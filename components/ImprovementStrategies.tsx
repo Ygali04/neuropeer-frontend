@@ -35,34 +35,16 @@ interface Props {
 }
 
 /**
- * Parse the overarching summary into { intro, items, outro }.
- * Splits on patterns like "(1)", "(2)", "(3)" to extract numbered items.
+ * Parse the overarching summary into sentences.
+ * Splits on sentence boundaries and extracts any that look like action items.
  */
-function parseSummary(text: string): { intro: string; items: string[]; outro: string } {
-  // Split on numbered patterns like "(1) ", "(2) ", "(3) "
-  const parts = text.split(/\(\d+\)\s*/);
-  const matches = text.match(/\(\d+\)\s*/g);
-
-  if (!matches || parts.length < 3) {
-    return { intro: text, items: [], outro: "" };
-  }
-
-  const intro = parts[0].trim().replace(/[.:]\s*$/, ".");
-  const items: string[] = [];
-  for (let i = 1; i < parts.length; i++) {
-    const item = parts[i].trim().replace(/,\s*$/, "").replace(/\.\s*$/, "");
-    if (item) items.push(item);
-  }
-  // If the last item contains a trailing sentence after a period, split it
-  const lastItem = items[items.length - 1];
-  if (lastItem) {
-    const periodIdx = lastItem.indexOf(". ");
-    if (periodIdx !== -1 && periodIdx < lastItem.length - 5) {
-      items[items.length - 1] = lastItem.slice(0, periodIdx + 1);
-    }
-  }
-
-  return { intro, items, outro: "" };
+function parseSummary(text: string): { sentences: string[] } {
+  // Split into sentences (period followed by space + capital letter, or end of string)
+  const sentences = text
+    .split(/(?<=\.)\s+(?=[A-Z])/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 10);
+  return { sentences };
 }
 
 export function ImprovementStrategies({ metrics, overarchingSummary }: Props) {
@@ -116,29 +98,19 @@ export function ImprovementStrategies({ metrics, overarchingSummary }: Props) {
       {/* ── Overarching Summary ───────────────────────────────────────────── */}
       {parsed && overarchingSummary && (
         <div className="glass-card p-5 !border-brand-500/15">
-          <div className="flex items-start gap-3 mb-3">
+          <div className="flex items-start gap-3">
             <div className="w-9 h-9 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
               <Target className="w-4 h-4 text-brand-400" />
             </div>
             <div>
-              <h3 className="text-sm font-medium text-white/70 mb-1">Overall Assessment</h3>
-              <p className="text-sm text-white/45 leading-relaxed">{parsed.intro}</p>
+              <h3 className="text-sm font-medium text-white/70 mb-2">Overall Assessment</h3>
+              <div className="space-y-2">
+                {parsed.sentences.map((sentence, i) => (
+                  <p key={i} className="text-sm text-white/45 leading-relaxed">{sentence}</p>
+                ))}
+              </div>
             </div>
           </div>
-
-          {/* Numbered priorities as vertical list */}
-          {parsed.items.length > 0 && (
-            <div className="ml-12 mt-3 space-y-2.5">
-              {parsed.items.map((item, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-lg bg-brand-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <span className="text-xs font-bold text-brand-400">{i + 1}</span>
-                  </div>
-                  <p className="text-sm text-white/50 leading-relaxed">{item}</p>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
 

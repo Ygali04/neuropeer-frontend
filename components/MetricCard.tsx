@@ -16,9 +16,10 @@ function scoreColor(score: number): string {
 interface Props {
   metric: MetricScore;
   expanded: boolean;
+  onToggle?: () => void;
 }
 
-export function MetricCard({ metric, expanded }: Props) {
+export function MetricCard({ metric, expanded, onToggle }: Props) {
   const color = scoreColor(metric.score);
   const info = METRIC_INFO[metric.name];
   const strategy = METRIC_STRATEGIES[metric.name];
@@ -27,9 +28,10 @@ export function MetricCard({ metric, expanded }: Props) {
   return (
     <div
       className={cn(
-        "glass-card glass-card-hover !p-4",
+        "glass-card glass-card-hover !p-4 cursor-pointer",
         expanded && "!border-white/[0.1]"
       )}
+      onClick={onToggle}
     >
       <div className="flex items-center gap-3">
         {/* Score ring */}
