@@ -101,7 +101,8 @@ export async function getBrainMap(
 export async function compareVideos(
   jobIds: string[]
 ): Promise<ComparisonResult> {
-  if (IS_MOCK) {
+  // If any job is a demo job, use mock comparison
+  if (IS_MOCK || jobIds.some(isDemoJob)) {
     await fakePause(800);
     return mockCompareVideos(jobIds);
   }

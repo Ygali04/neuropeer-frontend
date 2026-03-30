@@ -182,10 +182,15 @@ export function mockGetBrainMap(
 }
 
 export function mockCompareVideos(jobIds: string[]): ComparisonResult {
-  const scores = [MOCK_NEURAL_SCORE];
-  // Generate slightly different scores for additional jobs
-  for (let i = 1; i < jobIds.length; i++) {
-    scores.push(i === 1 ? MOCK_NEURAL_SCORE_B : {
+  // Import demo results to use real scores when available
+  const { getDemoResult } = require("./demo-results") as { getDemoResult: (id: string) => AnalysisResult | null };
+
+  const scores = jobIds.map((id, i) => {
+    const demo = getDemoResult(id);
+    if (demo) return demo.neural_score;
+    if (i === 0) return MOCK_NEURAL_SCORE;
+    if (i === 1) return MOCK_NEURAL_SCORE_B;
+    return {
       total: Math.round(rand(40, 85)),
       hook_score: Math.round(rand(35, 90)),
       sustained_attention: Math.round(rand(40, 80)),
@@ -193,24 +198,40 @@ export function mockCompareVideos(jobIds: string[]): ComparisonResult {
       memory_encoding: Math.round(rand(40, 75)),
       aesthetic_quality: Math.round(rand(35, 85)),
       cognitive_accessibility: Math.round(rand(40, 80)),
+    };
+  });
+
+  // Use the first job with real metrics for delta computation
+  const refResult = getDemoResult(jobIds[0]);
+  const refMetrics = refResult?.metrics ?? MOCK_METRICS;
+
+  const deltaMetrics: Record<string, number[]> = {};
+  for (const m of refMetrics.slice(0, 10)) {
+    deltaMetrics[m.name] = jobIds.map((id, i) => {
+      const d = getDemoResult(id);
+      if (d) {
+        const found = d.metrics.find((dm) => dm.name === m.name);
+        if (found) return found.score;
+      }
+      return i === 0 ? m.score : Math.round(m.score + rand(-20, 10));
     });
   }
 
-  const deltaMetrics: Record<string, number[]> = {};
-  for (const m of MOCK_METRICS.slice(0, 10)) {
-    deltaMetrics[m.name] = jobIds.map((_, i) =>
-      i === 0 ? m.score : Math.round(m.score + rand(-20, 10))
-    );
-  }
+  // Determine winner by total score
+  let winnerIdx = 0;
+  scores.forEach((s, i) => { if (s.total > scores[winnerIdx].total) winnerIdx = i; });
 
   return {
     job_ids: jobIds,
-    labels: jobIds.map((id) => id.slice(0, 12)),
+    labels: jobIds.map((id) => {
+      const d = getDemoResult(id);
+      return d ? d.url.replace(/https?:\/\/(www\.)?/, "").slice(0, 30) : id.slice(0, 12);
+    }),
     neural_scores: scores,
-    winner_job_id: jobIds[0],
+    winner_job_id: jobIds[winnerIdx],
     recommendation:
-      "Video 1 outperforms across hook strength, emotional resonance, and aesthetic quality. " +
-      "Video 2 shows stronger memory encoding — consider combining V1's hook with V2's narrative structure for an optimal variant.",
+      `Video ${winnerIdx + 1} scores highest overall (${scores[winnerIdx].total}/100). ` +
+      "Consider combining the strongest elements from each video — the best hook, emotional peaks, and pacing — into an optimized variant.",
     delta_metrics: deltaMetrics,
   };
 }

@@ -47,10 +47,19 @@ export default function AnalyzePage() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [metricsExpanded, setMetricsExpanded] = useState(false);
+  const [metricsExpandAll, setMetricsExpandAll] = useState(false);
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [shareCopied, setShareCopied] = useState(false);
   const { session } = useAuth();
-  const [loadingExisting, setLoadingExisting] = useState(true); // for already-computed reports
+  const [loadingExisting, setLoadingExisting] = useState(true);
+
+  // ── AI Feedback state ──────────────────────────────────────────────────
+  const [aiFeedback, setAiFeedback] = useState<{
+    summary: string;
+    priorities: string[];
+    metric_tips: Record<string, string>;
+  } | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   // ── Playback state ─────────────────────────────────────────────────────
   const [isPlaying, setIsPlaying] = useState(false);
@@ -123,6 +132,21 @@ export default function AnalyzePage() {
   const handleReset = useCallback(() => {
     setIsPlaying(false); playbackTimeRef.current = 0; setPlaybackTime(0); setCurrentSecond(0);
   }, []);
+
+  // ── AI Feedback fetcher ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!result || aiLoading || aiFeedback) return;
+    setAiLoading(true);
+    fetch("/api/generate-feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "analysis", data: result }),
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data) => setAiFeedback(data))
+      .catch((err) => console.warn("AI feedback unavailable:", err.message))
+      .finally(() => setAiLoading(false));
+  }, [result]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Data fetching ──────────────────────────────────────────────────────
   const saveToHistory = useCallback((data: AnalysisResult) => {
@@ -347,13 +371,42 @@ export default function AnalyzePage() {
                   <BarChart3 className="w-4 h-4 text-brand-400" />
                   <h2 className="text-sm font-medium text-white/50 uppercase tracking-wider">All Metrics</h2>
                 </div>
-                <button onClick={() => setMetricsExpanded((p) => !p)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-white/40 hover:text-white/60 hover:bg-white/[0.04] transition-all">
-                  {metricsExpanded ? "Collapse all" : "Expand all"}
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${metricsExpanded ? "rotate-180" : ""}`} />
+                <button
+                  onClick={() => {
+                    const next = !metricsExpandAll;
+                    setMetricsExpandAll(next);
+                    if (next) {
+                      const allRows = new Set(result.metrics.map((_, i) => Math.floor(i / 3)));
+                      setExpandedRows(allRows);
+                    } else {
+                      setExpandedRows(new Set());
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-white/40 hover:text-white/60 hover:bg-white/[0.04] transition-all"
+                >
+                  {metricsExpandAll ? "Collapse all" : "Expand all"}
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${metricsExpandAll ? "rotate-180" : ""}`} />
                 </button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {result.metrics.map((m) => <MetricCard key={m.name} metric={m} expanded={metricsExpanded} />)}
+                {result.metrics.map((m, i) => {
+                  const row = Math.floor(i / 3);
+                  return (
+                    <MetricCard
+                      key={m.name}
+                      metric={m}
+                      expanded={expandedRows.has(row)}
+                      onToggle={() => {
+                        setExpandedRows((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(row)) next.delete(row);
+                          else next.add(row);
+                          return next;
+                        });
+                      }}
+                    />
+                  );
+                })}
               </div>
             </div>
 
@@ -363,7 +416,13 @@ export default function AnalyzePage() {
                 <Lightbulb className="w-4 h-4 text-brand-400" />
                 <h2 className="text-sm font-medium text-white/50 uppercase tracking-wider">Improvement Strategies</h2>
               </div>
-              <ImprovementStrategies metrics={result.metrics} overarchingSummary={result.overarching_summary} />
+              <ImprovementStrategies
+                metrics={result.metrics}
+                overarchingSummary={aiFeedback?.summary ?? result.overarching_summary}
+                aiPriorities={aiFeedback?.priorities}
+                aiMetricTips={aiFeedback?.metric_tips}
+                aiLoading={aiLoading}
+              />
             </div>
 
             {/* A/B link */}
