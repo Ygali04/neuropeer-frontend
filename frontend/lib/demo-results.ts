@@ -99,7 +99,7 @@ const INSTAGRAM_REEL: AnalysisResult = {
 const YOUTUBE_PREROLL: AnalysisResult = {
   job_id: "demo-youtube-preroll",
   url: "https://www.youtube.com/shorts/Fez9foCZlng",
-  content_type: "youtube_short",
+  content_type: "youtube_preroll",
   duration_seconds: 30,
   neural_score: {
     total: 81,
