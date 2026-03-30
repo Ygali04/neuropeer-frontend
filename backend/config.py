@@ -28,8 +28,8 @@ class Settings(BaseSettings):
     hf_token: str = ""
     tribe_model_id: str = "facebook/tribev2"
 
-    # Whisper
-    whisper_model_size: str = "base"  # tiny/base/small/medium/large
+    # Transcription (ElevenLabs Scribe v2)
+    elevenlabs_api_key: str = ""
 
     # Inference
     device: str = "cuda"  # cuda / cpu

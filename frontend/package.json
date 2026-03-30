@@ -2,6 +2,9 @@
   "name": "frontend-tmp",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "scripts": {
     "dev": "next dev",
     "dev:mock": "NEXT_PUBLIC_MOCK=1 next dev",

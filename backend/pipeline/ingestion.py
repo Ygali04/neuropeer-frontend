@@ -722,25 +722,41 @@ def get_video_duration(video_path: Path) -> tuple[float, float]:
 
 def transcribe_audio(audio_path: Path) -> list[dict]:
     """
-    Transcribe audio with faster-whisper at word-level granularity.
+    Transcribe audio using ElevenLabs Scribe v2 with word-level timestamps.
     Returns list of {"word": str, "start": float, "end": float}.
     """
-    from faster_whisper import WhisperModel
+    from elevenlabs.client import ElevenLabs
 
-    model = WhisperModel(settings.whisper_model_size, device="cpu", compute_type="int8")
-    segments, _ = model.transcribe(str(audio_path), word_timestamps=True)
+    if not settings.elevenlabs_api_key:
+        raise RuntimeError(
+            "ELEVENLABS_API_KEY is required for transcription. Get one at https://elevenlabs.io/app/settings/api-keys"
+        )
+
+    client = ElevenLabs(api_key=settings.elevenlabs_api_key)
+    logger.info("Transcribing with ElevenLabs Scribe v2: %s", audio_path.name)
+
+    with open(audio_path, "rb") as f:
+        result = client.speech_to_text.convert(
+            file=f,
+            model_id="scribe_v2",
+            tag_audio_events=False,
+            timestamps_granularity="word",
+        )
 
     words = []
-    for segment in segments:
-        if segment.words:
-            for w in segment.words:
-                words.append(
-                    {
-                        "word": w.word.strip(),
-                        "start": w.start,
-                        "end": w.end,
-                    }
-                )
+    for chunk in result.words:
+        text = chunk.text.strip()
+        if not text:
+            continue
+        words.append(
+            {
+                "word": text,
+                "start": chunk.start,
+                "end": chunk.end,
+            }
+        )
+
+    logger.info("Transcription complete: %d words", len(words))
     return words
 
 

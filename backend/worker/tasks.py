@@ -116,7 +116,9 @@ def run_analysis(self, job_id: str, url: str, content_type: str) -> dict:
         _publish_progress(job_id, "inferring", 0.25, _inference_start_msg())
         _update_job_status(job_id, "inferring")
 
-        predictions, vertex_key = run_inference_backend(job_id, events_df, work_dir)
+        predictions, vertex_key = run_inference_backend(
+            job_id, events_df, work_dir, video_path=media.video_path
+        )
 
         _publish_progress(job_id, "inferring", 0.65, "All 4 modality passes complete.")
 

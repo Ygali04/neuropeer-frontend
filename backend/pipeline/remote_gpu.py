@@ -3,19 +3,18 @@ Remote GPU Inference — DataCrunch.io A100 Spot Instance Integration.
 
 Routes TRIBE v2 inference to either:
   A) Local GPU on the Celery worker (default for dev)
-  B) Ephemeral DataCrunch A100 spot instance (recommended for production)
+  B) Ephemeral DataCrunch A100 spot instance (production)
 
 Flow for mode B:
-  1. Worker stages events.parquet to S3
+  1. Worker uploads the downloaded video file to S3
   2. Worker creates DataCrunch A100 spot instance with bash startup script
-  3. Instance boots, installs deps, downloads events from S3, runs TRIBE v2
-  4. Instance uploads predictions.npz + sentinel file to S3, then idles
-  5. Worker polls S3 for sentinel, downloads predictions, deletes instance
+  3. Instance boots, installs tribev2 from GitHub, downloads video from S3
+  4. Instance runs TribeModel.get_events_dataframe() + model.predict() for all 4 modalities
+  5. Instance uploads predictions.npz + sentinel file to S3
+  6. Worker polls S3 for sentinel, downloads predictions, deletes instance
 
 DataCrunch SDK: pip install datacrunch
-Docs: https://datacrunch-python.readthedocs.io
 """
-
 from __future__ import annotations
 
 import io
@@ -39,10 +38,14 @@ def run_inference_backend(
     job_id: str,
     events_df: pd.DataFrame,
     work_dir: Path,
+    video_path: Path | None = None,
 ) -> tuple[dict[Modality, np.ndarray], str]:
     """Run TRIBE v2 inference via the configured backend."""
     if settings.inference_backend == "datacrunch":
-        return _run_on_datacrunch(job_id, events_df)
+        if video_path is None:
+            logger.warning("DataCrunch backend requires video_path; falling back to local")
+            return _run_locally(job_id, events_df)
+        return _run_on_datacrunch(job_id, video_path)
     return _run_locally(job_id, events_df)
 
 
@@ -74,17 +77,15 @@ class DataCrunchError(RuntimeError):
 
 def _run_on_datacrunch(
     job_id: str,
-    events_df: pd.DataFrame,
+    video_path: Path,
 ) -> tuple[dict[Modality, np.ndarray], str]:
-    """Spin up a DataCrunch A100 spot, run inference, download results, delete instance."""
+    """Spin up a DataCrunch A100 spot, run TRIBE v2, download results, delete instance."""
     logger.info("Provisioning DataCrunch A100 instance for job %s", job_id)
 
-    # 1. Stage events to S3
-    events_s3_key = f"staging/{job_id}/events.parquet"
-    buf = io.BytesIO()
-    events_df.to_parquet(buf, index=False)
-    _s3_upload(buf.getvalue(), events_s3_key)
-    logger.info("Events staged to s3://%s/%s", settings.s3_bucket, events_s3_key)
+    # 1. Upload the video file to S3 so the GPU instance can download it
+    video_s3_key = f"staging/{job_id}/video{video_path.suffix}"
+    _s3_upload(video_path.read_bytes(), video_s3_key)
+    logger.info("Video uploaded to s3://%s/%s (%.1f MB)", settings.s3_bucket, video_s3_key, video_path.stat().st_size / (1024 * 1024))
 
     vertex_key = f"predictions/{job_id}/vertices.npz"
     sentinel_done = f"staging/{job_id}/done"
@@ -93,10 +94,10 @@ def _run_on_datacrunch(
 
     try:
         # 2. Create spot instance
-        instance_id = _datacrunch_create_instance(job_id, events_s3_key, vertex_key, sentinel_done, sentinel_error)
+        instance_id = _datacrunch_create_instance(job_id, video_s3_key, vertex_key, sentinel_done, sentinel_error)
         logger.info("DataCrunch instance %s created for job %s", instance_id, job_id)
 
-        # 3. Poll S3 for sentinel (instance has no "completed" status)
+        # 3. Poll S3 for sentinel
         _poll_for_sentinel(instance_id, job_id, sentinel_done, sentinel_error)
         logger.info("Inference completed for job %s", job_id)
 
@@ -105,13 +106,9 @@ def _run_on_datacrunch(
         return predictions, vertex_key
 
     except DataCrunchError as exc:
-        logger.warning(
-            "DataCrunch inference failed for job %s (instance=%s), falling back to local: %s",
-            job_id,
-            instance_id,
-            exc,
-        )
-        return _run_locally(job_id, events_df)
+        logger.warning("DataCrunch inference failed for job %s (instance=%s): %s", job_id, instance_id, exc)
+        logger.warning("No local GPU fallback available — re-raising")
+        raise
 
     finally:
         if instance_id:
@@ -139,27 +136,23 @@ def _datacrunch_client():
 
 def _datacrunch_create_instance(
     job_id: str,
-    events_s3_key: str,
+    video_s3_key: str,
     output_s3_key: str,
     sentinel_done: str,
     sentinel_error: str,
 ) -> str:
-    """Create a DataCrunch A100 spot instance with a startup script."""
+    """Create a DataCrunch A100 spot instance."""
     client = _datacrunch_client()
 
     ssh_key_ids = [k.strip() for k in settings.datacrunch_ssh_key_ids.split(",") if k.strip()]
     if not ssh_key_ids:
-        # Try to get first available SSH key from account
         keys = client.ssh_keys.get()
         if not keys:
-            raise DataCrunchError(
-                "No SSH keys configured. Add an SSH key in the DataCrunch dashboard "
-                "and set DATACRUNCH_SSH_KEY_IDS in your .env"
-            )
+            raise DataCrunchError("No SSH keys configured in DataCrunch account")
         ssh_key_ids = [keys[0].id]
         logger.info("Using SSH key: %s", ssh_key_ids[0])
 
-    startup_script = _build_startup_script(events_s3_key, output_s3_key, sentinel_done, sentinel_error)
+    startup_script = _build_startup_script(video_s3_key, output_s3_key, sentinel_done, sentinel_error)
 
     try:
         instance = client.instances.create(
@@ -183,20 +176,18 @@ def _poll_for_sentinel(instance_id: str, job_id: str, sentinel_done: str, sentin
     client = _datacrunch_client()
 
     while time.time() < deadline:
-        # Check S3 for completion sentinel
         if _s3_key_exists(sentinel_done):
             return
         if _s3_key_exists(sentinel_error):
             error_body = _s3_download_text(sentinel_error)
-            raise DataCrunchError(f"Inference script failed on instance {instance_id}: {error_body[:500]}")
+            raise DataCrunchError(f"Inference failed on instance {instance_id}: {error_body[:500]}")
 
-        # Check instance hasn't failed
         try:
             instance = client.instances.get_by_id(instance_id)
             status = getattr(instance, "status", "unknown")
             logger.debug("Instance %s status: %s (job=%s)", instance_id, status, job_id)
             if status in ("failed", "error", "offline"):
-                raise DataCrunchError(f"DataCrunch instance {instance_id} entered status '{status}'")
+                raise DataCrunchError(f"DataCrunch instance {instance_id} status: {status}")
         except DataCrunchError:
             raise
         except Exception as exc:
@@ -205,7 +196,7 @@ def _poll_for_sentinel(instance_id: str, job_id: str, sentinel_done: str, sentin
         time.sleep(poll_interval)
         poll_interval = min(poll_interval * 1.3, 60)
 
-    raise DataCrunchError(f"DataCrunch instance {instance_id} timed out after {settings.datacrunch_boot_timeout}s")
+    raise DataCrunchError(f"Instance {instance_id} timed out after {settings.datacrunch_boot_timeout}s")
 
 
 def _datacrunch_delete(instance_id: str) -> None:
@@ -220,41 +211,55 @@ def _datacrunch_delete(instance_id: str) -> None:
         logger.warning("Error deleting DataCrunch instance %s: %s", instance_id, exc)
 
 
-# ── Startup script (bash, runs inside the DataCrunch instance) ───────────────
+# ── Startup script (runs inside the DataCrunch A100 instance) ────────────────
 
 
 def _build_startup_script(
-    events_s3_key: str,
+    video_s3_key: str,
     output_s3_key: str,
     sentinel_done: str,
     sentinel_error: str,
 ) -> str:
-    """Generate the bash startup script that runs on the DataCrunch A100 instance."""
-    # Inject S3 credentials and config as environment variables
-    s3_env = f"""
+    """Generate the bash startup script for the DataCrunch A100 instance.
+
+    Uses the real TRIBE v2 API from facebookresearch/tribev2:
+      from tribev2 import TribeModel
+      model = TribeModel.from_pretrained("facebook/tribev2")
+      df = model.get_events_dataframe(video_path="video.mp4")
+      preds, segments = model.predict(events=df)
+    """
+    return f"""#!/bin/bash
+set -e
+
 export AWS_ACCESS_KEY_ID="{settings.aws_access_key_id}"
 export AWS_SECRET_ACCESS_KEY="{settings.aws_secret_access_key}"
 export AWS_DEFAULT_REGION="{settings.aws_region}"
 export S3_BUCKET="{settings.s3_bucket}"
 export S3_ENDPOINT_URL="{settings.s3_endpoint_url}"
 export HF_TOKEN="{settings.hf_token}"
-export TRIBE_MODEL_ID="{settings.tribe_model_id}"
-"""
 
-    return f"""#!/bin/bash
-set -e
+echo "=== NeuroPeer TRIBE v2 Inference ==="
+echo "Installing dependencies..."
 
-{s3_env}
+# Install tribev2 from GitHub (includes torch, transformers, etc.)
+pip install git+https://github.com/facebookresearch/tribev2.git 2>&1 | tail -5
+pip install boto3 awscli 2>&1 | tail -2
 
-# Install Python ML dependencies
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124 2>&1 | tail -3
-pip install transformers huggingface-hub numpy pandas pyarrow boto3 scipy 2>&1 | tail -3
+echo "Dependencies installed."
+
+# Download video from S3
+echo "Downloading video from S3..."
+if [ -n "$S3_ENDPOINT_URL" ]; then
+    aws s3 cp "s3://$S3_BUCKET/{video_s3_key}" /tmp/video.mp4 --endpoint-url "$S3_ENDPOINT_URL"
+else
+    aws s3 cp "s3://$S3_BUCKET/{video_s3_key}" /tmp/video.mp4
+fi
+echo "Video downloaded: $(ls -lh /tmp/video.mp4)"
 
 # Write the inference script
 cat > /tmp/inference.py << 'PYEOF'
-import io, os, sys, logging
+import io, os, sys, logging, json
 import numpy as np
-import pandas as pd
 import boto3
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -262,7 +267,7 @@ log = logging.getLogger("tribe_inference")
 
 S3_BUCKET = os.environ["S3_BUCKET"]
 S3_ENDPOINT = os.environ.get("S3_ENDPOINT_URL") or None
-EVENTS_KEY = "{events_s3_key}"
+VIDEO_PATH = "/tmp/video.mp4"
 OUTPUT_KEY = "{output_s3_key}"
 SENTINEL_DONE = "{sentinel_done}"
 SENTINEL_ERROR = "{sentinel_error}"
@@ -276,40 +281,61 @@ def s3():
     )
 
 try:
-    log.info("Downloading events from S3")
-    buf = io.BytesIO(s3().get_object(Bucket=S3_BUCKET, Key=EVENTS_KEY)["Body"].read())
-    events_df = pd.read_parquet(buf)
+    # Load TRIBE v2 model
+    log.info("Loading TRIBE v2 model...")
+    from tribev2 import TribeModel
+    model = TribeModel.from_pretrained("facebook/tribev2", cache_folder="/tmp/tribe_cache")
+    log.info("Model loaded successfully")
 
-    import torch
-    from transformers import AutoModel
-    MODEL_ID = os.environ.get("TRIBE_MODEL_ID", "facebook/tribev2")
-    HF_TOKEN = os.environ.get("HF_TOKEN") or None
-    model = AutoModel.from_pretrained(MODEL_ID, token=HF_TOKEN, trust_remote_code=True)
-    model.eval().cuda()
-    log.info("Model loaded on GPU")
+    # Get events DataFrame from video (handles audio extraction + transcription internally)
+    log.info("Generating events DataFrame from video...")
+    df = model.get_events_dataframe(video_path=VIDEO_PATH)
+    log.info("Events generated: %d rows", len(df))
 
-    MODALITIES = ["full", "video_only", "audio_only", "text_only"]
-    predictions = {{}}
-    for modality in MODALITIES:
-        df = events_df.copy()
-        if modality == "video_only": df["audio_path"] = ""; df["word"] = ""
-        elif modality == "audio_only": df["video_path"] = ""; df["word"] = ""
-        elif modality == "text_only": df["video_path"] = ""; df["audio_path"] = ""
-        log.info("Inference: %s", modality)
-        with torch.no_grad():
-            preds = model.predict(df)
-        if hasattr(preds, "cpu"): preds = preds.cpu().numpy()
-        predictions[modality] = preds.astype(np.float32)
-        log.info("Done %s: shape=%s", modality, preds.shape)
+    # Run full multimodal prediction
+    log.info("Running TRIBE v2 full multimodal inference...")
+    preds_full, segments = model.predict(events=df)
+    log.info("Full predictions: shape=%s", preds_full.shape)
 
+    # Run modality ablations (video-only, audio-only, text-only)
+    predictions = {{"full": preds_full.astype(np.float32) if hasattr(preds_full, 'astype') else np.array(preds_full, dtype=np.float32)}}
+
+    for modality_name, ablation_kwargs in [
+        ("video_only", {{"audio_path": None}}),
+        ("audio_only", {{"video_path": None}}),
+        ("text_only",  {{"video_path": None, "audio_path": None}}),
+    ]:
+        log.info("Running ablation: %s", modality_name)
+        try:
+            df_ablated = model.get_events_dataframe(video_path=VIDEO_PATH)
+            # Zero out the ablated modality columns
+            for col, val in ablation_kwargs.items():
+                if col in df_ablated.columns and val is None:
+                    df_ablated[col] = ""
+            preds, _ = model.predict(events=df_ablated)
+            predictions[modality_name] = preds.astype(np.float32) if hasattr(preds, 'astype') else np.array(preds, dtype=np.float32)
+            log.info("  %s: shape=%s", modality_name, predictions[modality_name].shape)
+        except Exception as e:
+            log.warning("Ablation %s failed: %s — using full predictions as fallback", modality_name, e)
+            predictions[modality_name] = predictions["full"].copy()
+
+    # Upload predictions to S3
+    log.info("Uploading predictions to S3...")
     out_buf = io.BytesIO()
     np.savez_compressed(out_buf, **predictions)
     s3().put_object(Bucket=S3_BUCKET, Key=OUTPUT_KEY, Body=out_buf.getvalue())
-    s3().put_object(Bucket=S3_BUCKET, Key=SENTINEL_DONE, Body=b"ok")
-    log.info("Done. Predictions uploaded.")
+
+    # Signal success
+    s3().put_object(Bucket=S3_BUCKET, Key=SENTINEL_DONE, Body=json.dumps({{
+        "status": "done",
+        "n_timesteps": int(preds_full.shape[0]),
+        "n_vertices": int(preds_full.shape[1]) if len(preds_full.shape) > 1 else 0,
+        "modalities": list(predictions.keys()),
+    }}).encode())
+    log.info("Done! Predictions uploaded successfully.")
 
 except Exception as e:
-    log.error("Inference failed: %s", e)
+    log.error("Inference failed: %s", e, exc_info=True)
     try:
         s3().put_object(Bucket=S3_BUCKET, Key=SENTINEL_ERROR, Body=str(e).encode())
     except Exception:
@@ -317,8 +343,10 @@ except Exception as e:
     sys.exit(1)
 PYEOF
 
-# Run the inference script
+# Run inference
+echo "Running inference script..."
 python /tmp/inference.py
+echo "Inference complete!"
 """
 
 
@@ -342,7 +370,6 @@ def _s3_upload(data: bytes, key: str) -> None:
 
 
 def _s3_key_exists(key: str) -> bool:
-    """Check if an S3 key exists (used for sentinel file polling)."""
     import botocore.exceptions
 
     try:
@@ -353,13 +380,11 @@ def _s3_key_exists(key: str) -> bool:
 
 
 def _s3_download_text(key: str) -> str:
-    """Download a small text file from S3."""
     resp = _s3_client().get_object(Bucket=settings.s3_bucket, Key=key)
     return resp["Body"].read().decode("utf-8", errors="replace")
 
 
 def _s3_download_predictions(key: str) -> dict[Modality, np.ndarray]:
-    """Download predictions .npz from S3."""
     resp = _s3_client().get_object(Bucket=settings.s3_bucket, Key=key)
     data = np.load(io.BytesIO(resp["Body"].read()))
     return {Modality(k): data[k] for k in data.files}
