@@ -41,7 +41,7 @@ Marketing teams use NeuroPeer to quantify attention, emotional resonance, aesthe
                        +------v------+      +---------v--------+
                        | MinIO / S3  |      | DataCrunch A100  |
                        | (media +    |      | (remote GPU via  |
-                       |  tensors)   |      |  Verda API)      |
+                       |  tensors)   |      |  spot instances)      |
                        +-------------+      +------------------+
 ```
 
@@ -53,7 +53,7 @@ Marketing teams use NeuroPeer to quantify attention, emotional resonance, aesthe
 | Inference Engine | PyTorch 2.x, Meta TRIBE v2 (HuggingFace `facebook/tribev2`), faster-whisper   |
 | Analytics        | NumPy, SciPy, Nilearn (Schaefer-1000 atlas parcellation)                      |
 | Storage          | PostgreSQL 16 (metadata), Redis 7 (cache), S3/MinIO (media + prediction data) |
-| GPU Compute      | Local NVIDIA A100/H100 or remote DataCrunch A100 via Verda spot instances     |
+| GPU Compute      | Local NVIDIA A100/H100 or remote DataCrunch A100 spot instances ($0.45/h)     |
 
 ---
 
@@ -152,8 +152,8 @@ Copy `backend/.env.example` to `.env` and configure:
 | `REDIS_URL`          | Yes      | Redis connection string                    |
 | `S3_BUCKET`          | Yes      | S3/MinIO bucket name                       |
 | `DEVICE`             | No       | `cpu` (default) or `cuda` for GPU          |
-| `INFERENCE_BACKEND`  | No       | `local` (default) or `verda` for remote    |
-| `VERDA_API_KEY`      | No       | Verda API key (remote GPU only)            |
+| `INFERENCE_BACKEND`  | No       | `local` (default) or `datacrunch` for GPU  |
+| `DATACRUNCH_CLIENT_ID` | No     | DataCrunch OAuth2 client ID (remote GPU)   |
 | `YTDLP_COOKIES_FILE` | No      | Path to cookies.txt for auth-walled sites  |
 
 ---
