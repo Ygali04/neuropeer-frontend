@@ -19,6 +19,8 @@ import {
 import { connectJobWebSocket, getResult, exportReport } from "@/lib/api";
 import { generateReportPDF } from "@/lib/export-pdf";
 import { addRunToHistory } from "@/lib/run-history";
+import { useAuth } from "@/lib/auth-context";
+import { UserMenu } from "@/components/UserMenu";
 import type { AnalysisResult, ProgressEvent } from "@/lib/types";
 
 import { Button } from "@/components/ui/button";
@@ -47,6 +49,7 @@ export default function AnalyzePage() {
   const [exporting, setExporting] = useState(false);
   const [metricsExpanded, setMetricsExpanded] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const { session } = useAuth();
   const [loadingExisting, setLoadingExisting] = useState(true); // for already-computed reports
 
   // ── Playback state ─────────────────────────────────────────────────────
@@ -130,8 +133,8 @@ export default function AnalyzePage() {
       neuralScore: data.neural_score.total,
       timestamp: Date.now(),
       durationSeconds: data.duration_seconds,
-    });
-  }, []);
+    }, session?.user?.email ?? undefined);
+  }, [session]);
 
   const handleDone = useCallback(async () => {
     try {
@@ -202,22 +205,23 @@ export default function AnalyzePage() {
               <span className="font-[family-name:var(--font-display)] text-white font-semibold tracking-tight">
                 NeuroPeer
               </span>
-              <span className="text-white/20 text-sm">by</span>
-              <span className="text-brand-400 text-sm font-medium">Trupeer</span>
             </div>
           </Link>
-          {result && (
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={handleShare}>
-                {shareCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
-                {shareCopied ? "Copied!" : "Share"}
-              </Button>
-              <Button variant="secondary" size="sm" onClick={handleExport} disabled={exporting}>
-                {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                {exporting ? "Generating..." : "Export PDF"}
-              </Button>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {result && (
+              <>
+                <Button variant="ghost" size="sm" onClick={handleShare}>
+                  {shareCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
+                  {shareCopied ? "Copied!" : "Share"}
+                </Button>
+                <Button variant="secondary" size="sm" onClick={handleExport} disabled={exporting}>
+                  {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                  {exporting ? "Generating..." : "Export PDF"}
+                </Button>
+              </>
+            )}
+            <UserMenu />
+          </div>
         </div>
       </header>
 

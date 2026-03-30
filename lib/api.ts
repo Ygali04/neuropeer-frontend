@@ -12,9 +12,17 @@ import {
   mockExportReport,
   mockConnectJobWebSocket,
 } from "./mock-data";
+import { isDemoJob, getDemoResult } from "./demo-results";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const IS_MOCK = process.env.NEXT_PUBLIC_MOCK === "1";
+
+// Auth header stub — will send JWT when backend auth is deployed
+async function authHeaders(): Promise<HeadersInit> {
+  if (IS_MOCK) return {};
+  // Future: extract session token and send as Bearer
+  return {};
+}
 
 // ── REST API ────────────���─────────────────────────────��───────────────────────
 
@@ -39,6 +47,10 @@ export async function submitAnalysis(
 }
 
 export async function getResult(jobId: string): Promise<AnalysisResult> {
+  // Demo results are always available (no auth, no backend needed)
+  const demo = getDemoResult(jobId);
+  if (demo) return demo;
+
   if (IS_MOCK) {
     await fakePause(100);
     return mockGetResult(jobId);
@@ -75,8 +87,8 @@ export async function getBrainMap(
   jobId: string,
   timestamp: number
 ): Promise<{ timestamp: number; vertex_activations: number[] }> {
-  if (IS_MOCK) {
-    await fakePause(150);
+  if (isDemoJob(jobId) || IS_MOCK) {
+    await fakePause(50);
     return mockGetBrainMap(jobId, timestamp);
   }
   const res = await fetch(
@@ -129,6 +141,12 @@ export function connectJobWebSocket(
   onDone: () => void,
   onError: (msg: string) => void
 ): () => void {
+  // Demo jobs: skip WebSocket, load result directly
+  if (isDemoJob(jobId)) {
+    setTimeout(onDone, 100);
+    return () => {};
+  }
+
   if (IS_MOCK) {
     return mockConnectJobWebSocket(jobId, onEvent, onDone, onError);
   }

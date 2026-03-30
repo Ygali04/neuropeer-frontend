@@ -7,13 +7,17 @@ export interface RunHistoryEntry {
   durationSeconds: number;
 }
 
-const STORAGE_KEY = "neuropeer_run_history";
+const BASE_KEY = "neuropeer_run_history";
 const MAX_ENTRIES = 20;
 
-export function getRunHistory(): RunHistoryEntry[] {
+function storageKey(userEmail?: string): string {
+  return userEmail ? `${BASE_KEY}_${userEmail}` : BASE_KEY;
+}
+
+export function getRunHistory(userEmail?: string): RunHistoryEntry[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey(userEmail));
     if (!raw) return [];
     return JSON.parse(raw) as RunHistoryEntry[];
   } catch {
@@ -21,21 +25,19 @@ export function getRunHistory(): RunHistoryEntry[] {
   }
 }
 
-export function addRunToHistory(entry: RunHistoryEntry): void {
+export function addRunToHistory(entry: RunHistoryEntry, userEmail?: string): void {
   if (typeof window === "undefined") return;
   try {
-    const history = getRunHistory();
-    // Remove duplicate job IDs
+    const history = getRunHistory(userEmail);
     const filtered = history.filter((e) => e.jobId !== entry.jobId);
-    // Prepend new entry, cap at MAX_ENTRIES
     const updated = [entry, ...filtered].slice(0, MAX_ENTRIES);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    localStorage.setItem(storageKey(userEmail), JSON.stringify(updated));
   } catch {
     // localStorage might be full or unavailable
   }
 }
 
-export function clearRunHistory(): void {
+export function clearRunHistory(userEmail?: string): void {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(storageKey(userEmail));
 }

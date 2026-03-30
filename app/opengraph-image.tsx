@@ -84,12 +84,6 @@ export default async function Image() {
               <span style={{ fontSize: 36, fontWeight: 700, color: "white" }}>
                 NeuroPeer
               </span>
-              <span style={{ fontSize: 18, color: "rgba(255,255,255,0.3)" }}>
-                by
-              </span>
-              <span style={{ fontSize: 18, fontWeight: 600, color: "#f97316" }}>
-                Trupeer
-              </span>
             </div>
           </div>
 

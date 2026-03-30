@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Brain, Zap, BarChart3, GitCompare, Activity, Sparkles, Clock, ExternalLink, Trash2 } from "lucide-react";
 import { UrlInputCard } from "@/components/UrlInputCard";
+import { UserMenu } from "@/components/UserMenu";
 import { Badge } from "@/components/ui/badge";
 import { submitAnalysis } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { getRunHistory, clearRunHistory, type RunHistoryEntry } from "@/lib/run-history";
 import type { ContentType } from "@/lib/types";
 
@@ -47,10 +49,11 @@ export default function HomePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<RunHistoryEntry[]>([]);
+  const { session } = useAuth();
 
   useEffect(() => {
-    setHistory(getRunHistory());
-  }, []);
+    setHistory(getRunHistory(session?.user?.email ?? undefined));
+  }, [session]);
 
   const handleSubmit = async (url: string, contentType: ContentType) => {
     setLoading(true);
@@ -65,7 +68,7 @@ export default function HomePage() {
   const handleCompare = () => router.push("/compare");
 
   const handleClearHistory = () => {
-    clearRunHistory();
+    clearRunHistory(session?.user?.email ?? undefined);
     setHistory([]);
   };
 
@@ -80,8 +83,6 @@ export default function HomePage() {
             </div>
             <div className="flex items-center gap-2">
               <span className="font-[family-name:var(--font-display)] text-white font-semibold text-lg tracking-tight">NeuroPeer</span>
-              <span className="text-white/20 text-sm">by</span>
-              <span className="text-brand-400 text-sm font-medium">Trupeer</span>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -90,6 +91,7 @@ export default function HomePage() {
               <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
               TRIBE v2
             </Badge>
+            <UserMenu />
           </div>
         </div>
       </header>
@@ -122,6 +124,27 @@ export default function HomePage() {
         {/* ── Input Card ──────────────────────────────────────────────────── */}
         <div className="w-full max-w-2xl animate-fade-up delay-300 relative">
           <UrlInputCard onSubmit={handleSubmit} loading={loading} showCompareOption onCompare={handleCompare} />
+        </div>
+
+        {/* ── Example Reports ──────────────────────────────────────────── */}
+        <div className="flex flex-wrap justify-center gap-3 mt-10 animate-fade-up delay-400">
+          <span className="text-xs text-white/25 self-center mr-1">Try an example:</span>
+          <Link
+            href="/analyze/demo-instagram-reel"
+            className="glass-card glass-card-hover !rounded-full flex items-center gap-2 px-4 py-2"
+          >
+            <span className="text-sm">📱</span>
+            <span className="text-xs text-white/50 font-medium">Instagram Reel</span>
+            <span className="text-[10px] text-brand-400 font-semibold tabular-nums">72</span>
+          </Link>
+          <Link
+            href="/analyze/demo-youtube-preroll"
+            className="glass-card glass-card-hover !rounded-full flex items-center gap-2 px-4 py-2"
+          >
+            <span className="text-sm">▶</span>
+            <span className="text-xs text-white/50 font-medium">YouTube Pre-roll</span>
+            <span className="text-[10px] text-brand-400 font-semibold tabular-nums">81</span>
+          </Link>
         </div>
 
         {/* ── Feature Pills ───────────────────────────────────────────────── */}
@@ -210,8 +233,7 @@ export default function HomePage() {
       {/* ── Footer ──────────────────────────────────────────────────────────── */}
       <footer className="border-t border-white/[0.04] px-6 py-5 text-center">
         <p className="text-xs text-white/20">
-          TRIBE v2 is licensed CC BY-NC 4.0 · NeuroPeer is a{" "}
-          <span className="text-brand-500/60">Trupeer</span> product
+          TRIBE v2 is licensed CC BY-NC 4.0 · NeuroPeer
         </p>
       </footer>
     </div>
