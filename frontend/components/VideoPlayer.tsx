@@ -31,9 +31,10 @@ function extractYouTubeId(url: string): string | null {
   return match?.[1] ?? null;
 }
 
-function extractInstagramId(url: string): string | null {
-  const match = url.match(/instagram\.com\/(?:reel|p)\/([a-zA-Z0-9_-]+)/);
-  return match?.[1] ?? null;
+function extractInstagramEmbedUrl(url: string): string | null {
+  const match = url.match(/instagram\.com\/(reel|p)\/([a-zA-Z0-9_-]+)/);
+  if (!match) return null;
+  return `https://www.instagram.com/${match[1]}/${match[2]}/embed`;
 }
 
 // Aspect ratio CSS for different media types
@@ -141,14 +142,14 @@ export function VideoPlayer({
 
   // ── Instagram Reel Embed ───────────────────────────────────────────────
   if (mediaType === "instagram") {
-    const reelId = extractInstagramId(url);
+    const embedUrl = extractInstagramEmbedUrl(url);
 
     return (
       <div className="rounded-xl overflow-hidden border border-white/[0.06] bg-black">
         <div className="relative w-full max-w-[225px] mx-auto aspect-[9/16]">
-          {reelId ? (
+          {embedUrl ? (
             <iframe
-              src={`https://www.instagram.com/reel/${reelId}/embed`}
+              src={embedUrl}
               className="absolute inset-0 w-full h-full"
               allowFullScreen
               title="Instagram Reel preview"
