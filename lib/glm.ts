@@ -2,7 +2,7 @@
 // Server-side only — never import from client components
 
 const GLM_ENDPOINT = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
-const GLM_MODEL = "glm-4-flash";
+const GLM_MODEL = "glm-4.7-flash";
 
 interface Message {
   role: "system" | "user" | "assistant";
