@@ -28,8 +28,8 @@ huggingface-hub==0.24.6
 numpy==1.26.4
 scipy==1.14.1
 
-# Remote GPU (Verda B200 spot instances)
-verda>=1.20.0
+# Remote GPU (DataCrunch A100 spot instances)
+datacrunch
 
 # Neuroscience
 nilearn==0.10.4

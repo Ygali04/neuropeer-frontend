@@ -112,7 +112,7 @@ def run_analysis(self, job_id: str, url: str, content_type: str) -> dict:
             job_id, "transcribing", 0.18, f"Downloaded {media.duration_seconds:.0f}s video. Transcribing audio…"
         )
 
-        # ── Stage 2: TRIBE v2 inference (local GPU or Verda B200 spot) ────────
+        # ── Stage 2: TRIBE v2 inference (local GPU or DataCrunch A100 spot) ──
         _publish_progress(job_id, "inferring", 0.25, _inference_start_msg())
         _update_job_status(job_id, "inferring")
 
@@ -228,6 +228,6 @@ def _friendly_download_error(raw_error: str, url: str) -> str:
 
 def _inference_start_msg() -> str:
     backend = settings.inference_backend
-    if backend == "verda":
-        return "Provisioning Verda B200 GPU instance for TRIBE v2 inference…"
+    if backend == "datacrunch":
+        return "Provisioning DataCrunch A100 GPU instance for TRIBE v2 inference…"
     return "Running TRIBE v2 inference (full multimodal + 3 ablations)…"

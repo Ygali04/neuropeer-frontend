@@ -75,7 +75,7 @@ services:
   #   - Video download via yt-dlp (needs cookies.txt for Instagram/Facebook)
   #   - Audio extraction via ffmpeg
   #   - Whisper transcription
-  #   - TRIBE v2 inference (local GPU OR remote Verda B200 spot)
+  #   - TRIBE v2 inference (local GPU OR remote DataCrunch A100 spot)
   #   - Metric computation
 
   worker:
@@ -104,12 +104,11 @@ services:
       # PROXY_USERNAME: your_oxylabs_username
       # PROXY_PASSWORD: your_oxylabs_password
       # ── Inference backend ──────────────────────────────────────────────────
-      # INFERENCE_BACKEND: verda   # uncomment to use Verda B200 spot instances
-      # VERDA_API_KEY: your_verda_api_key_here
-      # VERDA_API_URL: https://api.verda.com/v1
-      # VERDA_INFERENCE_IMAGE: neuropeer/tribe-inference:latest
-      # VERDA_INSTANCE_TYPE: b200.1x
-      # VERDA_BOOT_TIMEOUT: "300"
+      # INFERENCE_BACKEND: datacrunch
+      # DATACRUNCH_CLIENT_ID: your_client_id
+      # DATACRUNCH_CLIENT_SECRET: your_client_secret
+      # DATACRUNCH_INSTANCE_TYPE: 1A100.80G
+      # DATACRUNCH_BOOT_TIMEOUT: "600"
     depends_on:
       - postgres
       - redis

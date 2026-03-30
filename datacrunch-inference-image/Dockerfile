@@ -1,5 +1,5 @@
 # NeuroPeer — TRIBE v2 Inference Image
-# Built for Verda B200 spot instances (CUDA 12.4 + PyTorch 2.4)
+# For local testing / model weight pre-download (DataCrunch uses startup scripts)
 #
 # Build:  docker build -t neuropeer/tribe-inference:latest .
 # Push:   docker push neuropeer/tribe-inference:latest
@@ -55,6 +55,6 @@ print('TRIBE v2 weights pre-downloaded successfully.')
 
 ENV TRIBE_MODEL_PATH=/models/tribev2
 
-# The startup script is injected at runtime by the Verda API (via startup_script field).
+# On DataCrunch, deps are installed via bash startup_script at instance boot.
 # This CMD is a fallback for manual testing.
 CMD ["python", "-c", "print('NeuroPeer TRIBE v2 inference image ready.')"]
