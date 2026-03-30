@@ -147,37 +147,19 @@ def run_analysis(self, job_id: str, url: str, content_type: str) -> dict:
         timeseries_key = f"predictions/{job_id}/timeseries.npz"
         _save_to_s3(ts_buffer.getvalue(), timeseries_key)
 
-        # Build final result dict
+        # Build final result dict using Pydantic model_dump()
         result = {
             "job_id": job_id,
             "url": url,
             "content_type": content_type,
             "duration_seconds": media.duration_seconds,
-            "neural_score": {
-                "total": neural_score.total,
-                "hook_score": neural_score.hook_score,
-                "sustained_attention": neural_score.sustained_attention,
-                "emotional_resonance": neural_score.emotional_resonance,
-                "memory_encoding": neural_score.memory_encoding,
-                "aesthetic_quality": neural_score.aesthetic_quality,
-                "cognitive_accessibility": neural_score.cognitive_accessibility,
-            },
-            "metrics": [
-                {
-                    "name": m.name,
-                    "score": round(m.score, 1),
-                    "raw_value": round(m.raw_value, 4),
-                    "description": m.description,
-                    "brain_region": m.brain_region,
-                    "gtm_proxy": m.gtm_proxy,
-                }
-                for m in metrics
-            ],
+            "neural_score": neural_score.model_dump(),
+            "metrics": [m.model_dump() for m in metrics],
             "attention_curve": attn_curve.tolist(),
             "emotional_arousal_curve": arousal_curve.tolist(),
             "cognitive_load_curve": cog_curve.tolist(),
-            "key_moments": key_moments,
-            "modality_breakdown": modality_breakdown,
+            "key_moments": [km.model_dump() for km in key_moments],
+            "modality_breakdown": [mb.model_dump() for mb in modality_breakdown],
             "vertex_data_s3_key": vertex_key,
             "timeseries_s3_key": timeseries_key,
         }

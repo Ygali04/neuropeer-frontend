@@ -10,7 +10,7 @@ import redis.asyncio as aioredis
 from fastapi import APIRouter, HTTPException
 
 from backend.config import settings
-from backend.models.schemas import BrainMapFrame
+from backend.models.schemas import AnalysisResult, BrainMapFrame
 
 router = APIRouter(tags=["Results"])
 
@@ -35,10 +35,12 @@ async def _get_result(job_id: str) -> dict:
     return json.loads(raw)
 
 
-@router.get("/results/{job_id}")
+@router.get("/results/{job_id}", response_model=AnalysisResult)
 async def get_result(job_id: UUID) -> dict:
     """Retrieve the full neural analysis report."""
-    return await _get_result(str(job_id))
+    data = await _get_result(str(job_id))
+    # Re-validate through Pydantic before returning
+    return AnalysisResult.model_validate(data).model_dump()
 
 
 @router.get("/results/{job_id}/timeseries")
