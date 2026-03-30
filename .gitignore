@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+
+# Environment
+backend/.env
+.env
+
+# Secrets
+secrets/
+
+# IDE
+.vscode/
+.idea/
+.cursor/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data
+neuropeer-data/
+/tmp/neuropeer/
+
+# Node
+frontend/node_modules/
+frontend/.next/
+
+# Cache
+.ruff_cache/
+
+# Design docs (large binary)
+*.docx
+*.pdf
