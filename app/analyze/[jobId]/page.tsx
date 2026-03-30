@@ -27,7 +27,11 @@ import { Badge } from "@/components/ui/badge";
 import { ProgressTracker } from "@/components/ProgressTracker";
 import { NeuralScoreGauge } from "@/components/NeuralScoreGauge";
 import { AttentionCurve } from "@/components/AttentionCurve";
-import { BrainMap3D } from "@/components/BrainMap3D";
+import dynamic from "next/dynamic";
+const BrainMap3D = dynamic(
+  () => import("@/components/BrainMap3D").then((m) => ({ default: m.BrainMap3D })),
+  { ssr: false, loading: () => <div className="h-[380px] flex items-center justify-center"><div className="w-6 h-6 border-2 border-white/10 border-t-brand-400 rounded-full animate-spin" /></div> }
+);
 import { KeyMomentsTimeline } from "@/components/KeyMomentsTimeline";
 import { EmotionalPanel } from "@/components/EmotionalPanel";
 import { ModalityBreakdown } from "@/components/ModalityBreakdown";
