@@ -45,7 +45,7 @@ function modalityBreakdown(duration: number, seed: number) {
 
 const INSTAGRAM_REEL: AnalysisResult = {
   job_id: "demo-instagram-reel",
-  url: "https://www.instagram.com/reel/DGfK3qMPUHk/",
+  url: "https://www.instagram.com/p/DWcFdH6CXZA/",
   content_type: "instagram_reel",
   duration_seconds: 48,
   neural_score: {
@@ -98,8 +98,8 @@ const INSTAGRAM_REEL: AnalysisResult = {
 
 const YOUTUBE_PREROLL: AnalysisResult = {
   job_id: "demo-youtube-preroll",
-  url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-  content_type: "youtube_preroll",
+  url: "https://www.youtube.com/shorts/Fez9foCZlng",
+  content_type: "youtube_short",
   duration_seconds: 30,
   neural_score: {
     total: 81,
