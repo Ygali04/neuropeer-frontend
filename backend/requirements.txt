@@ -1,3 +1,6 @@
+# NOTE: pyproject.toml at the project root is the source of truth for dependencies.
+# This file is kept for convenience (e.g. pip install -r) but may drift.
+
 # API
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
