@@ -304,7 +304,7 @@ export function AttentionCurve({
   }, [isPlaying, playbackTime, drawOverlay]);
 
   const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!onScrub || attentionCurve.length === 0 || isPlaying) return;
+    if (attentionCurve.length === 0) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const pad = padRef.current;
@@ -313,8 +313,17 @@ export function AttentionCurve({
     const plotW = canvas.clientWidth - pad.left - pad.right;
     const n = attentionCurve.length;
     const t = ((mouseX - pad.left) / plotW) * (n - 1);
-    onScrub(Math.max(0, Math.min(n - 1, t)));
-  }, [onScrub, attentionCurve, isPlaying]);
+    const clampedT = Math.max(0, Math.min(n - 1, t));
+
+    if (isPlaying) {
+      // Click while playing → seek to that point
+      onScrub?.(clampedT);
+    } else {
+      // Click while paused → seek then play
+      onScrub?.(clampedT);
+      onPlay?.();
+    }
+  }, [onScrub, onPlay, attentionCurve, isPlaying]);
 
   return (
     <div className="w-full">

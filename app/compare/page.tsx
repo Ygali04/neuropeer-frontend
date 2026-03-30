@@ -35,6 +35,8 @@ function ComparePageInner() {
   const [result, setResult] = useState<ComparisonResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [aiRecommendation, setAiRecommendation] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   const handleAddVideo = async (url: string, contentType: ContentType) => {
     setLoading(true);
@@ -69,6 +71,20 @@ function ComparePageInner() {
     try {
       const data = await compareVideos(allIds);
       setResult(data);
+      // Fetch AI recommendation in background
+      setAiLoading(true);
+      fetch("/api/generate-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "comparison",
+          data: { jobIds: data.job_ids, scores: data.neural_scores, labels: data.labels, deltaMetrics: data.delta_metrics },
+        }),
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject()))
+        .then((ai) => setAiRecommendation(ai.recommendation))
+        .catch(() => {})
+        .finally(() => setAiLoading(false));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Comparison failed.");
     } finally {
@@ -199,7 +215,12 @@ function ComparePageInner() {
                 <Trophy className="w-4 h-4 text-brand-400" />
                 <CardTitle className="!mb-0 !text-brand-400">Recommendation</CardTitle>
               </div>
-              <p className="text-white/60 text-sm leading-relaxed">{result.recommendation}</p>
+              <p className="text-white/60 text-sm leading-relaxed">
+                {aiRecommendation ?? result.recommendation}
+              </p>
+              {aiLoading && (
+                <p className="text-[10px] text-brand-400 animate-pulse mt-2">Generating AI recommendation...</p>
+              )}
             </Card>
 
             <div className={cn(

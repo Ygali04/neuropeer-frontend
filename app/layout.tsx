@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Sora, DM_Sans } from "next/font/google";
 import { DemoBanner } from "@/components/DemoBanner";
 import { AuthProvider } from "@/lib/auth-context";
@@ -53,6 +54,12 @@ export default function RootLayout({
         <DemoBanner />
         <div className="bg-mesh" />
         <AuthProvider>{children}</AuthProvider>
+        {process.env.NEXT_PUBLIC_IFRAMELY_API_KEY && (
+          <Script
+            src={`https://cdn.iframe.ly/embed.js?key=${process.env.NEXT_PUBLIC_IFRAMELY_API_KEY}`}
+            strategy="lazyOnload"
+          />
+        )}
       </body>
     </html>
   );

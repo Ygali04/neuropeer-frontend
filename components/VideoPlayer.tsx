@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { Play, Pause, Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,7 +19,7 @@ interface Props {
 type MediaType = "youtube" | "youtube-short" | "instagram" | "direct-video" | "unknown";
 
 function detectMediaType(url: string): MediaType {
-  if (/instagram\.com\/reel\//i.test(url)) return "instagram";
+  if (/instagram\.com\/(reel|p)\//i.test(url)) return "instagram";
   if (/youtube\.com\/shorts\//i.test(url)) return "youtube-short";
   if (/youtube\.com\/watch|youtu\.be\//i.test(url)) return "youtube";
   if (/\.(mp4|webm|ogg|mov)(\?|$)/i.test(url)) return "direct-video";
@@ -31,24 +31,288 @@ function extractYouTubeId(url: string): string | null {
   return match?.[1] ?? null;
 }
 
-function extractInstagramId(url: string): string | null {
-  const match = url.match(/instagram\.com\/reel\/([a-zA-Z0-9_-]+)/);
-  return match?.[1] ?? null;
+function extractInstagramEmbedUrl(url: string): string | null {
+  const match = url.match(/instagram\.com\/(reel|p)\/([a-zA-Z0-9_-]+)/);
+  if (!match) return null;
+  return `https://www.instagram.com/${match[1]}/${match[2]}/embed`;
 }
 
-// Aspect ratio CSS for different media types
-function getAspectClass(type: MediaType): string {
-  switch (type) {
-    case "instagram":
-    case "youtube-short":
-      return "aspect-[9/16] max-h-[400px]";
-    case "youtube":
-      return "aspect-video";
-    case "direct-video":
-      return "aspect-video";
-    default:
-      return "aspect-video";
-  }
+// ── YouTube IFrame API loader ──────────────────────────────────────────────
+let ytApiReady = false;
+let ytApiLoading = false;
+const ytApiCallbacks: (() => void)[] = [];
+
+function loadYouTubeApi(): Promise<void> {
+  if (ytApiReady) return Promise.resolve();
+  return new Promise((resolve) => {
+    ytApiCallbacks.push(resolve);
+    if (ytApiLoading) return;
+    ytApiLoading = true;
+    const tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+    (window as unknown as Record<string, unknown>).onYouTubeIframeAPIReady = () => {
+      ytApiReady = true;
+      ytApiCallbacks.forEach((cb) => cb());
+      ytApiCallbacks.length = 0;
+    };
+  });
+}
+
+// ── YouTube Player Component ────────────────────────────────────────────────
+function YouTubePlayer({
+  videoId,
+  isVertical,
+  currentTime,
+  isPlaying,
+  duration,
+  playbackSpeed,
+  onSeek,
+  onPlay,
+  onPause,
+  onCycleSpeed,
+}: {
+  videoId: string;
+  isVertical: boolean;
+  currentTime: number;
+  isPlaying: boolean;
+  duration: number;
+  playbackSpeed: number;
+  onSeek?: (time: number) => void;
+  onPlay?: () => void;
+  onPause?: () => void;
+  onCycleSpeed?: () => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const playerRef = useRef<YT.Player | null>(null);
+  const [muted, setMuted] = useState(true);
+  const [ready, setReady] = useState(false);
+  const suppressEventRef = useRef(false);
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  const formatTime = (t: number) => {
+    const m = Math.floor(t / 60);
+    const s = Math.floor(t % 60);
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
+  // Initialize YouTube player
+  useEffect(() => {
+    let player: YT.Player | null = null;
+    let cancelled = false;
+
+    loadYouTubeApi().then(() => {
+      if (cancelled || !containerRef.current) return;
+      // Create a div for the player inside the container
+      const el = document.createElement("div");
+      el.id = `yt-player-${videoId}-${Date.now()}`;
+      containerRef.current.appendChild(el);
+
+      player = new YT.Player(el.id, {
+        videoId,
+        playerVars: {
+          autoplay: 0,
+          mute: 1,
+          controls: 0,
+          modestbranding: 1,
+          rel: 0,
+          playsinline: 1,
+          fs: 0,
+        },
+        events: {
+          onReady: () => {
+            if (cancelled) return;
+            playerRef.current = player;
+            setReady(true);
+          },
+          onStateChange: (event: YT.OnStateChangeEvent) => {
+            if (cancelled || suppressEventRef.current) return;
+            if (event.data === YT.PlayerState.PLAYING) {
+              onPlay?.();
+            } else if (event.data === YT.PlayerState.PAUSED) {
+              onPause?.();
+            }
+          },
+        },
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      if (player) {
+        try { player.destroy(); } catch {}
+      }
+      playerRef.current = null;
+    };
+  }, [videoId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync play/pause state from NeuroPeer → YouTube
+  useEffect(() => {
+    const p = playerRef.current;
+    if (!p || !ready) return;
+    suppressEventRef.current = true;
+    try {
+      if (isPlaying) {
+        const state = p.getPlayerState();
+        if (state !== YT.PlayerState.PLAYING) p.playVideo();
+      } else {
+        const state = p.getPlayerState();
+        if (state === YT.PlayerState.PLAYING) p.pauseVideo();
+      }
+    } catch {}
+    setTimeout(() => { suppressEventRef.current = false; }, 200);
+  }, [isPlaying, ready]);
+
+  // Sync seek from NeuroPeer → YouTube
+  useEffect(() => {
+    const p = playerRef.current;
+    if (!p || !ready) return;
+    try {
+      const ytTime = p.getCurrentTime?.() ?? 0;
+      if (Math.abs(ytTime - currentTime) > 1.5) {
+        suppressEventRef.current = true;
+        p.seekTo(currentTime, true);
+        setTimeout(() => { suppressEventRef.current = false; }, 300);
+      }
+    } catch {}
+  }, [currentTime, ready]);
+
+  // Sync playback speed
+  useEffect(() => {
+    const p = playerRef.current;
+    if (!p || !ready) return;
+    try { p.setPlaybackRate(playbackSpeed); } catch {}
+  }, [playbackSpeed, ready]);
+
+  // Sync mute
+  useEffect(() => {
+    const p = playerRef.current;
+    if (!p || !ready) return;
+    try {
+      if (muted) p.mute(); else p.unMute();
+    } catch {}
+  }, [muted, ready]);
+
+  const handleTogglePlay = () => {
+    if (isPlaying) onPause?.();
+    else onPlay?.();
+  };
+
+  return (
+    <div className="rounded-xl overflow-hidden border border-white/[0.06] bg-black">
+      <div
+        ref={containerRef}
+        className={cn(
+          "relative w-full mx-auto [&_iframe]:absolute [&_iframe]:inset-0 [&_iframe]:w-full [&_iframe]:h-full",
+          isVertical ? "max-w-[225px] aspect-[9/16]" : "aspect-video"
+        )}
+      />
+      <Controls
+        currentTime={currentTime}
+        duration={duration}
+        progress={progress}
+        muted={muted}
+        isPlaying={isPlaying}
+        playbackSpeed={playbackSpeed}
+        onToggleMute={() => setMuted(!muted)}
+        onTogglePlay={handleTogglePlay}
+        onSeek={onSeek}
+        onCycleSpeed={onCycleSpeed}
+        formatTime={formatTime}
+      />
+    </div>
+  );
+}
+
+// ── Instagram Embed (via iframely) ──────────────────────────────────────
+function InstagramEmbed({
+  url,
+  currentTime,
+  isPlaying,
+  duration,
+  playbackSpeed = 1,
+  onSeek,
+  onPlay,
+  onPause,
+  onCycleSpeed,
+}: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const [muted, setMuted] = useState(true);
+  const isPlayingRef = useRef(isPlaying);
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+
+  const handleTogglePlay = useCallback(() => {
+    if (isPlaying) onPause?.();
+    else onPlay?.();
+  }, [isPlaying, onPause, onPlay]);
+
+  const formatTime = (t: number) => {
+    const m = Math.floor(t / 60);
+    const s = Math.floor(t % 60);
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
+  // Trigger iframely to process the embed link + grab iframe ref
+  useEffect(() => {
+    const w = window as unknown as Record<string, unknown>;
+    if (w.iframely && typeof (w.iframely as Record<string, unknown>).load === "function") {
+      (w.iframely as { load: () => void }).load();
+    }
+
+    const interval = setInterval(() => {
+      const iframe = containerRef.current?.querySelector("iframe");
+      if (iframe) {
+        iframeRef.current = iframe;
+        clearInterval(interval);
+      }
+    }, 300);
+    return () => clearInterval(interval);
+  }, [url]);
+
+  // Detect iframe clicks via focus/blur — when user clicks the Instagram
+  // embed to play, we pick it up and start NeuroPeer visualizations
+  useEffect(() => {
+    const onWindowBlur = () => {
+      // When window loses focus to an iframe, activeElement becomes the iframe
+      setTimeout(() => {
+        if (document.activeElement?.tagName === "IFRAME" && containerRef.current?.contains(document.activeElement)) {
+          // User clicked inside the Instagram embed — toggle NeuroPeer play
+          if (!isPlayingRef.current) onPlay?.();
+        }
+      }, 50);
+    };
+
+    window.addEventListener("blur", onWindowBlur);
+    return () => window.removeEventListener("blur", onWindowBlur);
+  }, [onPlay]);
+
+  return (
+    <div className="rounded-xl overflow-hidden border border-white/[0.06] bg-black">
+      <div className="relative w-full max-w-[320px] mx-auto">
+        <div ref={containerRef}>
+          <div className="iframely-embed">
+            <a data-iframely-url="" href={url}>{url}</a>
+          </div>
+        </div>
+      </div>
+      <Controls
+        currentTime={currentTime}
+        duration={duration}
+        progress={progress}
+        muted={muted}
+        isPlaying={isPlaying}
+        playbackSpeed={playbackSpeed}
+        onToggleMute={() => setMuted(!muted)}
+        onTogglePlay={handleTogglePlay}
+        onSeek={onSeek}
+        onCycleSpeed={onCycleSpeed}
+        formatTime={formatTime}
+      />
+    </div>
+  );
 }
 
 export function VideoPlayer({
@@ -100,80 +364,46 @@ export function VideoPlayer({
     if (video) video.playbackRate = playbackSpeed;
   }, [playbackSpeed]);
 
-  // ── YouTube Embed ──────────────────────────────────────────────────────
+  // ── YouTube Embed (via IFrame API) ────────────────────────────────────
   if (mediaType === "youtube" || mediaType === "youtube-short") {
     const videoId = extractYouTubeId(url);
-    const isVertical = mediaType === "youtube-short";
-
-    return (
-      <div className="rounded-xl overflow-hidden border border-white/[0.06] bg-black">
-        <div className={cn("relative w-full mx-auto", isVertical ? "max-w-[225px] aspect-[9/16]" : "aspect-video")}>
-          {videoId ? (
-            <iframe
-              src={`https://www.youtube.com/embed/${videoId}?autoplay=0&mute=1&controls=1&modestbranding=1&rel=0&start=${Math.floor(currentTime)}`}
-              className="absolute inset-0 w-full h-full"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              title="Video preview"
-            />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-white/20 text-xs">
-              Unable to embed video
-            </div>
-          )}
+    if (!videoId) {
+      return (
+        <div className="rounded-xl overflow-hidden border border-white/[0.06] bg-black aspect-video flex items-center justify-center text-white/20 text-xs">
+          Unable to embed video
         </div>
-        <Controls
-          currentTime={currentTime}
-          duration={duration}
-          progress={progress}
-          muted={muted}
-          isPlaying={isPlaying}
-          playbackSpeed={playbackSpeed}
-          onToggleMute={() => setMuted(!muted)}
-          onTogglePlay={handleTogglePlay}
-          onSeek={onSeek}
-          onCycleSpeed={onCycleSpeed}
-          formatTime={formatTime}
-        />
-      </div>
+      );
+    }
+    return (
+      <YouTubePlayer
+        videoId={videoId}
+        isVertical={mediaType === "youtube-short"}
+        currentTime={currentTime}
+        isPlaying={isPlaying}
+        duration={duration}
+        playbackSpeed={playbackSpeed}
+        onSeek={onSeek}
+        onPlay={onPlay}
+        onPause={onPause}
+        onCycleSpeed={onCycleSpeed}
+      />
     );
   }
 
-  // ── Instagram Reel Embed ───────────────────────────────────────────────
+  // ── Instagram Embed (via iframely) ──────────────────────────────────
   if (mediaType === "instagram") {
-    const reelId = extractInstagramId(url);
-
     return (
-      <div className="rounded-xl overflow-hidden border border-white/[0.06] bg-black">
-        <div className="relative w-full max-w-[225px] mx-auto aspect-[9/16]">
-          {reelId ? (
-            <iframe
-              src={`https://www.instagram.com/reel/${reelId}/embed`}
-              className="absolute inset-0 w-full h-full"
-              allowFullScreen
-              title="Instagram Reel preview"
-              style={{ border: "none" }}
-            />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-white/20 text-xs">
-              Unable to embed reel
-            </div>
-          )}
-        </div>
-        <Controls
-          currentTime={currentTime}
-          duration={duration}
-          progress={progress}
-          muted={muted}
-          isPlaying={isPlaying}
-          playbackSpeed={playbackSpeed}
-          onToggleMute={() => setMuted(!muted)}
-          onTogglePlay={handleTogglePlay}
-          onSeek={onSeek}
-          onCycleSpeed={onCycleSpeed}
-          formatTime={formatTime}
-        />
-      </div>
+      <InstagramEmbed
+        url={url}
+        currentTime={currentTime}
+        isPlaying={isPlaying}
+        duration={duration}
+        playbackSpeed={playbackSpeed}
+        onSeek={onSeek}
+        onPlay={onPlay}
+        onPause={onPause}
+        onCycleSpeed={onCycleSpeed}
+      />
     );
   }
 

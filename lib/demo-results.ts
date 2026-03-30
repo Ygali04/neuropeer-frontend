@@ -45,9 +45,9 @@ function modalityBreakdown(duration: number, seed: number) {
 
 const INSTAGRAM_REEL: AnalysisResult = {
   job_id: "demo-instagram-reel",
-  url: "https://www.instagram.com/reel/DGfK3qMPUHk/",
+  url: "https://www.instagram.com/p/DWcFdH6CXZA/",
   content_type: "instagram_reel",
-  duration_seconds: 48,
+  duration_seconds: 65,
   neural_score: {
     total: 72,
     hook_score: 84,
@@ -77,30 +77,30 @@ const INSTAGRAM_REEL: AnalysisResult = {
     { name: "Brand Safety", score: 88, raw_value: 0.8801, description: "Content safety assessment.", brain_region: "Prefrontal / Moral Network", gtm_proxy: "Brand safety score" },
     { name: "CTA Effectiveness", score: 57, raw_value: 0.5712, description: "Call-to-action timing and clarity.", brain_region: "Motor Planning / SMA", gtm_proxy: "Conversion rate" },
   ],
-  attention_curve: attentionCurve(48, 1),
-  emotional_arousal_curve: curve(48, 55, 8),
-  cognitive_load_curve: curve(48, 45, 6),
+  attention_curve: attentionCurve(65, 1),
+  emotional_arousal_curve: curve(65, 55, 8),
+  cognitive_load_curve: curve(65, 45, 6),
   key_moments: [
     { timestamp: 2, type: "best_hook", label: "Strong visual hook with motion", score: 88 },
-    { timestamp: 14, type: "peak_engagement", label: "Peak audience attention", score: 92 },
-    { timestamp: 23, type: "emotional_peak", label: "Emotional resonance spike", score: 78 },
-    { timestamp: 35, type: "dropoff_risk", label: "Pacing drop — risk of exit", score: 34 },
-    { timestamp: 42, type: "recovery", label: "CTA recovery point", score: 65 },
+    { timestamp: 18, type: "peak_engagement", label: "Peak audience attention", score: 92 },
+    { timestamp: 32, type: "emotional_peak", label: "Emotional resonance spike", score: 78 },
+    { timestamp: 48, type: "dropoff_risk", label: "Pacing drop — risk of exit", score: 34 },
+    { timestamp: 58, type: "recovery", label: "CTA recovery point", score: 65 },
   ],
-  modality_breakdown: modalityBreakdown(48, 1),
+  modality_breakdown: modalityBreakdown(65, 1),
   overarching_summary:
     "This Instagram Reel has a strong visual hook (84) and solid aesthetic quality (78), but loses viewers mid-content due to declining sustained attention (68) and moderate memory encoding (61). " +
-    "The emotional arc peaks at 23s but is followed by a pacing drop at 35s — the most critical fix. " +
-    "Priority: (1) Add a pattern interrupt between 28–35s to prevent the drop-off, (2) reinforce the key message near the emotional peak at 23s for better recall, and (3) strengthen the CTA timing — currently it lands during a low-attention window.",
+    "The emotional arc peaks at 32s but is followed by a pacing drop at 48s — the most critical fix. " +
+    "Priority: (1) Add a pattern interrupt between 40–48s to prevent the drop-off, (2) reinforce the key message near the emotional peak at 32s for better recall, and (3) strengthen the CTA timing — currently it lands during a low-attention window.",
 };
 
 // ── YouTube Pre-roll Demo ────────────────────────────────────────────────────
 
 const YOUTUBE_PREROLL: AnalysisResult = {
   job_id: "demo-youtube-preroll",
-  url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  url: "https://www.youtube.com/shorts/Fez9foCZlng",
   content_type: "youtube_preroll",
-  duration_seconds: 30,
+  duration_seconds: 26,
   neural_score: {
     total: 81,
     hook_score: 91,
@@ -130,19 +130,19 @@ const YOUTUBE_PREROLL: AnalysisResult = {
     { name: "Brand Safety", score: 92, raw_value: 0.9201, description: "Completely brand-safe content.", brain_region: "Prefrontal / Moral Network", gtm_proxy: "Brand safety score" },
     { name: "CTA Effectiveness", score: 71, raw_value: 0.7101, description: "Implicit CTA — could be stronger.", brain_region: "Motor Planning / SMA", gtm_proxy: "Conversion rate" },
   ],
-  attention_curve: attentionCurve(30, 2),
-  emotional_arousal_curve: curve(30, 65, 7),
-  cognitive_load_curve: curve(30, 40, 5),
+  attention_curve: attentionCurve(26, 2),
+  emotional_arousal_curve: curve(26, 65, 7),
+  cognitive_load_curve: curve(26, 40, 5),
   key_moments: [
     { timestamp: 1, type: "best_hook", label: "Iconic opening — instant recognition", score: 95 },
-    { timestamp: 8, type: "peak_engagement", label: "Chorus drop — maximum engagement", score: 94 },
-    { timestamp: 15, type: "emotional_peak", label: "Emotional crescendo", score: 85 },
-    { timestamp: 22, type: "recovery", label: "Second verse re-engagement", score: 72 },
-    { timestamp: 28, type: "peak_engagement", label: "Final chorus peak", score: 88 },
+    { timestamp: 7, type: "peak_engagement", label: "Chorus drop — maximum engagement", score: 94 },
+    { timestamp: 13, type: "emotional_peak", label: "Emotional crescendo", score: 85 },
+    { timestamp: 19, type: "recovery", label: "Second verse re-engagement", score: 72 },
+    { timestamp: 24, type: "peak_engagement", label: "Final chorus peak", score: 88 },
   ],
-  modality_breakdown: modalityBreakdown(30, 2),
+  modality_breakdown: modalityBreakdown(26, 2),
   overarching_summary:
-    "This YouTube pre-roll scores exceptionally well across all dimensions (81 overall). The visual hook (91) is in the top tier — the opening frame immediately captures attention. " +
+    "This YouTube short scores exceptionally well across all dimensions (81 overall). The visual hook (91) is in the top tier — the opening frame immediately captures attention. " +
     "Audio-visual sync (89) and facial processing (88) are standout strengths, driven by the music and performer's presence. " +
     "Priority: (1) The CTA (71) could be stronger — add a clear action prompt in the final 3 seconds, and (2) novelty (68) is the weakest dimension — consider adding an unexpected visual element to boost shareability.",
 };

@@ -51,7 +51,15 @@ export default function AnalyzePage() {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [shareCopied, setShareCopied] = useState(false);
   const { session } = useAuth();
-  const [loadingExisting, setLoadingExisting] = useState(true); // for already-computed reports
+  const [loadingExisting, setLoadingExisting] = useState(true);
+
+  // ── AI Feedback state ──────────────────────────────────────────────────
+  const [aiFeedback, setAiFeedback] = useState<{
+    summary: string;
+    priorities: string[];
+    metric_tips: Record<string, string>;
+  } | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   // ── Playback state ─────────────────────────────────────────────────────
   const [isPlaying, setIsPlaying] = useState(false);
@@ -124,6 +132,21 @@ export default function AnalyzePage() {
   const handleReset = useCallback(() => {
     setIsPlaying(false); playbackTimeRef.current = 0; setPlaybackTime(0); setCurrentSecond(0);
   }, []);
+
+  // ── AI Feedback fetcher ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!result || aiLoading || aiFeedback) return;
+    setAiLoading(true);
+    fetch("/api/generate-feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "analysis", data: result }),
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data) => setAiFeedback(data))
+      .catch((err) => console.warn("AI feedback unavailable:", err.message))
+      .finally(() => setAiLoading(false));
+  }, [result]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Data fetching ──────────────────────────────────────────────────────
   const saveToHistory = useCallback((data: AnalysisResult) => {
@@ -393,7 +416,13 @@ export default function AnalyzePage() {
                 <Lightbulb className="w-4 h-4 text-brand-400" />
                 <h2 className="text-sm font-medium text-white/50 uppercase tracking-wider">Improvement Strategies</h2>
               </div>
-              <ImprovementStrategies metrics={result.metrics} overarchingSummary={result.overarching_summary} />
+              <ImprovementStrategies
+                metrics={result.metrics}
+                overarchingSummary={aiFeedback?.summary ?? result.overarching_summary}
+                aiPriorities={aiFeedback?.priorities}
+                aiMetricTips={aiFeedback?.metric_tips}
+                aiLoading={aiLoading}
+              />
             </div>
 
             {/* A/B link */}

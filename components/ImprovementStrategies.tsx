@@ -32,6 +32,9 @@ const CATEGORY_CONFIG: Record<
 interface Props {
   metrics: MetricScore[];
   overarchingSummary?: string;
+  aiPriorities?: string[];
+  aiMetricTips?: Record<string, string>;
+  aiLoading?: boolean;
 }
 
 /**
@@ -47,7 +50,7 @@ function parseSummary(text: string): { sentences: string[] } {
   return { sentences };
 }
 
-export function ImprovementStrategies({ metrics, overarchingSummary }: Props) {
+export function ImprovementStrategies({ metrics, overarchingSummary, aiPriorities, aiMetricTips, aiLoading }: Props) {
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
 
   const improvableMetrics = metrics
@@ -96,19 +99,40 @@ export function ImprovementStrategies({ metrics, overarchingSummary }: Props) {
   return (
     <div className="flex flex-col gap-6">
       {/* ── Overarching Summary ───────────────────────────────────────────── */}
-      {parsed && overarchingSummary && (
+      {(parsed || aiLoading) && (
         <div className="glass-card p-5 !border-brand-500/15">
           <div className="flex items-start gap-3">
             <div className="w-9 h-9 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
               <Target className="w-4 h-4 text-brand-400" />
             </div>
-            <div>
-              <h3 className="text-sm font-medium text-white/70 mb-2">Overall Assessment</h3>
-              <div className="space-y-2">
-                {parsed.sentences.map((sentence, i) => (
-                  <p key={i} className="text-sm text-white/45 leading-relaxed">{sentence}</p>
-                ))}
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-2">
+                <h3 className="text-sm font-medium text-white/70">Overall Assessment</h3>
+                {aiLoading && (
+                  <span className="text-[10px] text-brand-400 animate-pulse">Generating AI insights...</span>
+                )}
               </div>
+              {parsed && (
+                <div className="space-y-2">
+                  {parsed.sentences.map((sentence, i) => (
+                    <p key={i} className="text-sm text-white/45 leading-relaxed">{sentence}</p>
+                  ))}
+                </div>
+              )}
+              {/* AI-generated priorities */}
+              {aiPriorities && aiPriorities.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-white/[0.06] space-y-2">
+                  <p className="text-[10px] text-teal-400/60 uppercase tracking-wider font-medium mb-2">AI-Generated Priorities</p>
+                  {aiPriorities.map((p, i) => (
+                    <div key={i} className="flex items-start gap-2.5">
+                      <div className="w-5 h-5 rounded-md bg-brand-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span className="text-[10px] font-bold text-brand-400">{i + 1}</span>
+                      </div>
+                      <p className="text-sm text-white/50 leading-relaxed">{p}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
