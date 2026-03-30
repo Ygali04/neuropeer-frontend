@@ -34,11 +34,11 @@ import subprocess
 import tempfile
 import time
 import uuid
-from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
 import pandas as pd
+from pydantic import BaseModel, ConfigDict
 
 from backend.config import settings
 
@@ -713,8 +713,9 @@ def build_events_dataframe(
 
 # ── Top-level entry point ─────────────────────────────────────────────────────
 
-@dataclass
-class IngestedMedia:
+class IngestedMedia(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     video_path: Path
     audio_path: Path
     transcript_words: list[dict]

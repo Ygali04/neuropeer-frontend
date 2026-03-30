@@ -10,7 +10,7 @@ Metric taxonomy follows Section 2 of the NeuroPeer design document.
 from __future__ import annotations
 
 import numpy as np
-from dataclasses import dataclass
+from pydantic import BaseModel
 
 from backend.pipeline.atlas_mapping import (
     aggregate_roi_timeseries,
@@ -20,14 +20,20 @@ from backend.pipeline.atlas_mapping import (
 from backend.pipeline.tribe_inference import Modality
 
 
-@dataclass
-class MetricResult:
+class MetricResult(BaseModel):
     name: str
     score: float        # 0–100
     raw_value: float
     description: str
     brain_region: str
     gtm_proxy: str
+
+
+class ModalityContributionEntry(BaseModel):
+    timestamp: float
+    visual: float
+    audio: float
+    text: float
 
 
 def _norm(value: float, low: float, high: float) -> float:
@@ -423,7 +429,7 @@ def modality_dominance(
     predictions_video_only: np.ndarray,
     predictions_audio_only: np.ndarray,
     predictions_text_only: np.ndarray,
-) -> tuple[MetricResult, list[dict]]:
+) -> tuple[MetricResult, list[ModalityContributionEntry]]:
     """
     Determine which modality drives engagement via per-region R² ablation.
     Returns (MetricResult, per-second modality contribution breakdown).
@@ -442,12 +448,12 @@ def modality_dominance(
     breakdown = []
     for t in range(n):
         total = r2_video + r2_audio + r2_text + 1e-6
-        breakdown.append({
-            "timestamp": float(t),
-            "visual": round(r2_video / total * 100, 1),
-            "audio": round(r2_audio / total * 100, 1),
-            "text": round(r2_text / total * 100, 1),
-        })
+        breakdown.append(ModalityContributionEntry(
+            timestamp=float(t),
+            visual=round(r2_video / total * 100, 1),
+            audio=round(r2_audio / total * 100, 1),
+            text=round(r2_text / total * 100, 1),
+        ))
 
     result = MetricResult(
         name="Modality Dominance",
@@ -466,7 +472,7 @@ def modality_dominance(
 
 def compute_all_metrics(
     predictions: dict,  # Modality -> np.ndarray
-) -> tuple[list[MetricResult], np.ndarray, np.ndarray, np.ndarray, list[dict]]:
+) -> tuple[list[MetricResult], np.ndarray, np.ndarray, np.ndarray, list[ModalityContributionEntry]]:
     """
     Run all 18 metrics given the 4 modality prediction arrays.
 

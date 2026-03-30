@@ -8,7 +8,7 @@ engagement data and can be overridden per content type preset.
 from __future__ import annotations
 
 import numpy as np
-from dataclasses import dataclass
+from pydantic import BaseModel
 
 from backend.pipeline.metric_engine import MetricResult
 from backend.models.schemas import ContentType
@@ -68,8 +68,7 @@ CONTENT_PRESETS: dict[ContentType, dict[str, float]] = {
 }
 
 
-@dataclass
-class NeuralScoreBreakdownResult:
+class NeuralScoreBreakdownResult(BaseModel):
     total: float
     hook_score: float
     sustained_attention: float
@@ -77,6 +76,13 @@ class NeuralScoreBreakdownResult:
     memory_encoding: float
     aesthetic_quality: float
     cognitive_accessibility: float
+
+
+class KeyMomentResult(BaseModel):
+    timestamp: float
+    type: str
+    label: str
+    score: float
 
 
 def _get_metric(metrics: list[MetricResult], name: str) -> float:
@@ -147,7 +153,7 @@ def detect_key_moments(
     arousal_curve: np.ndarray,
     cognitive_load_curve: np.ndarray,
     predictions_full: np.ndarray,
-) -> list[dict]:
+) -> list[KeyMomentResult]:
     """
     Automatically identify key inflection points in the attention timeline.
 
@@ -167,22 +173,22 @@ def detect_key_moments(
     hook_window = min(5, n)
     if hook_window > 0:
         best_t = int(np.argmax(attention_curve[:hook_window]))
-        moments.append({
-            "timestamp": float(best_t),
-            "type": "best_hook",
-            "label": "Best Hook",
-            "score": float(attention_curve[best_t]),
-        })
+        moments.append(KeyMomentResult(
+            timestamp=float(best_t),
+            type="best_hook",
+            label="Best Hook",
+            score=float(attention_curve[best_t]),
+        ))
 
     # peak_engagement: global attention maximum (after hook window)
     if n > hook_window:
         peak_t = int(np.argmax(attention_curve[hook_window:])) + hook_window
-        moments.append({
-            "timestamp": float(peak_t),
-            "type": "peak_engagement",
-            "label": "Peak Engagement",
-            "score": float(attention_curve[peak_t]),
-        })
+        moments.append(KeyMomentResult(
+            timestamp=float(peak_t),
+            type="peak_engagement",
+            label="Peak Engagement",
+            score=float(attention_curve[peak_t]),
+        ))
 
     # emotional_peaks: arousal spikes > mean + 1.5 std
     mean_a, std_a = arousal_curve.mean(), arousal_curve.std()
@@ -192,12 +198,12 @@ def detect_key_moments(
     prev_t = -5
     for t in above:
         if t - prev_t >= 2:
-            moments.append({
-                "timestamp": float(t),
-                "type": "emotional_peak",
-                "label": "Emotional Peak",
-                "score": float(arousal_curve[t]),
-            })
+            moments.append(KeyMomentResult(
+                timestamp=float(t),
+                type="emotional_peak",
+                label="Emotional Peak",
+                score=float(arousal_curve[t]),
+            ))
             prev_t = int(t)
 
     # dropoff_risk: attention declining AND cognitive load high
@@ -206,30 +212,30 @@ def detect_key_moments(
             attn_falling = attention_curve[t] < attention_curve[t - 2] - 10
             cog_high = cognitive_load_curve[t] > cognitive_load_curve.mean() + cognitive_load_curve.std()
             if attn_falling and cog_high:
-                moments.append({
-                    "timestamp": float(t),
-                    "type": "dropoff_risk",
-                    "label": "Drop-off Risk",
-                    "score": float(attention_curve[t]),
-                })
+                moments.append(KeyMomentResult(
+                    timestamp=float(t),
+                    type="dropoff_risk",
+                    label="Drop-off Risk",
+                    score=float(attention_curve[t]),
+                ))
 
     # recovery: attention rises > 15 points over 2-second window
     for t in range(2, n):
         if attention_curve[t] - attention_curve[t - 2] > 15:
-            moments.append({
-                "timestamp": float(t),
-                "type": "recovery",
-                "label": "Re-engagement",
-                "score": float(attention_curve[t]),
-            })
+            moments.append(KeyMomentResult(
+                timestamp=float(t),
+                type="recovery",
+                label="Re-engagement",
+                score=float(attention_curve[t]),
+            ))
 
     # Sort by timestamp, deduplicate same-second entries
-    moments.sort(key=lambda m: m["timestamp"])
+    moments.sort(key=lambda m: m.timestamp)
     seen_times: set[float] = set()
     deduped = []
     for m in moments:
-        if m["timestamp"] not in seen_times:
+        if m.timestamp not in seen_times:
             deduped.append(m)
-            seen_times.add(m["timestamp"])
+            seen_times.add(m.timestamp)
 
     return deduped
