@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 const IS_MOCK = process.env.NEXT_PUBLIC_MOCK === "1";
-const protectedPaths = ["/analyze", "/compare"];
+const protectedPaths = ["/analyze"];
 const DEMO_PATHS = ["/analyze/demo-instagram-reel", "/analyze/demo-youtube-preroll"];
 
 export function proxy(request: NextRequest) {
