@@ -409,12 +409,8 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
               className={cn("flex items-center gap-2.5 px-2 py-1.5 rounded-lg transition-all duration-200 text-left", active?"bg-white/[0.04]":"hover:bg-white/[0.02]")}>
               <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor:cfg.color, boxShadow:active?`0 0 8px ${cfg.color}40`:`0 0 4px ${cfg.color}20` }} />
               <span className={cn("text-xs flex-shrink-0 w-24", active?"text-white/60":"text-white/35")}>{cfg.label}</span>
-              <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ backgroundColor: `${cfg.color}15` }}>
-                <div className="h-full rounded-full transition-all duration-500" style={{
-                  width: `${norm}%`,
-                  background: `linear-gradient(to right, ${cfg.color}40, ${cfg.color})`,
-                  opacity: active ? 0.95 : 0.7,
-                }} />
+              <div className="flex-1 h-1 bg-white/[0.04] rounded-full overflow-hidden">
+                <div className="h-full rounded-full transition-all duration-500" style={{ width:`${norm}%`, backgroundColor:cfg.color, opacity:active?0.9:0.6 }} />
               </div>
               <span className={cn("text-xs w-8 text-right tabular-nums", active?"text-white/50":"text-white/30")}>{norm.toFixed(0)}</span>
               <span onClick={e=>e.stopPropagation()}>

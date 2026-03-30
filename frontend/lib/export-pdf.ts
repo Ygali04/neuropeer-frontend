@@ -205,7 +205,7 @@ export async function generateReportPDF(result: AnalysisResult): Promise<void> {
     doc.setFontSize(6);
     doc.setTextColor(180, 180, 180);
     doc.text(
-      `NeuroPeer by Trupeer | Page ${i} of ${pageCount} | TRIBE v2 CC BY-NC 4.0`,
+      `NeuroPeer | Page ${i} of ${pageCount} | TRIBE v2 CC BY-NC 4.0`,
       pageWidth / 2,
       doc.internal.pageSize.getHeight() - 8,
       { align: "center" }

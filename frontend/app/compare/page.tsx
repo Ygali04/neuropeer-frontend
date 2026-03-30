@@ -83,8 +83,6 @@ function ComparePageInner() {
               <span className="font-[family-name:var(--font-display)] text-white font-semibold tracking-tight">
                 NeuroPeer
               </span>
-              <span className="text-white/20 text-sm">by</span>
-              <span className="text-brand-400 text-sm font-medium">Trupeer</span>
             </div>
           </Link>
           <span className="text-white/10">/</span>
