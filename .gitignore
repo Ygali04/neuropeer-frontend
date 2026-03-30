@@ -32,6 +32,7 @@ frontend/.next/
 
 # Cache
 .ruff_cache/
+.pytest_cache/
 
 # Design docs (large binary)
 *.docx

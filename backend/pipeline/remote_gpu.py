@@ -23,6 +23,7 @@ Verda SDK: pip install verda  (github.com/verda-cloud/sdk-python)
   Client is authenticated via API key set in VERDA_API_KEY.
   Docs: https://docs.verda.com
 """
+
 from __future__ import annotations
 
 import io
@@ -40,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 
 # ── Public entry point ────────────────────────────────────────────────────────
+
 
 def run_inference_backend(
     job_id: str,
@@ -61,6 +63,7 @@ def run_inference_backend(
 
 # ── Local inference (dev / worker-with-GPU) ───────────────────────────────────
 
+
 def _run_locally(
     job_id: str,
     events_df: pd.DataFrame,
@@ -78,6 +81,7 @@ def _run_locally(
 
 
 # ── Verda B200 spot instance inference ────────────────────────────────────────
+
 
 class VerdaError(RuntimeError):
     pass
@@ -121,7 +125,9 @@ def _run_on_verda(
     except VerdaError as exc:
         logger.warning(
             "Verda inference failed for job %s (instance=%s), falling back to local: %s",
-            job_id, instance_id, exc,
+            job_id,
+            instance_id,
+            exc,
         )
         # Graceful fallback — job never hard-fails due to spot availability
         return _run_locally(job_id, events_df)
@@ -140,6 +146,7 @@ def _run_on_verda(
 
 # ── Verda API client (via official verda Python SDK) ──────────────────────────
 
+
 def _verda_client():
     """
     Return an authenticated Verda SDK client.
@@ -149,11 +156,10 @@ def _verda_client():
     """
     try:
         import verda  # noqa: PLC0415
+
         return verda.Client(api_key=settings.verda_api_key, base_url=settings.verda_api_url)
     except ImportError as exc:
-        raise VerdaError(
-            "Verda SDK not installed. Run: pip install verda"
-        ) from exc
+        raise VerdaError("Verda SDK not installed. Run: pip install verda") from exc
 
 
 def _verda_create_instance(job_id: str, events_s3_key: str, output_s3_key: str) -> str:
@@ -164,8 +170,8 @@ def _verda_create_instance(job_id: str, events_s3_key: str, output_s3_key: str) 
     startup_script = _build_inference_script(events_s3_key, output_s3_key)
 
     payload = {
-        "instance_type": settings.verda_instance_type,   # "b200.1x"
-        "image": settings.verda_inference_image,          # pre-built Docker image
+        "instance_type": settings.verda_instance_type,  # "b200.1x"
+        "image": settings.verda_inference_image,  # pre-built Docker image
         "spot": True,
         "labels": {
             "neuropeer_job_id": job_id,
@@ -211,26 +217,20 @@ def _verda_wait_for_completion(instance_id: str, job_id: str) -> None:
         try:
             instance = client.instances.get(instance_id)
             status = getattr(instance, "status", "unknown")
-            logger.debug(
-                "Verda instance %s status: %s (job=%s)", instance_id, status, job_id
-            )
+            logger.debug("Verda instance %s status: %s (job=%s)", instance_id, status, job_id)
 
             if status in ("completed", "terminated", "stopped"):
                 exit_code = getattr(instance, "exit_code", 0) or 0
                 if exit_code != 0:
                     logs = getattr(instance, "logs", "") or ""
                     raise VerdaError(
-                        f"Inference script exited {exit_code} on instance {instance_id}. "
-                        f"Logs: {logs[-500:]}"
+                        f"Inference script exited {exit_code} on instance {instance_id}. Logs: {logs[-500:]}"
                     )
                 return
 
             if status in ("failed", "error", "cancelled"):
                 logs = getattr(instance, "logs", "") or ""
-                raise VerdaError(
-                    f"Verda instance {instance_id} entered status '{status}'. "
-                    f"Logs: {logs[-500:]}"
-                )
+                raise VerdaError(f"Verda instance {instance_id} entered status '{status}'. Logs: {logs[-500:]}")
 
         except VerdaError:
             raise
@@ -240,9 +240,7 @@ def _verda_wait_for_completion(instance_id: str, job_id: str) -> None:
         time.sleep(poll_interval)
         poll_interval = min(poll_interval * 1.5, 60)
 
-    raise VerdaError(
-        f"Verda instance {instance_id} timed out after {settings.verda_boot_timeout}s"
-    )
+    raise VerdaError(f"Verda instance {instance_id} timed out after {settings.verda_boot_timeout}s")
 
 
 def _verda_terminate(instance_id: str) -> None:
@@ -255,6 +253,7 @@ def _verda_terminate(instance_id: str) -> None:
 
 
 # ── Inference script (runs INSIDE the Verda B200 instance) ───────────────────
+
 
 def _build_inference_script(events_s3_key: str, output_s3_key: str) -> str:
     """
@@ -315,8 +314,10 @@ def _build_inference_script(events_s3_key: str, output_s3_key: str) -> str:
 
 # ── S3 helpers ────────────────────────────────────────────────────────────────
 
+
 def _s3_client():
     import boto3
+
     return boto3.client(
         "s3",
         endpoint_url=settings.s3_endpoint_url or None,

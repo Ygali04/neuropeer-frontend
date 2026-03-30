@@ -4,13 +4,12 @@ Celery worker tasks — async pipeline execution.
 Each task corresponds to one stage of the NeuroPeer inference pipeline.
 Progress is streamed back to the frontend via Redis pub/sub → WebSocket.
 """
+
 from __future__ import annotations
 
 import json
 import logging
-import os
 import tempfile
-import uuid
 from pathlib import Path
 
 import numpy as np
@@ -39,12 +38,14 @@ def _get_redis() -> redis_sync.Redis:
 
 def _publish_progress(job_id: str, status: str, progress: float, message: str) -> None:
     """Publish a progress event to the Redis channel for this job."""
-    payload = json.dumps({
-        "job_id": job_id,
-        "status": status,
-        "progress": progress,
-        "message": message,
-    })
+    payload = json.dumps(
+        {
+            "job_id": job_id,
+            "status": status,
+            "progress": progress,
+            "message": message,
+        }
+    )
     _get_redis().publish(f"neuropeer:job:{job_id}", payload)
 
 
@@ -84,11 +85,12 @@ def run_analysis(self, job_id: str, url: str, content_type: str) -> dict:
       4. Neural Score composite + key moment detection (CPU)
     """
     import io
-    from backend.pipeline.ingestion import ingest, DownloadError
-    from backend.pipeline.remote_gpu import run_inference_backend
+
+    from backend.models.schemas import ContentType
+    from backend.pipeline.ingestion import DownloadError, ingest
     from backend.pipeline.metric_engine import compute_all_metrics
     from backend.pipeline.neural_score import compute_neural_score, detect_key_moments
-    from backend.models.schemas import ContentType
+    from backend.pipeline.remote_gpu import run_inference_backend
 
     work_dir = Path(tempfile.mkdtemp(prefix=f"neuropeer_{job_id}_", dir=settings.temp_dir))
 
@@ -107,8 +109,7 @@ def run_analysis(self, job_id: str, url: str, content_type: str) -> dict:
             raise
 
         _publish_progress(
-            job_id, "transcribing", 0.18,
-            f"Downloaded {media.duration_seconds:.0f}s video. Transcribing audio…"
+            job_id, "transcribing", 0.18, f"Downloaded {media.duration_seconds:.0f}s video. Transcribing audio…"
         )
 
         # ── Stage 2: TRIBE v2 inference (local GPU or Verda B200 spot) ────────
@@ -131,10 +132,9 @@ def run_analysis(self, job_id: str, url: str, content_type: str) -> dict:
         _update_job_status(job_id, "scoring")
 
         from backend.pipeline.tribe_inference import Modality
+
         neural_score = compute_neural_score(metrics, content_type_enum)
-        key_moments = detect_key_moments(
-            attn_curve, arousal_curve, cog_curve, predictions[Modality.FULL]
-        )
+        key_moments = detect_key_moments(attn_curve, arousal_curve, cog_curve, predictions[Modality.FULL])
 
         # Save timeseries to S3
         ts_buffer = io.BytesIO()
@@ -203,6 +203,7 @@ def run_analysis(self, job_id: str, url: str, content_type: str) -> dict:
 
     finally:
         import shutil
+
         shutil.rmtree(work_dir, ignore_errors=True)
 
 

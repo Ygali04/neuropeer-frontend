@@ -1,8 +1,8 @@
 """POST /api/v1/compare — A/B neural comparison of 2+ videos."""
+
 from __future__ import annotations
 
 import json
-from uuid import UUID
 
 import redis.asyncio as aioredis
 from fastapi import APIRouter, HTTPException
@@ -63,7 +63,7 @@ async def compare_videos(request: CompareRequest) -> dict:
     best_hook_idx = hook_scores.index(max(hook_scores))
 
     recommendation = (
-        f"Video {winner_idx + 1} (\"{labels[winner_idx][:30]}...\") leads with a Neural Score of {winner_score:.0f}/100 "
+        f'Video {winner_idx + 1} ("{labels[winner_idx][:30]}...") leads with a Neural Score of {winner_score:.0f}/100 '
         f"(+{margin:.0f} vs. runner-up). "
     )
     if best_hook_idx != winner_idx:

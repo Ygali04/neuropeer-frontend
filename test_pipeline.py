@@ -7,16 +7,16 @@ files — into ../neuropeer-data with one directory per video.
 
 Usage: python test_pipeline.py
 """
+
 import asyncio
 import csv
 import io
 import json
 import logging
 import os
-import re
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
@@ -31,17 +31,17 @@ REPO_ROOT = Path(__file__).resolve().parent
 DATA_ROOT = (REPO_ROOT / ".." / "neuropeer-data").resolve()
 
 from backend.config import settings
+from backend.models.schemas import ContentType
 from backend.pipeline.ingestion import (
+    build_events_dataframe,
     download_video,
     extract_audio,
     get_video_duration,
     transcribe_audio,
-    build_events_dataframe,
 )
 from backend.pipeline.metric_engine import compute_all_metrics
 from backend.pipeline.neural_score import compute_neural_score, detect_key_moments
 from backend.pipeline.tribe_inference import Modality
-from backend.models.schemas import ContentType
 
 # ── Test URLs ────────────────────────────────────────────────────────────────
 
@@ -62,6 +62,7 @@ TEST_URLS = [
 
 
 # ── Logging setup ────────────────────────────────────────────────────────────
+
 
 def setup_logging(log_path: Path) -> logging.Logger:
     """Create a logger that writes to both a file and stdout."""
@@ -100,6 +101,7 @@ def setup_logging(log_path: Path) -> logging.Logger:
 
 # ── Mock inference ───────────────────────────────────────────────────────────
 
+
 def mock_tribe_predictions(n_timesteps: int) -> dict[Modality, np.ndarray]:
     rng = np.random.default_rng(42)
     n_vertices = 20484
@@ -132,6 +134,7 @@ def mock_tribe_predictions(n_timesteps: int) -> dict[Modality, np.ndarray]:
 
 # ── File savers ──────────────────────────────────────────────────────────────
 
+
 def save_timeseries_csv(path: Path, curves: dict[str, np.ndarray]):
     """Save per-second metric curves as a human-readable CSV."""
     n = max(len(v) for v in curves.values())
@@ -143,16 +146,29 @@ def save_timeseries_csv(path: Path, curves: dict[str, np.ndarray]):
             writer.writerow(row)
 
 
-def save_summary_report(path: Path, *, job_id, url, label, content_type,
-                        duration, fps, n_words, transcript, neural_score,
-                        metrics, key_moments, modality_breakdown,
-                        file_manifest):
+def save_summary_report(
+    path: Path,
+    *,
+    job_id,
+    url,
+    label,
+    content_type,
+    duration,
+    fps,
+    n_words,
+    transcript,
+    neural_score,
+    metrics,
+    key_moments,
+    modality_breakdown,
+    file_manifest,
+):
     """Write a comprehensive human-readable summary report."""
     lines = []
     lines.append("=" * 72)
-    lines.append(f"  NeuroPeer Analysis Report")
+    lines.append("  NeuroPeer Analysis Report")
     lines.append("=" * 72)
-    lines.append(f"")
+    lines.append("")
     lines.append(f"  Job ID:       {job_id}")
     lines.append(f"  URL:          {url}")
     lines.append(f"  Label:        {label}")
@@ -160,8 +176,8 @@ def save_summary_report(path: Path, *, job_id, url, label, content_type,
     lines.append(f"  Duration:     {duration:.1f}s")
     lines.append(f"  FPS:          {fps:.1f}")
     lines.append(f"  Words:        {n_words}")
-    lines.append(f"  Generated:    {datetime.now(timezone.utc).replace(tzinfo=None).strftime('%Y-%m-%d %H:%M:%S UTC')}")
-    lines.append(f"")
+    lines.append(f"  Generated:    {datetime.now(UTC).replace(tzinfo=None).strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    lines.append("")
 
     lines.append("-" * 72)
     lines.append(f"  NEURAL SCORE: {neural_score.total:.1f} / 100")
@@ -172,7 +188,7 @@ def save_summary_report(path: Path, *, job_id, url, label, content_type,
     lines.append(f"  Memory Encoding:         {neural_score.memory_encoding:6.1f}")
     lines.append(f"  Aesthetic Quality:       {neural_score.aesthetic_quality:6.1f}")
     lines.append(f"  Cognitive Accessibility: {neural_score.cognitive_accessibility:6.1f}")
-    lines.append(f"")
+    lines.append("")
 
     lines.append("-" * 72)
     lines.append(f"  ALL METRICS ({len(metrics)} total)")
@@ -182,17 +198,17 @@ def save_summary_report(path: Path, *, job_id, url, label, content_type,
         lines.append(f"    Brain region: {m.brain_region}")
         lines.append(f"    GTM proxy:    {m.gtm_proxy}")
         lines.append(f"    Description:  {m.description}")
-        lines.append(f"")
+        lines.append("")
 
     lines.append("-" * 72)
     lines.append(f"  KEY MOMENTS ({len(key_moments)} detected)")
     lines.append("-" * 72)
     for km in key_moments:
         lines.append(f"  [{km['timestamp']:6.1f}s]  {km['type']:22s}  {km['label']}  (score={km['score']:.1f})")
-    lines.append(f"")
+    lines.append("")
 
     lines.append("-" * 72)
-    lines.append(f"  TRANSCRIPT")
+    lines.append("  TRANSCRIPT")
     lines.append("-" * 72)
     # Word-wrap transcript at 70 chars
     words = transcript.split()
@@ -204,14 +220,14 @@ def save_summary_report(path: Path, *, job_id, url, label, content_type,
         line += w + " "
     if line.strip():
         lines.append(line)
-    lines.append(f"")
+    lines.append("")
 
     lines.append("-" * 72)
-    lines.append(f"  OUTPUT FILES")
+    lines.append("  OUTPUT FILES")
     lines.append("-" * 72)
     for name, size in file_manifest:
         lines.append(f"  {name:40s}  {size}")
-    lines.append(f"")
+    lines.append("")
     lines.append("=" * 72)
 
     path.write_text("\n".join(lines))
@@ -219,9 +235,12 @@ def save_summary_report(path: Path, *, job_id, url, label, content_type,
 
 # ── Database helpers ─────────────────────────────────────────────────────────
 
+
 async def create_tables(db_url: str):
     from sqlalchemy.ext.asyncio import create_async_engine
+
     from backend.models.db import Base
+
     engine = create_async_engine(db_url)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
@@ -230,16 +249,21 @@ async def create_tables(db_url: str):
 
 
 async def store_result(db_url: str, job_data: dict, result_data: dict):
-    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
     from backend.models.db import Job, Result
+
     engine = create_async_engine(db_url)
     Session = async_sessionmaker(engine, expire_on_commit=False)
     async with Session() as session:
         job = Job(
-            id=job_data["id"], url=job_data["url"], label=job_data["label"],
-            content_type=job_data["content_type"], status="complete",
+            id=job_data["id"],
+            url=job_data["url"],
+            label=job_data["label"],
+            content_type=job_data["content_type"],
+            status="complete",
             created_at=job_data["created_at"],
-            completed_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            completed_at=datetime.now(UTC).replace(tzinfo=None),
         )
         session.add(job)
         await session.flush()
@@ -265,14 +289,15 @@ async def store_result(db_url: str, job_data: dict, result_data: dict):
 
 
 async def query_results(db_url: str) -> str:
-    from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
+
     out = []
     engine = create_async_engine(db_url)
     async with engine.connect() as conn:
-        jobs = await conn.execute(text(
-            "SELECT id, url, label, content_type, status, created_at, completed_at FROM jobs ORDER BY created_at"
-        ))
+        jobs = await conn.execute(
+            text("SELECT id, url, label, content_type, status, created_at, completed_at FROM jobs ORDER BY created_at")
+        )
         rows = jobs.fetchall()
         out.append(f"  {len(rows)} jobs in database:\n")
         for r in rows:
@@ -285,12 +310,14 @@ async def query_results(db_url: str) -> str:
             out.append(f"      Completed: {r[6]}")
             out.append("")
 
-        results = await conn.execute(text(
-            "SELECT r.job_id, j.label, r.duration_seconds, r.neural_score_total, "
-            "r.hook_score, r.sustained_attention, r.emotional_resonance, "
-            "r.memory_encoding, r.aesthetic_quality, r.cognitive_accessibility "
-            "FROM results r JOIN jobs j ON r.job_id = j.id ORDER BY j.created_at"
-        ))
+        results = await conn.execute(
+            text(
+                "SELECT r.job_id, j.label, r.duration_seconds, r.neural_score_total, "
+                "r.hook_score, r.sustained_attention, r.emotional_resonance, "
+                "r.memory_encoding, r.aesthetic_quality, r.cognitive_accessibility "
+                "FROM results r JOIN jobs j ON r.job_id = j.id ORDER BY j.created_at"
+            )
+        )
         rrows = results.fetchall()
         out.append(f"  {len(rrows)} results in database:\n")
         for r in rrows:
@@ -309,6 +336,7 @@ async def query_results(db_url: str) -> str:
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
+
 
 async def main():
     db_url = os.environ["DATABASE_URL"]
@@ -357,16 +385,14 @@ async def main():
         # ── Stage 2: Audio extraction ────────────────────────────────
         log.info("[2/6] Extracting audio...")
         audio_path = extract_audio(video_path, out_dir)
-        log.info("Audio: %s (%.1f MB)", audio_path.name,
-                 audio_path.stat().st_size / (1024 * 1024))
+        log.info("Audio: %s (%.1f MB)", audio_path.name, audio_path.stat().st_size / (1024 * 1024))
 
         # ── Stage 3: Video metadata + Transcription ──────────────────
         log.info("[3/6] Getting video metadata...")
         duration, fps = get_video_duration(video_path)
         log.info("Duration: %.1fs | FPS: %.1f", duration, fps)
 
-        log.info("[3/6] Transcribing audio (faster-whisper, model=%s)...",
-                 settings.whisper_model_size)
+        log.info("[3/6] Transcribing audio (faster-whisper, model=%s)...", settings.whisper_model_size)
         transcript_words = transcribe_audio(audio_path)
         full_text = " ".join(w["word"] for w in transcript_words)
         log.info("Transcription complete: %d words", len(transcript_words))
@@ -391,41 +417,32 @@ async def main():
 
         # ── Stage 4: Events DataFrame ────────────────────────────────
         log.info("[4/6] Building events DataFrame (1 Hz)...")
-        events_df = build_events_dataframe(
-            video_path, audio_path, transcript_words, duration, fps
-        )
+        events_df = build_events_dataframe(video_path, audio_path, transcript_words, duration, fps)
         events_df.to_parquet(out_dir / "events.parquet", index=False)
         events_df.to_csv(out_dir / "events.csv", index=False)
-        log.info("Events: %d rows x %d cols → events.parquet + events.csv",
-                 len(events_df), len(events_df.columns))
+        log.info("Events: %d rows x %d cols → events.parquet + events.csv", len(events_df), len(events_df.columns))
 
         # ── Stage 5: Mock TRIBE v2 inference ─────────────────────────
         log.info("[5/6] Running mock TRIBE v2 inference (4 modality passes)...")
         n_timesteps = int(duration)
         predictions = mock_tribe_predictions(n_timesteps)
         for mod, arr in predictions.items():
-            log.info("  %s: shape=%s, mean=%.4f, std=%.4f",
-                     mod.value, arr.shape, arr.mean(), arr.std())
+            log.info("  %s: shape=%s, mean=%.4f, std=%.4f", mod.value, arr.shape, arr.mean(), arr.std())
 
         # Save predictions (compressed numpy)
         vertex_key = f"predictions/{job_id}/vertices.npz"
         buf = io.BytesIO()
         np.savez_compressed(buf, **{m.value: arr for m, arr in predictions.items()})
         (out_dir / "vertices.npz").write_bytes(buf.getvalue())
-        log.info("Saved vertices.npz (%.1f MB)",
-                 (out_dir / "vertices.npz").stat().st_size / (1024 * 1024))
+        log.info("Saved vertices.npz (%.1f MB)", (out_dir / "vertices.npz").stat().st_size / (1024 * 1024))
 
         # ── Stage 6: Metrics + Neural Score ──────────────────────────
         log.info("[6/6] Computing 18 GTM metrics + Neural Score...")
         content_type_enum = ContentType(content_type_str)
-        metrics, attn_curve, arousal_curve, cog_curve, modality_breakdown = (
-            compute_all_metrics(predictions)
-        )
+        metrics, attn_curve, arousal_curve, cog_curve, modality_breakdown = compute_all_metrics(predictions)
 
         neural_score = compute_neural_score(metrics, content_type_enum)
-        key_moments = detect_key_moments(
-            attn_curve, arousal_curve, cog_curve, predictions[Modality.FULL]
-        )
+        key_moments = detect_key_moments(attn_curve, arousal_curve, cog_curve, predictions[Modality.FULL])
 
         log.info("Neural Score: %.1f/100", neural_score.total)
         for m in metrics:
@@ -436,13 +453,18 @@ async def main():
         # Timeseries (numpy + CSV)
         np.savez_compressed(
             out_dir / "timeseries.npz",
-            attention=attn_curve, arousal=arousal_curve, cognitive_load=cog_curve,
+            attention=attn_curve,
+            arousal=arousal_curve,
+            cognitive_load=cog_curve,
         )
-        save_timeseries_csv(out_dir / "timeseries.csv", {
-            "attention": attn_curve,
-            "emotional_arousal": arousal_curve,
-            "cognitive_load": cog_curve,
-        })
+        save_timeseries_csv(
+            out_dir / "timeseries.csv",
+            {
+                "attention": attn_curve,
+                "emotional_arousal": arousal_curve,
+                "cognitive_load": cog_curve,
+            },
+        )
         log.info("Saved timeseries.npz + timeseries.csv")
 
         # Metrics JSON
@@ -499,17 +521,24 @@ async def main():
         for fp in sorted(out_dir.iterdir()):
             sz = fp.stat().st_size
             if sz >= 1024 * 1024:
-                file_manifest.append((fp.name, f"{sz / (1024*1024):.1f} MB"))
+                file_manifest.append((fp.name, f"{sz / (1024 * 1024):.1f} MB"))
             else:
                 file_manifest.append((fp.name, f"{sz / 1024:.1f} KB"))
 
         # Summary report (human-readable text)
         save_summary_report(
             out_dir / "REPORT.txt",
-            job_id=job_id, url=url, label=label, content_type=content_type_str,
-            duration=duration, fps=fps, n_words=len(transcript_words),
-            transcript=full_text, neural_score=neural_score,
-            metrics=metrics, key_moments=key_moments,
+            job_id=job_id,
+            url=url,
+            label=label,
+            content_type=content_type_str,
+            duration=duration,
+            fps=fps,
+            n_words=len(transcript_words),
+            transcript=full_text,
+            neural_score=neural_score,
+            metrics=metrics,
+            key_moments=key_moments,
             modality_breakdown=modality_breakdown,
             file_manifest=file_manifest + [("REPORT.txt", "this file")],
         )
@@ -518,9 +547,11 @@ async def main():
         # ── Store in PostgreSQL ──────────────────────────────────────
         log.info("Storing results in PostgreSQL...")
         job_data = {
-            "id": job_id, "url": url, "label": label,
+            "id": job_id,
+            "url": url,
+            "label": label,
             "content_type": content_type_str,
-            "created_at": datetime.now(timezone.utc).replace(tzinfo=None),
+            "created_at": datetime.now(UTC).replace(tzinfo=None),
         }
         result_data = {
             "duration_seconds": duration,
@@ -555,13 +586,13 @@ async def main():
     # Save database dump to data root
     with open(DATA_ROOT / "database_dump.txt", "w") as f:
         f.write("NeuroPeer Database Contents\n")
-        f.write(f"Generated: {datetime.now(timezone.utc).replace(tzinfo=None).strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
+        f.write(f"Generated: {datetime.now(UTC).replace(tzinfo=None).strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
         f.write("=" * 60 + "\n\n")
         f.write(db_report)
     print(f"  Database dump: {DATA_ROOT / 'database_dump.txt'}")
 
     # Print database contents
-    print(f"\n  DATABASE CONTENTS")
+    print("\n  DATABASE CONTENTS")
     print(f"  {'=' * 50}")
     print(db_report)
 
@@ -571,17 +602,17 @@ async def main():
     for sub in sorted(DATA_ROOT.iterdir()):
         if sub.is_dir():
             total_size = sum(f.stat().st_size for f in sub.iterdir() if f.is_file())
-            print(f"\n  {sub.name}/  ({total_size / (1024*1024):.1f} MB total)")
+            print(f"\n  {sub.name}/  ({total_size / (1024 * 1024):.1f} MB total)")
             for fp in sorted(sub.iterdir()):
                 sz = fp.stat().st_size
                 if sz >= 1024 * 1024:
-                    print(f"    {fp.name:42s}  {sz / (1024*1024):6.1f} MB")
+                    print(f"    {fp.name:42s}  {sz / (1024 * 1024):6.1f} MB")
                 else:
                     print(f"    {fp.name:42s}  {sz / 1024:6.1f} KB")
         elif sub.is_file():
             print(f"\n  {sub.name}")
 
-    print(f"\n  Done.\n")
+    print("\n  Done.\n")
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ ROIs using the Schaefer-1000 parcellation (via Nilearn).
 Each NeuroPeer metric is computed by aggregating vertex-level predictions
 over the specific functional region(s) that its neural substrate occupies.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -21,23 +22,23 @@ import numpy as np
 # Label format: 7Networks_{LH,RH}_{Network}_{Subregion}_{Number}
 # Available networks: Vis, SomMot, DorsAttn, SalVentAttn, Limbic, Cont, Default
 _PARCEL_PATTERNS: dict[str, list[str]] = {
-    "ventral_striatum": ["Limbic_OFC"],                         # NAcc proxy via OFC
-    "anterior_insula": ["SalVentAttn_FrOperIns"],               # AIns: frontal operculum / insula
-    "medial_temporal": ["Limbic_TempPole"],                     # hippocampus / amygdala proxy
-    "tpj": ["SalVentAttn_TempOccPar"],                         # temporoparietal junction
-    "medial_frontal_acc": ["SalVentAttn_Med", "Cont_Cing"],    # ACC / medial frontal
-    "visual_cortex": ["_Vis_"],                                 # V1–V4: all visual parcels
-    "parietal_dorsal": ["DorsAttn_Post", "DorsAttn_FEF"],      # IPS + FEF
-    "prefrontal_dlPFC": ["Cont_PFCd", "Cont_PFCl"],            # dlPFC (executive)
-    "dmn": ["Default_"],                                        # Default Mode Network
-    "limbic_amygdala": ["Limbic_"],                             # amygdala + limbic system
-    "hippocampal": ["Limbic_TempPole", "Default_PHC"],          # medial temporal lobe + PHC
-    "mpfc_ofc": ["Default_PFC", "Limbic_OFC"],                 # mPFC + OFC (valuation)
-    "auditory_sts": ["SalVentAttn_TempOcc", "_SomMot_"],       # A1 / STS / somatomotor
+    "ventral_striatum": ["Limbic_OFC"],  # NAcc proxy via OFC
+    "anterior_insula": ["SalVentAttn_FrOperIns"],  # AIns: frontal operculum / insula
+    "medial_temporal": ["Limbic_TempPole"],  # hippocampus / amygdala proxy
+    "tpj": ["SalVentAttn_TempOccPar"],  # temporoparietal junction
+    "medial_frontal_acc": ["SalVentAttn_Med", "Cont_Cing"],  # ACC / medial frontal
+    "visual_cortex": ["_Vis_"],  # V1–V4: all visual parcels
+    "parietal_dorsal": ["DorsAttn_Post", "DorsAttn_FEF"],  # IPS + FEF
+    "prefrontal_dlPFC": ["Cont_PFCd", "Cont_PFCl"],  # dlPFC (executive)
+    "dmn": ["Default_"],  # Default Mode Network
+    "limbic_amygdala": ["Limbic_"],  # amygdala + limbic system
+    "hippocampal": ["Limbic_TempPole", "Default_PHC"],  # medial temporal lobe + PHC
+    "mpfc_ofc": ["Default_PFC", "Limbic_OFC"],  # mPFC + OFC (valuation)
+    "auditory_sts": ["SalVentAttn_TempOcc", "_SomMot_"],  # A1 / STS / somatomotor
     "broca_wernicke": ["SalVentAttn_FrOperIns", "SalVentAttn_PFCl"],  # left IFG + PFC proxy
-    "parahippocampal": ["Default_PHC"],                         # parahippocampal place area
-    "fusiform": ["_Vis_", "DorsAttn_Post"],                    # FFA proxy via ventral visual
-    "subcortical": ["Limbic_"],                                 # subcortical reward proxy
+    "parahippocampal": ["Default_PHC"],  # parahippocampal place area
+    "fusiform": ["_Vis_", "DorsAttn_Post"],  # FFA proxy via ventral visual
+    "subcortical": ["Limbic_"],  # subcortical reward proxy
 }
 
 _atlas_cache: dict | None = None
@@ -68,13 +69,11 @@ def _load_atlas() -> dict:
     label_names: list[str] = atlas.labels  # list of parcel names
 
     # Ensure label names are strings (nilearn sometimes returns bytes)
-    label_names_str = [
-        l.decode() if isinstance(l, bytes) else str(l) for l in label_names
-    ]
+    label_names_str = [l.decode() if isinstance(l, bytes) else str(l) for l in label_names]
 
     _atlas_cache = {
-        "vertex_labels": all_labels,       # (20484,) int array, 0 = unlabeled
-        "label_names": label_names_str,    # list[str] length ~1001 (incl. Background)
+        "vertex_labels": all_labels,  # (20484,) int array, 0 = unlabeled
+        "label_names": label_names_str,  # list[str] length ~1001 (incl. Background)
     }
     return _atlas_cache
 
@@ -133,4 +132,4 @@ def compute_r_squared(a: np.ndarray, b: np.ndarray) -> float:
     if len(a) < 2:
         return 0.0
     corr = np.corrcoef(a, b)[0, 1]
-    return float(corr ** 2)
+    return float(corr**2)

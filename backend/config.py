@@ -51,9 +51,9 @@ class Settings(BaseSettings):
     # Format: http://user:password@host:port  OR leave empty to disable.
     # Recommended provider: Oxylabs rotating residential ($8–15/GB).
     # Use rotating session IDs per request to avoid rate-limit accumulation.
-    proxy_url: str = ""          # e.g. http://proxy.oxylabs.io:60000
-    proxy_username: str = ""     # Oxylabs username (session ID appended automatically)
-    proxy_password: str = ""     # Oxylabs password
+    proxy_url: str = ""  # e.g. http://proxy.oxylabs.io:60000
+    proxy_username: str = ""  # Oxylabs username (session ID appended automatically)
+    proxy_password: str = ""  # Oxylabs password
 
     # Remote GPU inference (Verda B200 spot instances)
     # Set to "local" to run TRIBE v2 on the worker itself (requires local GPU).

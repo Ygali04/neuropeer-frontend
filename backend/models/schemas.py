@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, HttpUrl, field_validator
+from pydantic import BaseModel, field_validator
 
 
 class ContentType(str, Enum):
@@ -29,10 +28,11 @@ class JobStatus(str, Enum):
 
 # --- Request schemas ---
 
+
 class AnalyzeRequest(BaseModel):
     url: str
     content_type: ContentType = ContentType.custom
-    label: Optional[str] = None  # user-provided name for A/B labeling
+    label: str | None = None  # user-provided name for A/B labeling
 
     @field_validator("url")
     @classmethod
@@ -58,6 +58,7 @@ class CompareRequest(BaseModel):
 
 # --- Response schemas ---
 
+
 class JobCreatedResponse(BaseModel):
     job_id: UUID
     websocket_url: str
@@ -73,16 +74,16 @@ class ProgressEvent(BaseModel):
 
 class MetricScore(BaseModel):
     name: str
-    score: float          # 0–100
-    raw_value: float      # raw computation output
+    score: float  # 0–100
+    raw_value: float  # raw computation output
     description: str
     brain_region: str
     gtm_proxy: str
 
 
 class KeyMoment(BaseModel):
-    timestamp: float      # seconds
-    type: str             # "best_hook" | "peak_engagement" | "emotional_peak" | "dropoff_risk" | "recovery"
+    timestamp: float  # seconds
+    type: str  # "best_hook" | "peak_engagement" | "emotional_peak" | "dropoff_risk" | "recovery"
     label: str
     score: float
 
@@ -95,7 +96,7 @@ class ModalityContribution(BaseModel):
 
 
 class NeuralScoreBreakdown(BaseModel):
-    total: float          # 0–100, weighted composite
+    total: float  # 0–100, weighted composite
     hook_score: float
     sustained_attention: float
     emotional_resonance: float
@@ -111,16 +112,16 @@ class AnalysisResult(BaseModel):
     duration_seconds: float
     neural_score: NeuralScoreBreakdown
     metrics: list[MetricScore]
-    attention_curve: list[float]          # per-second, length = duration
+    attention_curve: list[float]  # per-second, length = duration
     emotional_arousal_curve: list[float]  # per-second
-    cognitive_load_curve: list[float]     # per-second
+    cognitive_load_curve: list[float]  # per-second
     key_moments: list[KeyMoment]
     modality_breakdown: list[ModalityContribution]
 
 
 class BrainMapFrame(BaseModel):
     timestamp: float
-    vertex_activations: list[float]       # length 20484
+    vertex_activations: list[float]  # length 20484
 
 
 class ComparisonResult(BaseModel):

@@ -1,7 +1,7 @@
 """WebSocket endpoint — streams real-time job progress to the frontend."""
+
 from __future__ import annotations
 
-import asyncio
 import json
 
 import redis.asyncio as aioredis
@@ -35,12 +35,14 @@ async def job_progress(websocket: WebSocket, job_id: str) -> None:
         # First, check if the job is already complete (race condition)
         existing = await r.get(f"neuropeer:result:{job_id}")
         if existing:
-            await websocket.send_json({
-                "job_id": job_id,
-                "status": "complete",
-                "progress": 1.0,
-                "message": "Analysis already complete.",
-            })
+            await websocket.send_json(
+                {
+                    "job_id": job_id,
+                    "status": "complete",
+                    "progress": 1.0,
+                    "message": "Analysis already complete.",
+                }
+            )
             await websocket.close()
             return
 

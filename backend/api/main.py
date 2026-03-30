@@ -1,10 +1,11 @@
 """NeuroPeer FastAPI application."""
+
 from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api.routes import analyze, results, compare, export
+from backend.api.routes import analyze, compare, export, results
 from backend.api.websocket import router as ws_router
 
 app = FastAPI(

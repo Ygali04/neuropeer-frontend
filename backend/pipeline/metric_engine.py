@@ -7,6 +7,7 @@ derived from the neuromarketing research literature.
 
 Metric taxonomy follows Section 2 of the NeuroPeer design document.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -14,15 +15,13 @@ from pydantic import BaseModel
 
 from backend.pipeline.atlas_mapping import (
     aggregate_roi_timeseries,
-    aggregate_all_rois,
     compute_r_squared,
 )
-from backend.pipeline.tribe_inference import Modality
 
 
 class MetricResult(BaseModel):
     name: str
-    score: float        # 0–100
+    score: float  # 0–100
     raw_value: float
     description: str
     brain_region: str
@@ -46,6 +45,7 @@ def _norm(value: float, low: float, high: float) -> float:
 # ---------------------------------------------------------------------------
 # 2.1 Attention Capture Metrics
 # ---------------------------------------------------------------------------
+
 
 def hook_score(
     predictions_full: np.ndarray,
@@ -107,6 +107,7 @@ def curiosity_gap_index(predictions_full: np.ndarray) -> MetricResult:
 # ---------------------------------------------------------------------------
 # 2.2 Sustained Attention & Retention Metrics
 # ---------------------------------------------------------------------------
+
 
 def attention_curve(predictions_full: np.ndarray) -> np.ndarray:
     """
@@ -185,6 +186,7 @@ def reengagement_spikes(predictions_full: np.ndarray) -> MetricResult:
 # 2.3 Emotional Resonance Metrics
 # ---------------------------------------------------------------------------
 
+
 def emotional_arousal(predictions_full: np.ndarray) -> MetricResult:
     """Absolute limbic activation intensity — amygdala bilateral arousal."""
     limbic = aggregate_roi_timeseries(predictions_full, "limbic_amygdala")
@@ -258,6 +260,7 @@ def social_cognition(predictions_full: np.ndarray) -> MetricResult:
 # 2.4 Aesthetic Quality Metrics
 # ---------------------------------------------------------------------------
 
+
 def visual_aesthetic_score(predictions_full: np.ndarray) -> MetricResult:
     """mOFC + mPFC aesthetic valuation circuit mean activation."""
     mpfc_ofc = aggregate_roi_timeseries(predictions_full, "mpfc_ofc").mean()
@@ -305,6 +308,7 @@ def scene_composition(predictions_full: np.ndarray) -> MetricResult:
 # ---------------------------------------------------------------------------
 # 2.5 Cognitive Processing & Memory Metrics
 # ---------------------------------------------------------------------------
+
 
 def cognitive_load(predictions_full: np.ndarray) -> MetricResult:
     """dlPFC activation intensity — working memory / executive processing demand."""
@@ -380,6 +384,7 @@ def message_clarity(predictions_full: np.ndarray) -> MetricResult:
 # 2.6 Multimodal Integration Metrics
 # ---------------------------------------------------------------------------
 
+
 def audio_visual_coherence(
     predictions_full: np.ndarray,
     predictions_video_only: np.ndarray,
@@ -448,12 +453,14 @@ def modality_dominance(
     breakdown = []
     for t in range(n):
         total = r2_video + r2_audio + r2_text + 1e-6
-        breakdown.append(ModalityContributionEntry(
-            timestamp=float(t),
-            visual=round(r2_video / total * 100, 1),
-            audio=round(r2_audio / total * 100, 1),
-            text=round(r2_text / total * 100, 1),
-        ))
+        breakdown.append(
+            ModalityContributionEntry(
+                timestamp=float(t),
+                visual=round(r2_video / total * 100, 1),
+                audio=round(r2_audio / total * 100, 1),
+                text=round(r2_text / total * 100, 1),
+            )
+        )
 
     result = MetricResult(
         name="Modality Dominance",
@@ -469,6 +476,7 @@ def modality_dominance(
 # ---------------------------------------------------------------------------
 # Full metric computation
 # ---------------------------------------------------------------------------
+
 
 def compute_all_metrics(
     predictions: dict,  # Modality -> np.ndarray

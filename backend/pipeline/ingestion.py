@@ -25,10 +25,10 @@ Residential proxy (required for server IP blocks on Instagram):
   Set PROXY_URL, PROXY_USERNAME, PROXY_PASSWORD in .env.
   Recommended: Oxylabs rotating residential ($8-15/GB).
 """
+
 from __future__ import annotations
 
 import logging
-import os
 import re
 import subprocess
 import tempfile
@@ -50,11 +50,11 @@ _DIRECT_VIDEO_EXTS = {".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v"}
 
 _PLATFORM_PATTERNS = {
     "instagram": re.compile(r"instagram\.com/(reel|p|tv)/"),
-    "youtube":   re.compile(r"(youtube\.com/watch|youtu\.be/|youtube\.com/shorts/)"),
-    "tiktok":    re.compile(r"tiktok\.com/"),
-    "twitter":   re.compile(r"(twitter\.com|x\.com)/\w+/status/"),
-    "facebook":  re.compile(r"(facebook\.com|fb\.watch)/"),
-    "vimeo":     re.compile(r"vimeo\.com/"),
+    "youtube": re.compile(r"(youtube\.com/watch|youtu\.be/|youtube\.com/shorts/)"),
+    "tiktok": re.compile(r"tiktok\.com/"),
+    "twitter": re.compile(r"(twitter\.com|x\.com)/\w+/status/"),
+    "facebook": re.compile(r"(facebook\.com|fb\.watch)/"),
+    "vimeo": re.compile(r"vimeo\.com/"),
 }
 
 
@@ -71,8 +71,10 @@ def _detect_platform(url: str) -> str:
 
 # ── Custom error ──────────────────────────────────────────────────────────────
 
+
 class DownloadError(RuntimeError):
     """Raised when yt-dlp fails. Carries the full stderr for debugging."""
+
     def __init__(self, message: str, stderr: str = ""):
         self.stderr = stderr
         # Keep stderr in the message so it surfaces in the job error field
@@ -81,6 +83,7 @@ class DownloadError(RuntimeError):
 
 
 # ── Base yt-dlp command builder ───────────────────────────────────────────────
+
 
 def _residential_proxy_url() -> str | None:
     """
@@ -120,16 +123,23 @@ def _base_ytdlp_args(use_proxy: bool = False) -> list[str]:
     args: list[str] = [
         "yt-dlp",
         "--no-playlist",
-        "--no-warnings",        # suppress non-critical warnings
-        "--no-part",            # don't leave .part files on failure
-        "--retries", "3",
-        "--fragment-retries", "3",
-        "--file-access-retries", "3",
-        "--extractor-retries", "3",
+        "--no-warnings",  # suppress non-critical warnings
+        "--no-part",  # don't leave .part files on failure
+        "--retries",
+        "3",
+        "--fragment-retries",
+        "3",
+        "--file-access-retries",
+        "3",
+        "--extractor-retries",
+        "3",
         # Throttled download — helps avoid rate-limit bans on Meta platforms
-        "--sleep-requests", "1",
-        "--min-sleep-interval", "3",
-        "--max-sleep-interval", "8",
+        "--sleep-requests",
+        "1",
+        "--min-sleep-interval",
+        "3",
+        "--max-sleep-interval",
+        "8",
         # Force IPv4 — avoids some IPv6 routing issues with residential proxies
         "--force-ipv4",
     ]
@@ -161,6 +171,7 @@ def _base_ytdlp_args(use_proxy: bool = False) -> list[str]:
 
 # ── Per-platform yt-dlp strategy lists ───────────────────────────────────────
 
+
 def _strategies_for_platform(url: str, output_template: str, platform: str) -> list[list[str]]:
     """
     Return an ordered list of yt-dlp command variants to try.
@@ -179,15 +190,21 @@ def _strategies_for_platform(url: str, output_template: str, platform: str) -> l
         return [
             # Strategy 1: best quality — requires residential proxy + Firefox cookies
             _cmd(
-                "--format", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-                "--add-header", "referer:https://www.instagram.com/",
-                "--add-header", "x-ig-app-id:936619743392459",
-                "--extractor-args", "instagram:api_version=v1",
+                "--format",
+                "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+                "--add-header",
+                "referer:https://www.instagram.com/",
+                "--add-header",
+                "x-ig-app-id:936619743392459",
+                "--extractor-args",
+                "instagram:api_version=v1",
             ),
             # Strategy 2: single-stream mp4 (avoids merge issues)
             _cmd(
-                "--format", "best[ext=mp4]/best",
-                "--add-header", "referer:https://www.instagram.com/",
+                "--format",
+                "best[ext=mp4]/best",
+                "--add-header",
+                "referer:https://www.instagram.com/",
             ),
             # Strategy 3: generic best (last resort)
             _cmd("--format", "best"),
@@ -197,11 +214,13 @@ def _strategies_for_platform(url: str, output_template: str, platform: str) -> l
         return [
             # Strategy 1: best mp4 video + m4a audio (most compatible)
             _cmd(
-                "--format", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+                "--format",
+                "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
             ),
             # Strategy 2: any best video + audio
             _cmd(
-                "--format", "bestvideo+bestaudio/best",
+                "--format",
+                "bestvideo+bestaudio/best",
             ),
             # Strategy 3: single best stream
             _cmd("--format", "best"),
@@ -212,8 +231,10 @@ def _strategies_for_platform(url: str, output_template: str, platform: str) -> l
     elif platform == "tiktok":
         return [
             _cmd(
-                "--format", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-                "--add-header", "referer:https://www.tiktok.com/",
+                "--format",
+                "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+                "--add-header",
+                "referer:https://www.tiktok.com/",
             ),
             _cmd("--format", "best"),
         ]
@@ -228,8 +249,10 @@ def _strategies_for_platform(url: str, output_template: str, platform: str) -> l
         # Facebook requires residential proxy + logged-in cookies
         return [
             _cmd(
-                "--format", "best[ext=mp4]/best",
-                "--add-header", "referer:https://www.facebook.com/",
+                "--format",
+                "best[ext=mp4]/best",
+                "--add-header",
+                "referer:https://www.facebook.com/",
             ),
             _cmd("--format", "best"),
         ]
@@ -237,7 +260,8 @@ def _strategies_for_platform(url: str, output_template: str, platform: str) -> l
     elif platform == "vimeo":
         return [
             _cmd(
-                "--format", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+                "--format",
+                "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
             ),
             _cmd("--format", "best"),
         ]
@@ -253,6 +277,7 @@ def _strategies_for_platform(url: str, output_template: str, platform: str) -> l
 
 # ── Direct URL downloader (bypasses yt-dlp) ──────────────────────────────────
 
+
 def _download_direct(url: str, output_dir: Path) -> Path:
     """Download a direct video file URL using urllib. No auth needed."""
     import urllib.request
@@ -263,8 +288,7 @@ def _download_direct(url: str, output_dir: Path) -> Path:
 
     headers = {
         "User-Agent": (
-            settings.ytdlp_user_agent
-            or "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+            settings.ytdlp_user_agent or "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
         )
     }
     req = urllib.request.Request(url, headers=headers)
@@ -288,9 +312,7 @@ _IG_GRAPHQL_URL = "https://www.instagram.com/graphql/query"
 _IG_APP_ID = "936619743392459"
 _IG_DOC_ID = "24368985919464652"
 _IG_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/124.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
 
@@ -455,6 +477,7 @@ def _video_url_from_item(item: dict) -> str | None:
 
 # ── Main download function ────────────────────────────────────────────────────
 
+
 def download_video(url: str, output_dir: Path) -> Path:
     """
     Download a video from any supported URL.
@@ -481,7 +504,10 @@ def download_video(url: str, output_dir: Path) -> Path:
         for retry in range(settings.ytdlp_max_retries):
             logger.info(
                 "Download attempt strategy=%d retry=%d platform=%s url=%s",
-                attempt_i, retry, platform, url,
+                attempt_i,
+                retry,
+                platform,
+                url,
             )
             result = subprocess.run(cmd, capture_output=True, text=True)
             last_stderr = result.stderr
@@ -500,22 +526,41 @@ def download_video(url: str, output_dir: Path) -> Path:
             stderr_lower = result.stderr.lower()
 
             # Detect rate-limit or transient errors → retry with backoff
-            is_rate_limit = any(kw in stderr_lower for kw in [
-                "rate-limit", "rate limit", "429", "too many requests",
-                "temporarily unavailable", "please wait", "try again later",
-                "http error 429", "http error 503",
-            ])
-            is_network = any(kw in stderr_lower for kw in [
-                "connection reset", "connection refused", "timed out",
-                "network error", "urlopen error",
-            ])
+            is_rate_limit = any(
+                kw in stderr_lower
+                for kw in [
+                    "rate-limit",
+                    "rate limit",
+                    "429",
+                    "too many requests",
+                    "temporarily unavailable",
+                    "please wait",
+                    "try again later",
+                    "http error 429",
+                    "http error 503",
+                ]
+            )
+            is_network = any(
+                kw in stderr_lower
+                for kw in [
+                    "connection reset",
+                    "connection refused",
+                    "timed out",
+                    "network error",
+                    "urlopen error",
+                ]
+            )
 
             if is_rate_limit or is_network:
-                wait = settings.ytdlp_retry_backoff * (2 ** retry)
+                wait = settings.ytdlp_retry_backoff * (2**retry)
                 reason = "rate-limit" if is_rate_limit else "network error"
                 logger.warning(
                     "yt-dlp %s on strategy %d, retry %d/%d — waiting %.0fs",
-                    reason, attempt_i, retry + 1, settings.ytdlp_max_retries, wait,
+                    reason,
+                    attempt_i,
+                    retry + 1,
+                    settings.ytdlp_max_retries,
+                    wait,
                 )
                 time.sleep(wait)
                 continue
@@ -523,12 +568,19 @@ def download_video(url: str, output_dir: Path) -> Path:
             # Detect auth / login wall
             # Note: "format is not available" is a format error, NOT an auth error
             is_format_error = "format" in stderr_lower and "not available" in stderr_lower
-            is_auth = not is_format_error and any(kw in stderr_lower for kw in [
-                "login required", "private",
-                "content is not available", "requested content is not available",
-                "cookies", "sign in",
-                "authentication required", "403 forbidden",
-            ])
+            is_auth = not is_format_error and any(
+                kw in stderr_lower
+                for kw in [
+                    "login required",
+                    "private",
+                    "content is not available",
+                    "requested content is not available",
+                    "cookies",
+                    "sign in",
+                    "authentication required",
+                    "403 forbidden",
+                ]
+            )
             if is_auth:
                 # For Instagram, don't raise immediately — let it exhaust strategies
                 # so we can try the GraphQL fallback after all yt-dlp strategies fail
@@ -542,7 +594,9 @@ def download_video(url: str, output_dir: Path) -> Path:
             # Other hard failure — move to next strategy without sleeping
             logger.debug(
                 "yt-dlp strategy %d failed (rc=%d), moving to next strategy. stderr: %s",
-                attempt_i, result.returncode, result.stderr[-400:],
+                attempt_i,
+                result.returncode,
+                result.stderr[-400:],
             )
             break  # inner retry loop
 
@@ -555,8 +609,7 @@ def download_video(url: str, output_dir: Path) -> Path:
 
     raise DownloadError(
         f"All download strategies failed for platform '{platform}'. "
-        f"Last exit code: {last_returncode}. "
-        + _auth_hint(platform),
+        f"Last exit code: {last_returncode}. " + _auth_hint(platform),
         stderr=last_stderr,
     )
 
@@ -590,16 +643,22 @@ def _raise_auth_error(platform: str, stderr: str) -> None:
 
 # ── Audio extraction ──────────────────────────────────────────────────────────
 
+
 def extract_audio(video_path: Path, output_dir: Path) -> Path:
     """Extract audio track as 16 kHz mono WAV via ffmpeg."""
     audio_path = output_dir / "audio.wav"
     cmd = [
-        "ffmpeg", "-y",
-        "-i", str(video_path),
-        "-ac", "1",       # mono
-        "-ar", "16000",   # 16 kHz — Whisper / Wav2Vec standard
-        "-vn",            # no video stream
-        "-loglevel", "error",
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(video_path),
+        "-ac",
+        "1",  # mono
+        "-ar",
+        "16000",  # 16 kHz — Whisper / Wav2Vec standard
+        "-vn",  # no video stream
+        "-loglevel",
+        "error",
         str(audio_path),
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -610,12 +669,17 @@ def extract_audio(video_path: Path, output_dir: Path) -> Path:
 
 # ── Video metadata ────────────────────────────────────────────────────────────
 
+
 def get_video_duration(video_path: Path) -> tuple[float, float]:
     """Return (duration_seconds, fps) via ffprobe."""
     import json
+
     cmd = [
-        "ffprobe", "-v", "quiet",
-        "-print_format", "json",
+        "ffprobe",
+        "-v",
+        "quiet",
+        "-print_format",
+        "json",
         "-show_streams",
         str(video_path),
     ]
@@ -637,8 +701,13 @@ def get_video_duration(video_path: Path) -> tuple[float, float]:
     if duration == 0:
         # Fallback: try format-level duration
         cmd2 = [
-            "ffprobe", "-v", "quiet", "-print_format", "json",
-            "-show_format", str(video_path),
+            "ffprobe",
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_format",
+            str(video_path),
         ]
         r2 = subprocess.run(cmd2, capture_output=True, text=True)
         if r2.returncode == 0:
@@ -649,6 +718,7 @@ def get_video_duration(video_path: Path) -> tuple[float, float]:
 
 
 # ── Transcription ─────────────────────────────────────────────────────────────
+
 
 def transcribe_audio(audio_path: Path) -> list[dict]:
     """
@@ -664,15 +734,18 @@ def transcribe_audio(audio_path: Path) -> list[dict]:
     for segment in segments:
         if segment.words:
             for w in segment.words:
-                words.append({
-                    "word": w.word.strip(),
-                    "start": w.start,
-                    "end": w.end,
-                })
+                words.append(
+                    {
+                        "word": w.word.strip(),
+                        "start": w.start,
+                        "end": w.end,
+                    }
+                )
     return words
 
 
 # ── Events DataFrame ──────────────────────────────────────────────────────────
+
 
 def build_events_dataframe(
     video_path: Path,
@@ -698,20 +771,23 @@ def build_events_dataframe(
                 word_at_second[t] = w["word"]
 
     for t in range(n_timesteps):
-        rows.append({
-            "onset": float(t),
-            "duration": 1.0,
-            "video_path": str(video_path),
-            "audio_path": str(audio_path),
-            "word": word_at_second.get(t, ""),
-            "word_onset": float(t),
-            "word_offset": float(t + 1),
-        })
+        rows.append(
+            {
+                "onset": float(t),
+                "duration": 1.0,
+                "video_path": str(video_path),
+                "audio_path": str(audio_path),
+                "word": word_at_second.get(t, ""),
+                "word_onset": float(t),
+                "word_offset": float(t + 1),
+            }
+        )
 
     return pd.DataFrame(rows)
 
 
 # ── Top-level entry point ─────────────────────────────────────────────────────
+
 
 class IngestedMedia(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)

@@ -1,6 +1,6 @@
 [build-system]
 requires = ["hatchling"]
-build-backend = "hatchling.backends"
+build-backend = "hatchling.build"
 
 [project]
 name = "neuropeer"
@@ -29,8 +29,8 @@ dependencies = [
     "huggingface-hub>=0.24.6",
     "numpy>=1.26.4",
     "scipy>=1.14.1",
-    # Remote GPU (Verda B200 spot instances)
-    "verda>=1.20.0",
+    # Remote GPU (DataCrunch A100 spot instances)
+    "datacrunch",
     # Neuroscience
     "nilearn>=0.10.4",
     "nibabel>=5.2.1",
@@ -61,7 +61,11 @@ src = ["backend"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]
-ignore = ["E501", "B008", "UP007"]
+ignore = ["E501", "B008", "UP007", "UP042", "B905", "E741", "SIM108"]
+
+[tool.ruff.lint.per-file-ignores]
+"test_pipeline.py" = ["E402"]
+"backend/worker/tasks.py" = ["E402"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["backend"]

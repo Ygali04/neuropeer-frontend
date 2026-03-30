@@ -1,4 +1,5 @@
 """GET /api/v1/results/{job_id} — retrieve analysis results."""
+
 from __future__ import annotations
 
 import json
@@ -6,10 +7,10 @@ from uuid import UUID
 
 import numpy as np
 import redis.asyncio as aioredis
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 
 from backend.config import settings
-from backend.models.schemas import AnalysisResult, BrainMapFrame, JobStatus
+from backend.models.schemas import BrainMapFrame
 
 router = APIRouter(tags=["Results"])
 
@@ -59,8 +60,9 @@ async def get_brain_map(job_id: UUID, timestamp: float = 0.0) -> dict:
     Retrieve vertex-level activation for 3D cortical surface rendering.
     Loads the predictions .npz from S3 and returns the frame at `timestamp`.
     """
-    import boto3
     import io
+
+    import boto3
 
     result = await _get_result(str(job_id))
     s3_key = result.get("vertex_data_s3_key")

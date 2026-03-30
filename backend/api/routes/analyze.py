@@ -1,9 +1,11 @@
 """POST /api/v1/analyze — submit a video URL for neural analysis."""
+
 from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
+
 from backend.models.schemas import AnalyzeRequest, JobCreatedResponse, JobStatus
 from backend.worker.tasks import run_analysis
 

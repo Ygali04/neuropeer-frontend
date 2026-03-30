@@ -1,4 +1,5 @@
 """POST /api/v1/results/{job_id}/export — export PDF report."""
+
 from __future__ import annotations
 
 import json
@@ -6,7 +7,6 @@ from uuid import UUID
 
 import redis.asyncio as aioredis
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
 
 from backend.config import settings
 
@@ -40,6 +40,7 @@ async def export_report(job_id: UUID, format: str = "pdf") -> dict:
         s3_key = f"reports/{job_id}/report.pdf"
 
         import boto3
+
         s3 = boto3.client(
             "s3",
             endpoint_url=settings.s3_endpoint_url or None,
@@ -61,11 +62,12 @@ async def export_report(job_id: UUID, format: str = "pdf") -> dict:
 def _generate_pdf(result: dict) -> bytes:
     """Generate a minimal PDF report from analysis results."""
     try:
+        import io
+
+        from reportlab.lib import colors
         from reportlab.lib.pagesizes import letter
         from reportlab.lib.styles import getSampleStyleSheet
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-        from reportlab.lib import colors
-        import io
+        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
         buf = io.BytesIO()
         doc = SimpleDocTemplate(buf, pagesize=letter)
@@ -93,13 +95,17 @@ def _generate_pdf(result: dict) -> bytes:
             ["Cognitive Accessibility", f"{ns.get('cognitive_accessibility', 0):.0f}"],
         ]
         t = Table(breakdown_data, colWidths=[300, 100])
-        t.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#6366f1")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-            ("FONTSIZE", (0, 0), (-1, -1), 10),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f1f5f9")]),
-        ]))
+        t.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#6366f1")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("FONTSIZE", (0, 0), (-1, -1), 10),
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f1f5f9")]),
+                ]
+            )
+        )
         story.append(t)
         story.append(Spacer(1, 12))
 
@@ -110,13 +116,17 @@ def _generate_pdf(result: dict) -> bytes:
             metrics_data.append([m["name"], f"{m['score']:.0f}", m["gtm_proxy"]])
 
         mt = Table(metrics_data, colWidths=[150, 60, 240])
-        mt.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0f172a")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-            ("FONTSIZE", (0, 0), (-1, -1), 8),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
-        ]))
+        mt.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0f172a")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8),
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+                ]
+            )
+        )
         story.append(mt)
 
         doc.build(story)
@@ -125,4 +135,5 @@ def _generate_pdf(result: dict) -> bytes:
     except ImportError:
         # Fallback: return a JSON report as bytes if reportlab not installed
         import json
+
         return json.dumps(result, indent=2).encode("utf-8")

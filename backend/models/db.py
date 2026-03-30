@@ -1,10 +1,11 @@
 """SQLAlchemy async models and database setup."""
+
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -31,7 +32,7 @@ class Job(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
-    result: Mapped["Result | None"] = relationship("Result", back_populates="job", uselist=False)
+    result: Mapped[Result | None] = relationship("Result", back_populates="job", uselist=False)
 
 
 class Result(Base):
@@ -54,13 +55,13 @@ class Result(Base):
     vertex_data_s3_key: Mapped[str | None] = mapped_column(Text)  # full (n_timesteps, 20484) array
 
     # JSON blobs for smaller data
-    metrics_json: Mapped[dict | None] = mapped_column(JSON)      # list[MetricScore]
+    metrics_json: Mapped[dict | None] = mapped_column(JSON)  # list[MetricScore]
     key_moments_json: Mapped[dict | None] = mapped_column(JSON)  # list[KeyMoment]
-    modality_json: Mapped[dict | None] = mapped_column(JSON)     # list[ModalityContribution]
+    modality_json: Mapped[dict | None] = mapped_column(JSON)  # list[ModalityContribution]
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    job: Mapped["Job"] = relationship("Job", back_populates="result")
+    job: Mapped[Job] = relationship("Job", back_populates="result")
 
 
 async def get_session() -> AsyncSession:

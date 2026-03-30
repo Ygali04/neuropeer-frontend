@@ -9,6 +9,7 @@ Output shape: (n_timesteps, 20484) at 1 Hz (one prediction per second).
 Also supports modality ablation runs (video-only, audio-only, text-only)
 by zeroing out the unused modality columns in the events DataFrame.
 """
+
 from __future__ import annotations
 
 from enum import Enum
@@ -35,6 +36,7 @@ def _get_model():
     global _model
     if _model is None:
         from transformers import AutoModel
+
         _model = AutoModel.from_pretrained(
             settings.tribe_model_id,
             token=settings.hf_token or None,
@@ -42,7 +44,6 @@ def _get_model():
         )
         _model.eval()
         if settings.device == "cuda":
-            import torch
             _model = _model.to("cuda")
     return _model
 
@@ -87,8 +88,7 @@ def run_inference(events_df: pd.DataFrame, modality: Modality = Modality.FULL) -
 
     # Expected shape: (n_timesteps, 20484)
     assert predictions.ndim == 2 and predictions.shape[1] == 20484, (
-        f"Unexpected TRIBE v2 output shape: {predictions.shape}. "
-        "Expected (n_timesteps, 20484)."
+        f"Unexpected TRIBE v2 output shape: {predictions.shape}. Expected (n_timesteps, 20484)."
     )
     return predictions
 
@@ -98,10 +98,7 @@ def run_all_modalities(events_df: pd.DataFrame) -> dict[Modality, np.ndarray]:
     Run all 4 inference passes (full + 3 ablations).
     Returns dict mapping Modality → predictions array (n_timesteps, 20484).
     """
-    return {
-        modality: run_inference(events_df, modality)
-        for modality in Modality
-    }
+    return {modality: run_inference(events_df, modality) for modality in Modality}
 
 
 def save_predictions(predictions: dict[Modality, np.ndarray], output_path: Path) -> None:
