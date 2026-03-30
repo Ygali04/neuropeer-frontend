@@ -18,7 +18,6 @@ import type { ComparisonResult, ContentType } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { NeuralScoreGauge } from "@/components/NeuralScoreGauge";
 import { UrlInputCard } from "@/components/UrlInputCard";
 import { ReportPicker } from "@/components/ReportPicker";
 import { UserMenu } from "@/components/UserMenu";
@@ -203,18 +202,75 @@ function ComparePageInner() {
               <p className="text-white/60 text-sm leading-relaxed">{result.recommendation}</p>
             </Card>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 animate-fade-up delay-100">
+            <div className={cn(
+              "grid gap-5 animate-fade-up delay-100",
+              result.neural_scores.length === 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+            )}>
               {result.neural_scores.map((ns, i) => {
                 const isWinner = result.job_ids[i] === result.winner_job_id;
+                const scoreColor = ns.total >= 75 ? "var(--color-score-green)" : ns.total >= 50 ? "var(--color-score-amber)" : "var(--color-score-red)";
+                const dims = [
+                  { label: "Hook", value: ns.hook_score },
+                  { label: "Attention", value: ns.sustained_attention },
+                  { label: "Emotion", value: ns.emotional_resonance },
+                  { label: "Memory", value: ns.memory_encoding },
+                  { label: "Aesthetic", value: ns.aesthetic_quality },
+                  { label: "Clarity", value: ns.cognitive_accessibility },
+                ];
+
                 return (
-                  <Card key={result.job_ids[i]} className={cn(isWinner && "!border-brand-500/30 glow-brand")}>
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-sm font-medium text-white/60">Video {i + 1}</span>
+                  <Card key={result.job_ids[i]} className={cn("!p-5", isWinner && "!border-brand-500/30 glow-brand")}>
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-5">
+                      <span className="text-sm font-medium text-white/50">Video {i + 1}</span>
                       {isWinner && <Badge variant="brand"><Trophy className="w-3 h-3" /> Winner</Badge>}
                     </div>
-                    <NeuralScoreGauge breakdown={ns} size="sm" />
-                    <div className="mt-3 text-center">
-                      <p className="text-[10px] text-white/25 truncate mb-2">{result.labels[i]}</p>
+
+                    {/* Score — compact horizontal layout */}
+                    <div className="flex items-center gap-4 mb-5">
+                      <div className="relative flex-shrink-0" style={{ width: 72, height: 72 }}>
+                        <svg width="72" height="72" style={{ transform: "rotate(-90deg)" }}>
+                          <circle cx="36" cy="36" r="30" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="5" />
+                          <circle cx="36" cy="36" r="30" fill="none" stroke={scoreColor} strokeWidth="5"
+                            strokeDasharray={2 * Math.PI * 30}
+                            strokeDashoffset={2 * Math.PI * 30 * (1 - ns.total / 100)}
+                            strokeLinecap="round"
+                            style={{ filter: `drop-shadow(0 0 6px ${scoreColor}40)` }}
+                          />
+                        </svg>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                          <span className="text-xl font-bold font-[family-name:var(--font-display)]" style={{ color: scoreColor }}>{Math.round(ns.total)}</span>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-white/20 text-xs">/ 100</div>
+                        <div className="text-xs font-semibold uppercase tracking-wider mt-0.5" style={{ color: scoreColor }}>
+                          {ns.total >= 80 ? "Exceptional" : ns.total >= 65 ? "Strong" : ns.total >= 50 ? "Moderate" : "Needs Work"}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Dimension bars */}
+                    <div className="grid grid-cols-2 gap-x-5 gap-y-2.5 mb-5">
+                      {dims.map((d) => {
+                        const c = d.value >= 75 ? "var(--color-score-green)" : d.value >= 50 ? "var(--color-score-amber)" : "var(--color-score-red)";
+                        return (
+                          <div key={d.label}>
+                            <div className="flex justify-between text-xs mb-1">
+                              <span className="text-white/35">{d.label}</span>
+                              <span className="text-white/55 font-medium tabular-nums">{Math.round(d.value)}</span>
+                            </div>
+                            <div className="h-1 bg-white/[0.04] rounded-full overflow-hidden">
+                              <div className="h-full rounded-full" style={{ width: `${d.value}%`, backgroundColor: c, opacity: 0.7 }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Footer: URL + link */}
+                    <div className="pt-3 border-t border-white/[0.04]">
+                      <p className="text-[10px] text-white/20 truncate mb-2 font-mono">{result.labels[i]}</p>
                       <Link href={`/analyze/${result.job_ids[i]}`} className="inline-flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300 transition-colors">
                         View full report <ExternalLink className="w-3 h-3" />
                       </Link>
