@@ -32,8 +32,14 @@ async def job_progress(websocket: WebSocket, job_id: str) -> None:
     await pubsub.subscribe(f"neuropeer:job:{job_id}")
 
     try:
-        # First, check if the job is already complete (race condition)
+        # First, check if the job is already complete (race condition / cache expired)
         existing = await r.get(f"neuropeer:result:{job_id}")
+        if not existing:
+            # Check PostgreSQL for completed jobs whose cache expired
+            from backend.api.routes.results import _load_from_db
+            db_result = await _load_from_db(job_id)
+            if db_result:
+                existing = "found_in_db"
         if existing:
             await websocket.send_json(
                 {

@@ -2,19 +2,12 @@
 
 from __future__ import annotations
 
-import json
-
-import redis.asyncio as aioredis
 from fastapi import APIRouter, HTTPException
 
-from backend.config import settings
+from backend.api.routes.results import _get_result
 from backend.models.schemas import CompareRequest
 
 router = APIRouter(tags=["Comparison"])
-
-
-async def _get_redis() -> aioredis.Redis:
-    return aioredis.from_url(settings.redis_url, decode_responses=True)
 
 
 @router.post("/compare")
@@ -22,18 +15,19 @@ async def compare_videos(request: CompareRequest) -> dict:
     """
     Compare 2–5 already-analyzed videos side by side.
     Returns comparative metrics and a winner recommendation.
+    Uses _get_result which falls back to PostgreSQL if Redis cache expired.
     """
-    r = await _get_redis()
     results = []
 
     for job_id in request.job_ids:
-        raw = await r.get(f"neuropeer:result:{str(job_id)}")
-        if not raw:
+        try:
+            data = await _get_result(str(job_id))
+            results.append(data)
+        except HTTPException:
             raise HTTPException(
                 status_code=404,
                 detail=f"Results not found for job {job_id}. Ensure analysis is complete before comparing.",
             )
-        results.append(json.loads(raw))
 
     # Build per-video Neural Score breakdown
     neural_scores = [r["neural_score"] for r in results]

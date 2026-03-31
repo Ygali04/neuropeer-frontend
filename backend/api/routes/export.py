@@ -2,40 +2,28 @@
 
 from __future__ import annotations
 
-import json
 from uuid import UUID
 
-import redis.asyncio as aioredis
 from fastapi import APIRouter, HTTPException
 
+from backend.api.routes.results import _get_result
 from backend.config import settings
 
 router = APIRouter(tags=["Export"])
-
-
-async def _get_redis() -> aioredis.Redis:
-    return aioredis.from_url(settings.redis_url, decode_responses=True)
 
 
 @router.post("/results/{job_id}/export")
 async def export_report(job_id: UUID, format: str = "pdf") -> dict:
     """
     Generate a downloadable PDF or JSON report for a completed analysis.
-    Returns a download URL (S3 pre-signed URL or data URL).
+    Uses _get_result which falls back to PostgreSQL if Redis cache expired.
     """
-    r = await _get_redis()
-    raw = await r.get(f"neuropeer:result:{str(job_id)}")
-    if not raw:
-        raise HTTPException(status_code=404, detail="Results not found")
-
-    result = json.loads(raw)
+    result = await _get_result(str(job_id))
 
     if format == "json":
-        # Return the raw JSON result directly
         return {"download_url": None, "data": result, "format": "json"}
 
     if format == "pdf":
-        # Build minimal PDF report using reportlab (or weasyprint if available)
         pdf_bytes = _generate_pdf(result)
         s3_key = f"reports/{job_id}/report.pdf"
 
@@ -74,17 +62,14 @@ def _generate_pdf(result: dict) -> bytes:
         styles = getSampleStyleSheet()
         story = []
 
-        # Title
         story.append(Paragraph("NeuroPeer Neural Analysis Report", styles["Title"]))
         story.append(Paragraph(f"URL: {result.get('url', 'N/A')}", styles["Normal"]))
         story.append(Spacer(1, 12))
 
-        # Neural Score
         ns = result.get("neural_score", {})
         story.append(Paragraph(f"Neural Score: {ns.get('total', 0):.0f} / 100", styles["Heading1"]))
         story.append(Spacer(1, 8))
 
-        # Score breakdown table
         breakdown_data = [["Dimension", "Score"]]
         breakdown_data += [
             ["Hook Score", f"{ns.get('hook_score', 0):.0f}"],
@@ -109,7 +94,6 @@ def _generate_pdf(result: dict) -> bytes:
         story.append(t)
         story.append(Spacer(1, 12))
 
-        # All metrics
         story.append(Paragraph("All Metrics", styles["Heading2"]))
         metrics_data = [["Metric", "Score", "GTM Proxy"]]
         for m in result.get("metrics", []):
@@ -133,7 +117,5 @@ def _generate_pdf(result: dict) -> bytes:
         return buf.getvalue()
 
     except ImportError:
-        # Fallback: return a JSON report as bytes if reportlab not installed
         import json
-
         return json.dumps(result, indent=2).encode("utf-8")
