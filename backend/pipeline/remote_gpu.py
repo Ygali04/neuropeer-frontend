@@ -213,7 +213,7 @@ def _datacrunch_create_instance(
             image=settings.datacrunch_image,
             ssh_key_ids=ssh_key_ids,
             hostname=f"neuropeer-{job_id[:8]}",
-            description=f"NeuroPeer TRIBE v2 inference for job {job_id}",
+            description=f"NeuroPeer-{job_id[:8]}",
             location=location,
             is_spot=False,  # on-demand to avoid eviction
             startup_script_id=script_obj.id,
