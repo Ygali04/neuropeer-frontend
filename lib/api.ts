@@ -11,12 +11,16 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://neuropeer-api-produ
 
 export async function submitAnalysis(
   url: string,
-  contentType: ContentType
+  contentType: ContentType,
+  parentJobId?: string
 ): Promise<{ job_id: string; websocket_url: string }> {
+  const body: Record<string, unknown> = { url, content_type: contentType };
+  if (parentJobId) body.parent_job_id = parentJobId;
+
   const res = await fetch(`${API_BASE}/api/v1/analyze`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url, content_type: contentType }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Unknown error" }));
@@ -80,6 +84,14 @@ export async function exportReport(
     { method: "POST" }
   );
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function getRunHistory(
+  jobId: string
+): Promise<{ content_group_id: string; runs: import("./types").RunHistoryEntry[] }> {
+  const res = await fetch(`${API_BASE}/api/v1/results/${jobId}/history`);
+  if (!res.ok) return { content_group_id: "", runs: [] };
   return res.json();
 }
 

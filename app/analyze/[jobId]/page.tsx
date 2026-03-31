@@ -15,9 +15,10 @@ import {
   Share2,
   Check,
   Sparkles,
+  RotateCcw,
 } from "lucide-react";
 
-import { connectJobWebSocket, getResult, exportReport } from "@/lib/api";
+import { connectJobWebSocket, getResult, exportReport, getRunHistory, submitAnalysis } from "@/lib/api";
 import { generateReportPDF } from "@/lib/export-pdf";
 import { addRunToHistory } from "@/lib/run-history";
 import { useAuth } from "@/lib/auth-context";
@@ -80,16 +81,10 @@ export default function AnalyzePage() {
   const { session } = useAuth();
   const [loadingExisting, setLoadingExisting] = useState(true);
 
-  // ── AI Feedback state ──────────────────────────────────────────────────
-  const [aiFeedback, setAiFeedback] = useState<{
-    summary: string;
-    report_title: string;
-    priorities: string[];
-    action_items: string[];
-    category_strategies: Record<string, { score_context: string; strategies: string[] }>;
-    metric_tips: Record<string, string>;
-  } | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
+  const [showReanalyze, setShowReanalyze] = useState(false);
+  const [reanalyzeUrl, setReanalyzeUrl] = useState("");
+  const [reanalyzeLoading, setReanalyzeLoading] = useState(false);
+  const [runHistory, setRunHistory] = useState<import("@/lib/types").RunHistoryEntry[]>([]);
 
   // ── Playback state ─────────────────────────────────────────────────────
   const [isPlaying, setIsPlaying] = useState(false);
@@ -163,33 +158,6 @@ export default function AnalyzePage() {
     setIsPlaying(false); playbackTimeRef.current = 0; setPlaybackTime(0); setCurrentSecond(0);
   }, []);
 
-  // ── AI Feedback: load from result (persisted) or generate via GLM ──
-  useEffect(() => {
-    if (!result || aiFeedback) return;
-
-    // Check if AI feedback is already persisted in the result
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const persisted = (result as any).ai_feedback;
-    if (persisted && typeof persisted === "object" && persisted.summary) {
-      setAiFeedback(persisted as NonNullable<typeof aiFeedback>);
-      return;
-    }
-
-    // Otherwise, generate via GLM (first-time only)
-    setAiLoading(true);
-    fetch("/api/generate-feedback", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "analysis", data: result }),
-    })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((data) => {
-        if (data.summary) setAiFeedback(data);
-      })
-      .catch((err) => console.warn("AI feedback unavailable:", err.message))
-      .finally(() => setAiLoading(false));
-  }, [result]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // ── Data fetching ──────────────────────────────────────────────────────
   const saveToHistory = useCallback((data: AnalysisResult) => {
     addRunToHistory({
@@ -233,6 +201,14 @@ export default function AnalyzePage() {
     return disconnect;
   }, [jobId, handleDone]);
 
+  // ── Run history fetch ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!result) return;
+    getRunHistory(result.job_id).then((data) => {
+      if (data.runs.length > 1) setRunHistory(data.runs);
+    }).catch(() => {});
+  }, [result]);
+
   // ── Export PDF (client-side generation) ─────────────────────────────────
   const handleExport = async () => {
     if (!result) return;
@@ -253,6 +229,21 @@ export default function AnalyzePage() {
       setTimeout(() => setShareCopied(false), 2000);
     }).catch(() => { window.prompt("Copy this report link:", url); });
   }, []);
+
+  const handleReanalyze = async (url?: string) => {
+    setReanalyzeLoading(true);
+    try {
+      const targetUrl = url || result!.url;
+      const contentType = result!.content_type;
+      const { job_id } = await submitAnalysis(targetUrl, contentType, result!.job_id);
+      window.location.href = `/analyze/${job_id}`;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Re-analysis failed");
+    } finally {
+      setReanalyzeLoading(false);
+      setShowReanalyze(false);
+    }
+  };
 
   // Determine loading state
   const isActiveComputation = progress !== null && progress.status !== "complete";
@@ -282,6 +273,14 @@ export default function AnalyzePage() {
                   {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                   <span className="hidden sm:inline">{exporting ? "Generating..." : "Export PDF"}</span>
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowReanalyze(true)}
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Re-analyze
+                </Button>
               </>
             )}
             <ThemeToggle />
@@ -298,10 +297,33 @@ export default function AnalyzePage() {
           </div>
         )}
 
+        {/* ── Re-analyze Modal ──────────────────────────────────────────────── */}
+        {showReanalyze && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowReanalyze(false)}>
+            <div className="tooltip-card p-6 max-w-md w-full mx-4 space-y-4 rounded-2xl shadow-2xl border border-white/[0.1]" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-lg font-semibold text-white">Re-analyze</h3>
+              <p className="text-sm text-white/40">Run a new analysis linked to this report to track improvement.</p>
+              <Button className="w-full" onClick={() => handleReanalyze()} disabled={reanalyzeLoading}>
+                {reanalyzeLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                Re-run same video
+              </Button>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/[0.06]" /></div>
+                <div className="relative flex justify-center"><span className="px-3 text-[10px] text-white/20 uppercase tracking-wider tooltip-card rounded">or</span></div>
+              </div>
+              <div className="flex gap-2">
+                <input type="text" placeholder="Paste new video URL…" value={reanalyzeUrl} onChange={(e) => setReanalyzeUrl(e.target.value)} className="flex-1 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-brand-500/50" />
+                <Button size="sm" disabled={!reanalyzeUrl || reanalyzeLoading} onClick={() => handleReanalyze(reanalyzeUrl)}>Analyze</Button>
+              </div>
+              <button onClick={() => setShowReanalyze(false)} className="w-full text-xs text-white/30 hover:text-white/50 transition-colors pt-2">Cancel</button>
+            </div>
+          </div>
+        )}
+
         {/* ── Floating Progress Modal (over skeleton) ──────────────────── */}
         {(isActiveComputation || isLoadingReport) && (
           <div className="fixed inset-x-0 top-20 z-50 flex justify-center pointer-events-none">
-            <div className="pointer-events-auto glass-card !bg-[#12101a]/95 backdrop-blur-xl p-5 rounded-2xl shadow-2xl shadow-black/40 border border-white/[0.08] max-w-md w-full mx-4 animate-fade-up">
+            <div className="pointer-events-auto tooltip-card backdrop-blur-xl p-5 rounded-2xl shadow-2xl border border-white/[0.08] max-w-md w-full mx-4 animate-fade-up">
               {isLoadingReport ? (
                 <div className="flex items-center gap-3">
                   <Loader2 className="w-5 h-5 text-brand-400 animate-spin flex-shrink-0" />
@@ -317,6 +339,26 @@ export default function AnalyzePage() {
         {/* ── Results Dashboard (shows skeleton when loading) ─────────────── */}
         {(result || isActiveComputation || isLoadingReport) && (
           <div className="flex flex-col gap-6">
+
+            {/* Delta banner */}
+            {result && result.parent_job_id && runHistory.length > 0 && (() => {
+              const parentRun = runHistory.find(r => r.job_id === result.parent_job_id);
+              if (!parentRun) return null;
+              const delta = result.neural_score.total - parentRun.neural_score;
+              const sign = delta >= 0 ? "+" : "";
+              const color = delta > 0 ? "text-emerald-400" : delta < 0 ? "text-red-400" : "text-white/40";
+              return (
+                <div className="glass-card !rounded-xl px-4 py-3 mb-6 flex items-center justify-between animate-fade-up">
+                  <div className="flex items-center gap-3">
+                    <RotateCcw className="w-4 h-4 text-brand-400" />
+                    <span className="text-sm text-white/50">vs previous run: <span className="text-white/70 font-medium">{parentRun.neural_score}</span> → <span className="text-white/70 font-medium">{Math.round(result.neural_score.total)}</span></span>
+                    <span className={`text-sm font-bold tabular-nums ${color}`}>{sign}{Math.round(delta)}</span>
+                  </div>
+                  <Link href={`/analyze/${result.parent_job_id}`} className="text-xs text-brand-400 hover:text-brand-300 transition-colors">View previous →</Link>
+                </div>
+              );
+            })()}
+
             {/* Row 1: Neural Score + Video info */}
             <div className={`grid grid-cols-1 lg:grid-cols-3 gap-6 transition-all duration-700 ${result ? "animate-fade-up" : "opacity-60"}`}>
               <Card className="lg:col-span-1">
@@ -358,11 +400,11 @@ export default function AnalyzePage() {
                   )}
                 </div>
                 {/* AI Action Items */}
-                {aiFeedback?.action_items && aiFeedback.action_items.length > 0 && (
+                {result?.ai_action_items && result.ai_action_items.length > 0 && (
                   <div className="mt-4 p-3 rounded-lg bg-brand-500/[0.05] border border-brand-500/10">
                     <p className="text-[10px] text-brand-400 font-medium uppercase tracking-wider mb-2">Quick Takeaways</p>
                     <div className="space-y-1.5">
-                      {aiFeedback.action_items.map((item, i) => (
+                      {result.ai_action_items.map((item, i) => (
                         <div key={i} className="flex items-start gap-2">
                           <div className="w-1 h-1 rounded-full bg-brand-400 mt-1.5 flex-shrink-0" />
                           <p className="text-[11px] text-white/50 leading-relaxed">{item}</p>
@@ -398,42 +440,31 @@ export default function AnalyzePage() {
             </div>
 
             {/* AI Insights Summary Banner */}
-            {result && (
+            {result && result.ai_summary && (
               <div className="animate-fade-up delay-50">
-                {aiLoading && !aiFeedback && (
-                  <div className="glass-card p-4 flex items-center gap-3 !border-brand-500/15">
-                    <Loader2 className="w-4 h-4 text-brand-400 animate-spin flex-shrink-0" />
-                    <div>
-                      <p className="text-xs text-brand-400 font-medium">Generating AI Insights...</p>
-                      <p className="text-[10px] text-white/30 mt-0.5">GLM-4.7 is analyzing your neural report (~20s)</p>
+                <div className="glass-card p-4 !border-brand-500/15">
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 rounded-lg bg-brand-500/10 border border-brand-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Sparkles className="w-3 h-3 text-brand-400" />
                     </div>
-                  </div>
-                )}
-                {aiFeedback?.summary && (
-                  <div className="glass-card p-4 !border-brand-500/15">
-                    <div className="flex items-start gap-3">
-                      <div className="w-6 h-6 rounded-lg bg-brand-500/10 border border-brand-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <Sparkles className="w-3 h-3 text-brand-400" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-xs text-brand-400 font-medium mb-1">AI Analysis Summary</p>
-                        <p className="text-sm text-white/60 leading-relaxed">{aiFeedback.summary}</p>
-                        {aiFeedback.action_items && aiFeedback.action_items.length > 0 && (
-                          <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-1.5">
-                            {aiFeedback.action_items.map((item, i) => (
-                              <div key={i} className="flex items-start gap-2">
-                                <div className="w-4 h-4 rounded-full bg-brand-500/10 border border-brand-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                                  <span className="text-[8px] text-brand-400 font-bold">{i + 1}</span>
-                                </div>
-                                <p className="text-xs text-white/50 leading-relaxed">{item}</p>
+                    <div className="flex-1">
+                      <p className="text-xs text-brand-400 font-medium mb-1">AI Analysis Summary</p>
+                      <p className="text-sm text-white/60 leading-relaxed">{result.ai_summary}</p>
+                      {result.ai_action_items && result.ai_action_items.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-1.5">
+                          {result.ai_action_items.map((item, i) => (
+                            <div key={i} className="flex items-start gap-2">
+                              <div className="w-4 h-4 rounded-full bg-brand-500/10 border border-brand-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <span className="text-[8px] text-brand-400 font-bold">{i + 1}</span>
                               </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                              <p className="text-xs text-white/50 leading-relaxed">{item}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
-                )}
+                </div>
               </div>
             )}
 
@@ -592,13 +623,45 @@ export default function AnalyzePage() {
               <CollapsibleSection title="Improvement Strategies" icon={<Lightbulb className="w-4 h-4 text-amber-400" />} className="animate-fade-up delay-500">
                 <ImprovementStrategies
                   metrics={result.metrics}
-                  overarchingSummary={aiFeedback?.summary ?? result.overarching_summary}
-                  aiPriorities={aiFeedback?.priorities}
-                  aiMetricTips={aiFeedback?.metric_tips}
-                  aiCategoryStrategies={aiFeedback?.category_strategies}
-                  aiLoading={aiLoading}
+                  overarchingSummary={result.ai_summary ?? result.overarching_summary}
+                  aiPriorities={result.ai_priorities}
+                  aiMetricTips={result.ai_metric_tips}
+                  aiCategoryStrategies={result.ai_category_strategies}
+                  aiLoading={false}
                 />
               </CollapsibleSection>
+            )}
+
+            {/* Version History */}
+            {result && runHistory.length > 1 && (
+              <Card className="animate-fade-up delay-600">
+                <div className="flex items-center gap-2 mb-4">
+                  <GitCompare className="w-4 h-4 text-teal-400" />
+                  <h2 className="text-sm font-medium text-white/50 uppercase tracking-wider">Version History</h2>
+                </div>
+                <div className="space-y-2">
+                  {runHistory.map((run, i) => {
+                    const prev = i > 0 ? runHistory[i - 1] : null;
+                    const delta = prev ? run.neural_score - prev.neural_score : 0;
+                    const sign = delta >= 0 ? "+" : "";
+                    return (
+                      <Link key={run.job_id} href={`/analyze/${run.job_id}`} className={`flex items-center justify-between px-3 py-2 rounded-lg transition-colors ${run.is_current ? "bg-brand-500/10 border border-brand-500/20" : "hover:bg-white/[0.04]"}`}>
+                        <div className="flex items-center gap-3">
+                          <span className="w-6 h-6 rounded-full bg-white/[0.06] flex items-center justify-center text-[10px] text-white/40 font-bold">v{i + 1}</span>
+                          <div>
+                            <span className="text-xs text-white/50 truncate max-w-[200px] block">{run.url.replace(/https?:\/\/(www\.)?/, "").slice(0, 40)}</span>
+                            <span className="text-[10px] text-white/25">{new Date(run.created_at).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold tabular-nums" style={{ color: run.neural_score >= 75 ? "var(--color-score-green)" : run.neural_score >= 50 ? "var(--color-score-amber)" : "var(--color-score-red)" }}>{run.neural_score}</span>
+                          {prev && delta !== 0 && (<span className={`text-[10px] font-bold tabular-nums ${delta > 0 ? "text-emerald-400" : "text-red-400"}`}>{sign}{Math.round(delta)}</span>)}
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </Card>
             )}
 
             {/* A/B link */}

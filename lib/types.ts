@@ -69,6 +69,27 @@ export interface AnalysisResult {
   key_moments: KeyMoment[];
   modality_breakdown: ModalityContribution[];
   overarching_summary?: string;
+
+  // AI feedback (persisted in DB)
+  ai_summary?: string;
+  ai_report_title?: string;
+  ai_action_items?: string[];
+  ai_priorities?: string[];
+  ai_category_strategies?: Record<string, { score_context: string; strategies: string[] }>;
+  ai_metric_tips?: Record<string, string>;
+
+  // Linked runs
+  parent_job_id?: string;
+  content_group_id?: string;
+}
+
+export interface RunHistoryEntry {
+  job_id: string;
+  url: string;
+  neural_score: number;
+  created_at: string;
+  parent_job_id: string | null;
+  is_current: boolean;
 }
 
 export interface ComparisonResult {

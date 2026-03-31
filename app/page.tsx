@@ -194,14 +194,14 @@ export default function HomePage() {
               </div>
               {/* Hover modal */}
               <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto transition-all duration-200 z-50">
-                <div className="glass-card !bg-[#15131a]/95 backdrop-blur-xl p-4 rounded-xl shadow-2xl shadow-black/40 border border-white/[0.08]">
+                <div className="tooltip-card backdrop-blur-xl p-4 rounded-xl shadow-2xl border border-white/[0.08]">
                   <p className="text-xs text-white/60 leading-relaxed">{desc}</p>
                   <p className="text-[10px] text-white/25 mt-2 italic">{cite}</p>
                   <Link href="/methodology" className="inline-flex items-center gap-1 text-[10px] text-brand-400 hover:text-brand-300 mt-2 transition-colors">
                     Learn more <ArrowRight className="w-2.5 h-2.5" />
                   </Link>
                 </div>
-                <div className="w-2 h-2 bg-[#15131a] border-r border-b border-white/[0.08] rotate-45 mx-auto -mt-1" />
+                <div className="w-2 h-2 tooltip-card border-r border-b border-white/[0.08] rotate-45 mx-auto -mt-1" />
               </div>
             </div>
           ))}

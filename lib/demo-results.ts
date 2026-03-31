@@ -1,53 +1,10 @@
 import type { AnalysisResult } from "./types";
 
-// Fixed demo job IDs — always accessible without auth
-export const DEMO_JOB_IDS = ["demo-instagram-reel", "demo-youtube-preroll"];
-
-export function isDemoJob(jobId: string): boolean {
-  return DEMO_JOB_IDS.includes(jobId);
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function curve(length: number, base: number, variance: number): number[] {
-  const data: number[] = [];
-  let v = base;
-  for (let i = 0; i < length; i++) {
-    v += (Math.sin(i * 0.7 + base) * 0.5 - 0.25) * variance;
-    v = Math.max(5, Math.min(95, v));
-    data.push(v);
-  }
-  return data;
-}
-
-function attentionCurve(duration: number, seed: number): number[] {
-  const data: number[] = [];
-  for (let i = 0; i < duration; i++) {
-    const t = i / duration;
-    const base = 80 - 30 * Math.sin(t * Math.PI * 1.5 + seed) + 15 * Math.cos(t * Math.PI * 3 + seed);
-    data.push(Math.max(10, Math.min(95, base + Math.sin(i * 0.9 + seed) * 5)));
-  }
-  return data;
-}
-
-function modalityBreakdown(duration: number, seed: number) {
-  const data = [];
-  for (let i = 0; i < duration; i++) {
-    const visual = 40 + Math.sin(i * 0.3 + seed) * 15;
-    const audio = 30 + Math.cos(i * 0.2 + seed) * 10;
-    const text = Math.max(5, 100 - visual - audio);
-    data.push({ timestamp: i, visual, audio, text });
-  }
-  return data;
-}
-
-// ── Instagram Reel Demo ──────────────────────────────────────────────────────
-
-const INSTAGRAM_REEL: AnalysisResult = {
-  job_id: "demo-instagram-reel",
-  url: "https://www.instagram.com/p/DWcFdH6CXZA/",
+export const INSTAGRAM_REEL: AnalysisResult = {
+  job_id: "demo-instagram-001",
+  url: "https://instagram.com/p/demo-instagram-reel",
   content_type: "instagram_reel",
-  duration_seconds: 65,
+  duration_seconds: 64.9,
   neural_score: {
     total: 72,
     hook_score: 84,
@@ -55,52 +12,149 @@ const INSTAGRAM_REEL: AnalysisResult = {
     emotional_resonance: 75,
     memory_encoding: 61,
     aesthetic_quality: 78,
-    cognitive_accessibility: 66,
+    cognitive_accessibility: 70,
   },
   metrics: [
-    { name: "Visual Hook Strength", score: 84, raw_value: 0.8412, description: "Measures the initial visual impact in the first 3 seconds. High scores indicate strong opening visuals that capture attention.", brain_region: "V1 / Primary Visual Cortex", gtm_proxy: "Thumb-stop rate" },
-    { name: "Sustained Attention", score: 68, raw_value: 0.6823, description: "Tracks average attention levels across the full duration.", brain_region: "Dorsal Attention Network", gtm_proxy: "Average watch time" },
-    { name: "Emotional Resonance", score: 75, raw_value: 0.7501, description: "Measures emotional activation intensity.", brain_region: "Amygdala / Limbic System", gtm_proxy: "Comment sentiment" },
-    { name: "Memory Encoding", score: 61, raw_value: 0.6133, description: "Predicts how well the content will be recalled.", brain_region: "Hippocampus", gtm_proxy: "Brand recall" },
-    { name: "Aesthetic Quality", score: 78, raw_value: 0.7789, description: "Visual composition, color harmony, and production quality.", brain_region: "Fusiform / Visual Cortex", gtm_proxy: "Production value" },
-    { name: "Cognitive Accessibility", score: 66, raw_value: 0.6602, description: "How easily the message is processed.", brain_region: "Prefrontal Cortex", gtm_proxy: "Message clarity" },
-    { name: "Narrative Coherence", score: 71, raw_value: 0.7124, description: "Story structure and logical flow.", brain_region: "Temporal Pole", gtm_proxy: "Comprehension" },
-    { name: "Audio-Visual Sync", score: 82, raw_value: 0.8198, description: "Synchronization quality between audio and visual.", brain_region: "Superior Temporal Sulcus", gtm_proxy: "Perceived quality" },
-    { name: "Novelty Response", score: 55, raw_value: 0.5534, description: "How novel or surprising the content appears.", brain_region: "Hippocampus / ACC", gtm_proxy: "Shareability" },
-    { name: "Social Relevance", score: 73, raw_value: 0.7312, description: "Content relevance to social identity.", brain_region: "Medial Prefrontal Cortex", gtm_proxy: "Share intent" },
-    { name: "Reward Prediction", score: 64, raw_value: 0.6401, description: "Anticipatory reward signals.", brain_region: "Ventral Striatum", gtm_proxy: "Click-through rate" },
-    { name: "Facial Processing", score: 80, raw_value: 0.7998, description: "Face detection and emotional expression processing.", brain_region: "Fusiform Face Area", gtm_proxy: "Talent effectiveness" },
-    { name: "Language Processing", score: 59, raw_value: 0.5923, description: "Spoken/text language complexity.", brain_region: "Wernicke's / Broca's Area", gtm_proxy: "Message retention" },
-    { name: "Motion Sensitivity", score: 77, raw_value: 0.7689, description: "Response to visual motion.", brain_region: "MT / V5 Complex", gtm_proxy: "Visual dynamism" },
-    { name: "Arousal Regulation", score: 70, raw_value: 0.6978, description: "Autonomic arousal patterns.", brain_region: "Insula / ANS", gtm_proxy: "Engagement intensity" },
-    { name: "Temporal Pacing", score: 63, raw_value: 0.6312, description: "Information delivery rate optimization.", brain_region: "Cerebellum / Basal Ganglia", gtm_proxy: "Completion rate" },
-    { name: "Brand Safety", score: 88, raw_value: 0.8801, description: "Content safety assessment.", brain_region: "Prefrontal / Moral Network", gtm_proxy: "Brand safety score" },
-    { name: "CTA Effectiveness", score: 57, raw_value: 0.5712, description: "Call-to-action timing and clarity.", brain_region: "Motor Planning / SMA", gtm_proxy: "Conversion rate" },
+    {
+      name: "Visual Hook",
+      score: 84,
+      raw_value: 0.84,
+      description: "Initial V1 cortex activation in first 3 seconds",
+      brain_region: "V1",
+      gtm_proxy: "hook_score",
+    },
+    {
+      name: "Sustained Attention",
+      score: 68,
+      raw_value: 0.68,
+      description: "Dorsal attention network engagement over time",
+      brain_region: "IPS/SPL",
+      gtm_proxy: "attention_retention",
+    },
+    {
+      name: "Emotional Resonance",
+      score: 75,
+      raw_value: 0.75,
+      description: "Amygdala and limbic system activation",
+      brain_region: "Amygdala/OFC",
+      gtm_proxy: "emotional_engagement",
+    },
+    {
+      name: "Memory Encoding",
+      score: 61,
+      raw_value: 0.61,
+      description: "Hippocampal formation engagement",
+      brain_region: "Hippocampus",
+      gtm_proxy: "memory_encoding",
+    },
+    {
+      name: "Aesthetic Quality",
+      score: 78,
+      raw_value: 0.78,
+      description: "Fusiform cortex response to visual aesthetics",
+      brain_region: "Fusiform",
+      gtm_proxy: "production_quality",
+    },
+    {
+      name: "Audio-Visual Sync",
+      score: 82,
+      raw_value: 0.82,
+      description: "Superior temporal sulcus integration",
+      brain_region: "STS",
+      gtm_proxy: "modality_integration",
+    },
   ],
-  attention_curve: attentionCurve(65, 1),
-  emotional_arousal_curve: curve(65, 55, 8),
-  cognitive_load_curve: curve(65, 45, 6),
+  attention_curve: [84, 82, 80, 78, 75, 72, 70, 68, 68, 67, 66, 65, 64, 63, 62, 61, 60, 59, 58, 57],
+  emotional_arousal_curve: [70, 72, 74, 76, 78, 80, 82, 81, 80, 79, 78, 77, 76, 75, 74, 73, 72, 71, 70, 68],
+  cognitive_load_curve: [45, 48, 50, 52, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 70],
   key_moments: [
-    { timestamp: 2, type: "best_hook", label: "Strong visual hook with motion", score: 88 },
-    { timestamp: 18, type: "peak_engagement", label: "Peak audience attention", score: 92 },
-    { timestamp: 32, type: "emotional_peak", label: "Emotional resonance spike", score: 78 },
-    { timestamp: 48, type: "dropoff_risk", label: "Pacing drop — risk of exit", score: 34 },
-    { timestamp: 58, type: "recovery", label: "CTA recovery point", score: 65 },
+    {
+      timestamp: 3,
+      type: "best_hook",
+      label: "Opening hook fires V1 cortex",
+      score: 84,
+    },
+    {
+      timestamp: 32,
+      type: "emotional_peak",
+      label: "Amygdala peaks during key message",
+      score: 82,
+    },
+    {
+      timestamp: 48,
+      type: "dropoff_risk",
+      label: "Critical attention drop-off",
+      score: 58,
+    },
+    {
+      timestamp: 56,
+      type: "recovery",
+      label: "Mild recovery before end",
+      score: 65,
+    },
   ],
-  modality_breakdown: modalityBreakdown(65, 1),
-  overarching_summary:
-    "This Instagram Reel has a strong visual hook (84) and solid aesthetic quality (78), but loses viewers mid-content due to declining sustained attention (68) and moderate memory encoding (61). " +
-    "The emotional arc peaks at 32s but is followed by a pacing drop at 48s — the most critical fix. " +
-    "Priority: (1) Add a pattern interrupt between 40–48s to prevent the drop-off, (2) reinforce the key message near the emotional peak at 32s for better recall, and (3) strengthen the CTA timing — currently it lands during a low-attention window.",
+  modality_breakdown: [
+    { timestamp: 0, visual: 85, audio: 60, text: 20 },
+    { timestamp: 16, visual: 80, audio: 70, text: 30 },
+    { timestamp: 32, visual: 75, audio: 85, text: 40 },
+    { timestamp: 48, visual: 65, audio: 60, text: 25 },
+  ],
+  overarching_summary: "This Instagram Reel demonstrates strong initial engagement with a compelling visual hook (84) and excellent aesthetic quality (78), but struggles with sustained attention decay after 40 seconds and moderate memory encoding (61). The key challenge is preventing the critical drop-off at 48 seconds where viewer retention typically falls.",
+  ai_summary: "This Instagram Reel scores 72/100 — strong visual hook (84) and aesthetic quality (78) are standout strengths, but sustained attention (68) and memory encoding (61) need work. Priority fix: add a pattern interrupt between 40–48s to prevent the critical drop-off.",
+  ai_report_title: "Visual Punch, Fading Memory",
+  ai_action_items: [
+    "Add a visual pattern interrupt at the 40-second mark",
+    "Reinforce the key message near the 32s emotional peak",
+    "Move CTA earlier to a higher-attention window",
+  ],
+  ai_priorities: [
+    "TOP: Fix the pacing drop at 48s — the dorsal attention network disengages when visual novelty stalls. Add a scene change, text overlay, or audio shift between 40–48s.",
+    "SECOND: Strengthen memory encoding — the hippocampal activation is moderate (61). Repeat the core message near the emotional peak at 32s for dual-coding reinforcement.",
+    "THIRD: Reposition the CTA — it currently lands during a low-attention window. Move it to 50–55s where arousal recovers.",
+  ],
+  ai_category_strategies: {
+    "Attention & Hook": {
+      score_context: "Strong opening (84) but mid-content drop-off at 48s.",
+      strategies: [
+        "The V1 cortex response peaks in the first 3 seconds. Maintain this by introducing a second visual hook at the 20s mark.",
+        "Add pattern interrupts every 15–20s to re-engage the dorsal attention network.",
+      ],
+    },
+    "Emotional Engagement": {
+      score_context: "Good emotional arc (75) with peak at 32s.",
+      strategies: [
+        "The amygdala activation peaks at 32s — anchor your key brand message here for maximum emotional association.",
+        "Add subtle facial close-ups during emotional peaks to activate the fusiform face area.",
+      ],
+    },
+    "Memory & Recall": {
+      score_context: "Moderate encoding (61) — high risk of forgetting.",
+      strategies: [
+        "Hippocampal encoding improves with repetition. Echo the core message at least twice across different modalities (visual + text).",
+        "End with a distinctive audio/visual signature to create a memory anchor.",
+      ],
+    },
+    "Production Quality": {
+      score_context: "Strong aesthetics (78) and audio-visual sync (82).",
+      strategies: [
+        "Maintain the current color grading quality — the fusiform cortex responds well to consistent palettes.",
+        "The audio-visual sync is a strength. Consider adding beat-synced text overlays to reinforce timing.",
+      ],
+    },
+  },
+  ai_metric_tips: {
+    "Novelty Response": "The hippocampus/ACC novelty circuit shows declining activation. Introduce an unexpected visual element mid-content.",
+    "CTA Effectiveness": "Motor planning areas (SMA) show weak activation during your CTA. Make the action physically intuitive — swipe, tap, or click cues.",
+    "Language Processing": "Wernicke's area shows moderate engagement. Simplify spoken language or add on-screen text reinforcement.",
+  },
+  content_group_id: "demo-instagram-group",
 };
 
-// ── YouTube Pre-roll Demo ────────────────────────────────────────────────────
-
-const YOUTUBE_PREROLL: AnalysisResult = {
-  job_id: "demo-youtube-preroll",
-  url: "https://www.youtube.com/shorts/Fez9foCZlng",
+export const YOUTUBE_PREROLL: AnalysisResult = {
+  job_id: "demo-youtube-001",
+  url: "https://youtube.com/watch?v=demo-youtube-preroll",
   content_type: "youtube_preroll",
-  duration_seconds: 26,
+  duration_seconds: 30.0,
   neural_score: {
     total: 81,
     hook_score: 91,
@@ -111,49 +165,153 @@ const YOUTUBE_PREROLL: AnalysisResult = {
     cognitive_accessibility: 73,
   },
   metrics: [
-    { name: "Visual Hook Strength", score: 91, raw_value: 0.9102, description: "Exceptional opening — strong motion and contrast.", brain_region: "V1 / Primary Visual Cortex", gtm_proxy: "Thumb-stop rate" },
-    { name: "Sustained Attention", score: 79, raw_value: 0.7912, description: "Strong sustained engagement throughout.", brain_region: "Dorsal Attention Network", gtm_proxy: "Average watch time" },
-    { name: "Emotional Resonance", score: 82, raw_value: 0.8201, description: "High emotional activation — music-driven.", brain_region: "Amygdala / Limbic System", gtm_proxy: "Comment sentiment" },
-    { name: "Memory Encoding", score: 76, raw_value: 0.7612, description: "Good recall potential — catchy melody aids encoding.", brain_region: "Hippocampus", gtm_proxy: "Brand recall" },
-    { name: "Aesthetic Quality", score: 85, raw_value: 0.8501, description: "Clean production with good color grading.", brain_region: "Fusiform / Visual Cortex", gtm_proxy: "Production value" },
-    { name: "Cognitive Accessibility", score: 73, raw_value: 0.7302, description: "Simple message, easy to process.", brain_region: "Prefrontal Cortex", gtm_proxy: "Message clarity" },
-    { name: "Narrative Coherence", score: 78, raw_value: 0.7812, description: "Clear narrative arc with setup and payoff.", brain_region: "Temporal Pole", gtm_proxy: "Comprehension" },
-    { name: "Audio-Visual Sync", score: 89, raw_value: 0.8912, description: "Excellent sync — music perfectly matches visuals.", brain_region: "Superior Temporal Sulcus", gtm_proxy: "Perceived quality" },
-    { name: "Novelty Response", score: 68, raw_value: 0.6801, description: "Familiar format but well executed.", brain_region: "Hippocampus / ACC", gtm_proxy: "Shareability" },
-    { name: "Social Relevance", score: 85, raw_value: 0.8501, description: "Highly shareable, cultural resonance.", brain_region: "Medial Prefrontal Cortex", gtm_proxy: "Share intent" },
-    { name: "Reward Prediction", score: 77, raw_value: 0.7701, description: "Strong anticipation built through music.", brain_region: "Ventral Striatum", gtm_proxy: "Click-through rate" },
-    { name: "Facial Processing", score: 88, raw_value: 0.8801, description: "Strong face presence with clear expressions.", brain_region: "Fusiform Face Area", gtm_proxy: "Talent effectiveness" },
-    { name: "Language Processing", score: 72, raw_value: 0.7201, description: "Simple lyrics, easy comprehension.", brain_region: "Wernicke's / Broca's Area", gtm_proxy: "Message retention" },
-    { name: "Motion Sensitivity", score: 81, raw_value: 0.8101, description: "Good camera movement and choreography.", brain_region: "MT / V5 Complex", gtm_proxy: "Visual dynamism" },
-    { name: "Arousal Regulation", score: 80, raw_value: 0.8001, description: "Well-paced arousal build.", brain_region: "Insula / ANS", gtm_proxy: "Engagement intensity" },
-    { name: "Temporal Pacing", score: 75, raw_value: 0.7501, description: "Good pacing for the format.", brain_region: "Cerebellum / Basal Ganglia", gtm_proxy: "Completion rate" },
-    { name: "Brand Safety", score: 92, raw_value: 0.9201, description: "Completely brand-safe content.", brain_region: "Prefrontal / Moral Network", gtm_proxy: "Brand safety score" },
-    { name: "CTA Effectiveness", score: 71, raw_value: 0.7101, description: "Implicit CTA — could be stronger.", brain_region: "Motor Planning / SMA", gtm_proxy: "Conversion rate" },
+    {
+      name: "Visual Hook",
+      score: 91,
+      raw_value: 0.91,
+      description: "Exceptional V1 cortex activation in opening frame",
+      brain_region: "V1",
+      gtm_proxy: "hook_score",
+    },
+    {
+      name: "Sustained Engagement",
+      score: 79,
+      raw_value: 0.79,
+      description: "Dorsal attention network sustains throughout",
+      brain_region: "IPS/SPL",
+      gtm_proxy: "attention_retention",
+    },
+    {
+      name: "Emotional Engagement",
+      score: 82,
+      raw_value: 0.82,
+      description: "Strong amygdala activation driven by music",
+      brain_region: "Amygdala/OFC",
+      gtm_proxy: "emotional_engagement",
+    },
+    {
+      name: "Memory Encoding",
+      score: 76,
+      raw_value: 0.76,
+      description: "Good hippocampal engagement",
+      brain_region: "Hippocampus",
+      gtm_proxy: "memory_encoding",
+    },
+    {
+      name: "Production Quality",
+      score: 85,
+      raw_value: 0.85,
+      description: "Excellent fusiform cortex response to aesthetics",
+      brain_region: "Fusiform",
+      gtm_proxy: "production_quality",
+    },
+    {
+      name: "Audio-Visual Sync",
+      score: 89,
+      raw_value: 0.89,
+      description: "Excellent superior temporal sulcus integration",
+      brain_region: "STS",
+      gtm_proxy: "modality_integration",
+    },
+    {
+      name: "Facial Processing",
+      score: 88,
+      raw_value: 0.88,
+      description: "Strong fusiform face area activation",
+      brain_region: "FFA",
+      gtm_proxy: "social_relevance",
+    },
+    {
+      name: "CTA Effectiveness",
+      score: 71,
+      raw_value: 0.71,
+      description: "Moderate supplementary motor area activation",
+      brain_region: "SMA",
+      gtm_proxy: "cta_effectiveness",
+    },
   ],
-  attention_curve: attentionCurve(26, 2),
-  emotional_arousal_curve: curve(26, 65, 7),
-  cognitive_load_curve: curve(26, 40, 5),
+  attention_curve: [91, 89, 88, 87, 86, 85, 84, 83, 82, 81, 80, 79, 78, 77, 76, 75, 74, 73, 72, 71, 70, 69, 68, 67, 66, 65, 64, 63, 62, 61],
+  emotional_arousal_curve: [78, 80, 82, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 92, 91, 90, 89, 88, 87, 86, 85, 84, 83, 82, 81, 80, 79, 78, 77, 76],
+  cognitive_load_curve: [55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 72, 71, 70, 69, 68, 67, 66, 65, 64, 63, 62],
   key_moments: [
-    { timestamp: 1, type: "best_hook", label: "Iconic opening — instant recognition", score: 95 },
-    { timestamp: 7, type: "peak_engagement", label: "Chorus drop — maximum engagement", score: 94 },
-    { timestamp: 13, type: "emotional_peak", label: "Emotional crescendo", score: 85 },
-    { timestamp: 19, type: "recovery", label: "Second verse re-engagement", score: 72 },
-    { timestamp: 24, type: "peak_engagement", label: "Final chorus peak", score: 88 },
+    {
+      timestamp: 1,
+      type: "best_hook",
+      label: "Opening frame hook fires immediately",
+      score: 91,
+    },
+    {
+      timestamp: 13,
+      type: "emotional_peak",
+      label: "Amygdala crescendo with music peak",
+      score: 93,
+    },
+    {
+      timestamp: 20,
+      type: "peak_engagement",
+      label: "Sustained high engagement window",
+      score: 89,
+    },
+    {
+      timestamp: 28,
+      type: "recovery",
+      label: "Pre-outro engagement surge",
+      score: 75,
+    },
   ],
-  modality_breakdown: modalityBreakdown(26, 2),
-  overarching_summary:
-    "This YouTube short scores exceptionally well across all dimensions (81 overall). The visual hook (91) is in the top tier — the opening frame immediately captures attention. " +
-    "Audio-visual sync (89) and facial processing (88) are standout strengths, driven by the music and performer's presence. " +
-    "Priority: (1) The CTA (71) could be stronger — add a clear action prompt in the final 3 seconds, and (2) novelty (68) is the weakest dimension — consider adding an unexpected visual element to boost shareability.",
+  modality_breakdown: [
+    { timestamp: 0, visual: 91, audio: 75, text: 40 },
+    { timestamp: 7, visual: 88, audio: 88, text: 50 },
+    { timestamp: 14, visual: 85, audio: 92, text: 45 },
+    { timestamp: 21, visual: 82, audio: 85, text: 35 },
+  ],
+  overarching_summary: "This YouTube preroll is exceptionally well-crafted with an outstanding visual hook (91) that grabs attention immediately. Music-driven emotional engagement (82) and excellent production quality (85) are major strengths. The audio-visual sync is exceptional (89). Main opportunity: the CTA effectiveness is moderate (71) — the final moments drop in impact when the viewer should be most motivated to act.",
+  ai_summary: "This YouTube short scores 81/100 — exceptional visual hook (91) and audio-visual sync (89) drive strong initial engagement. Facial processing (88) and social relevance (85) are key strengths. CTA effectiveness (71) and novelty (68) are the main improvement opportunities.",
+  ai_report_title: "Hook King, Soft Close",
+  ai_action_items: [
+    "Add a clear CTA card in the final 3 seconds",
+    "Insert an unexpected visual twist at the midpoint",
+    "Leverage the strong facial presence with a direct-to-camera ask",
+  ],
+  ai_priorities: [
+    "TOP: Strengthen the CTA — motor planning areas (SMA) show weak end-of-video activation. Add a clear visual prompt in the last 3 seconds.",
+    "SECOND: Boost novelty — the hippocampus/ACC shows moderate novelty response (68). Add an unexpected visual element or perspective shift at 13s.",
+    "THIRD: Extend the emotional peak — the amygdala crescendo at 13s drops off quickly. Hold the emotional moment 2–3s longer.",
+  ],
+  ai_category_strategies: {
+    "Attention & Hook": {
+      score_context: "Exceptional hook (91) with sustained engagement (79).",
+      strategies: [
+        "The V1 cortex fires strongly in the opening frame. Maintain this quality by keeping the visual complexity high throughout.",
+        "The dorsal attention network stays engaged — this is rare. Preserve the current pacing and visual rhythm.",
+      ],
+    },
+    "Emotional Engagement": {
+      score_context: "High emotional activation (82) driven by music.",
+      strategies: [
+        "The amygdala peaks at 13s — this is your anchor point. Place the most important brand message here.",
+        "The music-driven emotion is strong. Add synchronized visual moments to create multimodal emotional peaks.",
+      ],
+    },
+    "Memory & Recall": {
+      score_context: "Good encoding (76) — room for improvement.",
+      strategies: [
+        "Hippocampal activation is solid but could be higher. Add a distinctive visual signature that repeats.",
+        "The catchy melody aids encoding — pair it with a visual motif for dual-coding memory enhancement.",
+      ],
+    },
+    "Production Quality": {
+      score_context: "Excellent production (85) with strong sync (89).",
+      strategies: [
+        "The color grading and production quality activate the fusiform cortex well. Maintain this standard.",
+        "Audio-visual sync is a standout at 89 — consider making it even more precise with beat-matched cuts.",
+      ],
+    },
+  },
+  ai_metric_tips: {
+    "CTA Effectiveness": "Motor planning areas show weak activation during the outro. Add a swipe/tap visual cue synced to the final beat.",
+    "Novelty Response": "The hippocampus/ACC novelty circuit plateaus mid-video. A perspective shift or unexpected visual at 13s would re-engage it.",
+    "Cognitive Accessibility": "Prefrontal processing is moderate (73). Simplify the visual composition in the final 5s to make the message crystal clear.",
+  },
+  content_group_id: "demo-youtube-group",
 };
-
-// ── Lookup ───────────────────────────────────────────────────────────────────
-
-const DEMO_RESULTS: Record<string, AnalysisResult> = {
-  "demo-instagram-reel": INSTAGRAM_REEL,
-  "demo-youtube-preroll": YOUTUBE_PREROLL,
-};
-
-export function getDemoResult(jobId: string): AnalysisResult | null {
-  return DEMO_RESULTS[jobId] ?? null;
-}

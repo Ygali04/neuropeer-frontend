@@ -37,6 +37,15 @@ export function addRunToHistory(entry: RunHistoryEntry, userEmail?: string): voi
   }
 }
 
+export function deleteRunsFromHistory(jobIds: string[], userEmail?: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const history = getRunHistory(userEmail);
+    const filtered = history.filter((e) => !jobIds.includes(e.jobId));
+    localStorage.setItem(storageKey(userEmail), JSON.stringify(filtered));
+  } catch {}
+}
+
 export function clearRunHistory(userEmail?: string): void {
   if (typeof window === "undefined") return;
   localStorage.removeItem(storageKey(userEmail));
