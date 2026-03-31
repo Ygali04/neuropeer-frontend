@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     if (type === "analysis") {
       const result: AnalysisResult = body.data;
       const messages = buildAnalysisFeedbackPrompt(result);
-      const raw = await callGLM(messages, 0.7, 6000);
+      const raw = await callGLM(messages, 0.7, 6000, result.duration_seconds);
 
       // Parse JSON from GLM response (strip markdown wrapping if present)
       const jsonStr = raw.replace(/^```json?\s*\n?/, "").replace(/\n?\s*```$/, "").trim();
