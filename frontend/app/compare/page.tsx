@@ -95,7 +95,6 @@ function ComparePageInner() {
 
   // Resolve labels for queued items
   const getLabel = (id: string): string => {
-    if (demo) return demo.url.replace(/https?:\/\/(www\.)?/, "").slice(0, 35);
     return id.slice(0, 12) + "…";
   };
 
@@ -134,7 +133,7 @@ function ComparePageInner() {
         {allIds.length > 0 && !result && (
           <div className="mb-6 flex flex-wrap gap-2 animate-fade-up delay-100">
             {allIds.map((id, i) => {
-              const score = demo?.neural_score.total;
+              const score: number | undefined = undefined;
               return (
                 <div key={id} className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
                   <span className="w-5 h-5 rounded-full bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center text-white text-[10px] font-bold">
