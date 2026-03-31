@@ -3,9 +3,10 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Brain, Zap, BarChart3, GitCompare, Activity, Sparkles, Clock, ExternalLink, Trash2 } from "lucide-react";
+import { Brain, Zap, BarChart3, GitCompare, Activity, Sparkles, Clock, ExternalLink, Trash2, ArrowRight } from "lucide-react";
 import { UrlInputCard } from "@/components/UrlInputCard";
 import { UserMenu } from "@/components/UserMenu";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Badge } from "@/components/ui/badge";
 import { submitAnalysis } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -13,12 +14,12 @@ import { getRunHistory, clearRunHistory, type RunHistoryEntry } from "@/lib/run-
 import type { ContentType } from "@/lib/types";
 
 const FEATURES = [
-  { icon: Zap, label: "Hook Score", color: "text-brand-400" },
-  { icon: Activity, label: "Attention Curve", color: "text-teal-400" },
-  { icon: Sparkles, label: "Emotional Resonance", color: "text-amber-400" },
-  { icon: Brain, label: "Memory Encoding", color: "text-purple-400" },
-  { icon: BarChart3, label: "Modality Breakdown", color: "text-blue-400" },
-  { icon: GitCompare, label: "A/B Comparison", color: "text-emerald-400" },
+  { icon: Zap, label: "Hook Score", color: "text-brand-400", desc: "Measures NAcc approach vs. AIns avoidance in first 3s — predicts thumb-stop rate.", cite: "Tong et al. (2020) PNAS" },
+  { icon: Activity, label: "Attention Curve", color: "text-teal-400", desc: "Tracks dorsal attention network activation over time — maps to viewer retention.", cite: "Hasson et al. (2004) Science" },
+  { icon: Sparkles, label: "Emotional Resonance", color: "text-amber-400", desc: "Limbic and amygdala activation intensity — drives sharing and engagement.", cite: "Chan et al. (2024) JMR" },
+  { icon: Brain, label: "Memory Encoding", color: "text-purple-400", desc: "Hippocampal formation activity — predicts brand recall and message retention.", cite: "Falk et al. (2012) Psych. Science" },
+  { icon: BarChart3, label: "Modality Breakdown", color: "text-blue-400", desc: "Ablation analysis: visual vs. audio vs. text contribution to neural engagement.", cite: "d'Ascoli et al. (2026) Meta FAIR" },
+  { icon: GitCompare, label: "A/B Comparison", color: "text-emerald-400", desc: "Side-by-side neural comparison of content variants with winner recommendation.", cite: "Genevsky et al. (2025) PNAS Nexus" },
 ];
 
 const STATS = [
@@ -86,11 +87,13 @@ export default function HomePage() {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            <Link href="/methodology" className="text-sm text-white/40 hover:text-white/70 transition-colors">Methodology</Link>
             <Link href="/compare" className="text-sm text-white/40 hover:text-white/70 transition-colors">A/B Compare</Link>
             <Badge variant="default">
               <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
               TRIBE v2
             </Badge>
+            <ThemeToggle />
             <UserMenu />
           </div>
         </div>
@@ -126,33 +129,80 @@ export default function HomePage() {
           <UrlInputCard onSubmit={handleSubmit} loading={loading} showCompareOption onCompare={handleCompare} />
         </div>
 
-        {/* ── Example Reports ──────────────────────────────────────────── */}
-        <div className="flex flex-wrap justify-center gap-3 mt-10 animate-fade-up delay-400">
-          <span className="text-xs text-white/25 self-center mr-1">Try an example:</span>
-          <Link
-            href="/analyze/demo-instagram-reel"
-            className="glass-card glass-card-hover !rounded-full flex items-center gap-2 px-4 py-2"
-          >
-            <span className="text-sm">📱</span>
-            <span className="text-xs text-white/50 font-medium">Instagram Reel</span>
-            <span className="text-[10px] text-brand-400 font-semibold tabular-nums">72</span>
-          </Link>
-          <Link
-            href="/analyze/demo-youtube-preroll"
-            className="glass-card glass-card-hover !rounded-full flex items-center gap-2 px-4 py-2"
-          >
-            <span className="text-sm">▶</span>
-            <span className="text-xs text-white/50 font-medium">YouTube Pre-roll</span>
-            <span className="text-[10px] text-brand-400 font-semibold tabular-nums">81</span>
-          </Link>
+        {/* ── Disclaimer ────────────────────────────────────────────────── */}
+        <div className="w-full max-w-2xl mt-6 animate-fade-up delay-350">
+          <div className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-amber-500/[0.06] border border-amber-500/10">
+            <Clock className="w-3.5 h-3.5 text-amber-400/60 flex-shrink-0" />
+            <p className="text-[11px] text-amber-400/60">
+              Full neural analysis takes ~7 minutes — includes GPU instance provisioning, TRIBE v2 inference (4 modality passes), and 20-metric computation.
+            </p>
+          </div>
         </div>
 
-        {/* ── Feature Pills ───────────────────────────────────────────────── */}
+        {/* ── See an Example ──────────────────────────────────────────────── */}
+        <div className="w-full max-w-2xl mt-14 animate-fade-up delay-400">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-1 h-4 rounded-full bg-gradient-to-b from-brand-400 to-brand-600" />
+            <h2 className="font-[family-name:var(--font-display)] text-sm font-semibold text-white/60 uppercase tracking-wider">See an Example</h2>
+          </div>
+          <Link
+            href="/analyze/b5c2b795-3db7-4454-af30-48e7c237d375"
+            className="glass-card glass-card-hover p-5 flex items-center gap-5 group relative overflow-hidden"
+          >
+            <div className="absolute -top-10 -right-10 w-32 h-32 rounded-full bg-brand-500/10 blur-2xl group-hover:bg-brand-500/20 transition-all" />
+
+            <div className="relative flex-shrink-0">
+              <div className="w-16 h-16 rounded-full flex items-center justify-center bg-gradient-to-br from-amber-500/20 to-brand-500/20 border border-amber-500/30">
+                <span className="font-[family-name:var(--font-display)] text-2xl font-bold text-amber-400">34.5</span>
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center">
+                <span className="text-[8px] text-green-400 font-bold">REAL</span>
+              </div>
+            </div>
+
+            <div className="flex-1 min-w-0 relative">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-brand-500/10 border border-brand-500/20 text-brand-400">
+                  TRIBE v2 Neural Analysis
+                </span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 border border-amber-500/20 text-amber-400">
+                  A100 GPU
+                </span>
+              </div>
+              <p className="text-sm text-white/70 font-medium truncate">BlackMirror - Instagram Reel</p>
+              <p className="text-[11px] text-white/30 mt-0.5">
+                64.9s · 20,484 vertices · 65 timesteps · Hook: 42.3 · Novelty: 22.8 · Re-engagement: 76.9
+              </p>
+            </div>
+
+            <div className="flex-shrink-0 text-white/20 group-hover:text-brand-400 transition-colors">
+              <ArrowRight className="w-4 h-4" />
+            </div>
+          </Link>
+          <p className="text-center text-[10px] text-white/20 mt-2">
+            Real fMRI-predicted cortical activations from Meta TRIBE v2 on DataCrunch A100
+          </p>
+        </div>
+
+        {/* ── Feature Pills with hover modals ─────────────────────────────── */}
         <div className="flex flex-wrap justify-center gap-3 mt-12 animate-fade-up delay-400">
-          {FEATURES.map(({ icon: Icon, label, color }) => (
-            <div key={label} className="glass-card glass-card-hover !rounded-full flex items-center gap-2 px-4 py-2 cursor-default">
-              <Icon className={`w-3.5 h-3.5 ${color}`} />
-              <span className="text-xs text-white/50 font-medium">{label}</span>
+          {FEATURES.map(({ icon: Icon, label, color, desc, cite }) => (
+            <div key={label} className="relative group">
+              <div className="glass-card glass-card-hover !rounded-full flex items-center gap-2 px-4 py-2 cursor-default">
+                <Icon className={`w-3.5 h-3.5 ${color}`} />
+                <span className="text-xs text-white/50 font-medium">{label}</span>
+              </div>
+              {/* Hover modal */}
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto transition-all duration-200 z-50">
+                <div className="glass-card !bg-[#15131a]/95 backdrop-blur-xl p-4 rounded-xl shadow-2xl shadow-black/40 border border-white/[0.08]">
+                  <p className="text-xs text-white/60 leading-relaxed">{desc}</p>
+                  <p className="text-[10px] text-white/25 mt-2 italic">{cite}</p>
+                  <Link href="/methodology" className="inline-flex items-center gap-1 text-[10px] text-brand-400 hover:text-brand-300 mt-2 transition-colors">
+                    Learn more <ArrowRight className="w-2.5 h-2.5" />
+                  </Link>
+                </div>
+                <div className="w-2 h-2 bg-[#15131a] border-r border-b border-white/[0.08] rotate-45 mx-auto -mt-1" />
+              </div>
             </div>
           ))}
         </div>
@@ -168,8 +218,8 @@ export default function HomePage() {
           ))}
         </div>
 
-        {/* ── Past Runs ───────────────────────────────────────────────────── */}
-        {history.length > 0 && (
+        {/* ── Past Runs (only for logged-in users) ─────────────────────── */}
+        {session && history.length > 0 && (
           <div className="w-full max-w-2xl mt-20 animate-fade-up delay-600">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">

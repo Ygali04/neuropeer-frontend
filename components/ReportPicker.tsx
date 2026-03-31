@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { FileText, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getRunHistory, type RunHistoryEntry } from "@/lib/run-history";
-import { DEMO_JOB_IDS, getDemoResult } from "@/lib/demo-results";
 import { useAuth } from "@/lib/auth-context";
 
 interface Props {
@@ -26,20 +25,6 @@ export function ReportPicker({ selectedIds, onSelect }: Props) {
 
   useEffect(() => {
     const items: PickerEntry[] = [];
-
-    // Demo reports
-    for (const id of DEMO_JOB_IDS) {
-      const demo = getDemoResult(id);
-      if (demo) {
-        items.push({
-          jobId: id,
-          url: demo.url,
-          score: demo.neural_score.total,
-          type: demo.content_type.replace("_", " "),
-          label: "demo",
-        });
-      }
-    }
 
     // Run history
     const history = getRunHistory(session?.user?.email ?? undefined);

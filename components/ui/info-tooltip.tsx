@@ -49,15 +49,15 @@ export function InfoTooltip({
 
       <div
         className={cn(
-          "absolute z-50 w-72 pointer-events-none",
+          "absolute w-72",
           "transition-all duration-200 ease-out",
-          visible ? "opacity-100 translate-y-0" : "opacity-0",
+          visible ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 pointer-events-none",
           position === "top"
             ? "bottom-full mb-2 translate-y-1"
             : "top-full mt-2 -translate-y-1",
           "left-1/2 -translate-x-1/2"
         )}
-        style={{ visibility: visible ? "visible" : "hidden" }}
+        style={{ visibility: visible ? "visible" : "hidden", zIndex: 9999 }}
       >
         <div
           className="rounded-xl p-4 shadow-2xl border border-white/[0.1]"

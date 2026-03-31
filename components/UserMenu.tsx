@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { LogOut, User, ChevronDown } from "lucide-react";
+import { LogOut, User, ChevronDown, LayoutDashboard } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
@@ -80,6 +80,14 @@ export function UserMenu() {
           </div>
 
           <div className="p-1.5">
+            <Link
+              href="/dashboard"
+              onClick={() => setOpen(false)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-white/50 hover:text-brand-400 hover:bg-brand-500/[0.06] transition-colors"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5" />
+              Dashboard
+            </Link>
             <button
               onClick={() => {
                 setOpen(false);

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Script from "next/script";
 import { Sora, DM_Sans } from "next/font/google";
-import { DemoBanner } from "@/components/DemoBanner";
 import { AuthProvider } from "@/lib/auth-context";
+import { ThemeProvider } from "@/lib/theme-context";
 import "./globals.css";
 
 const sora = Sora({
@@ -48,12 +48,14 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${sora.variable} ${dmSans.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col noise-overlay">
-        <DemoBanner />
         <div className="bg-mesh" />
-        <AuthProvider>{children}</AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </ThemeProvider>
         {process.env.NEXT_PUBLIC_IFRAMELY_API_KEY && (
           <Script
             src={`https://cdn.iframe.ly/embed.js?key=${process.env.NEXT_PUBLIC_IFRAMELY_API_KEY}`}

@@ -148,22 +148,31 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
 
     for (let i = 0; i < count; i++) {
       const spatial = seeds[i];
-      // Create sharp hotspot clusters: only vertices where spatial seed is high AND activation is high
-      // This produces localized patches, not uniform spread
-      const clusterStrength = spatial * spatial; // square to make peaks sharper
-      const vertAct = activation * (0.2 + clusterStrength * 1.8);
-      const clamped = Math.max(0, Math.min(1, vertAct));
 
-      if (mode === "heatmap") {
-        const [hr, hg, hb, alpha] = hotColor(clamped);
-        colors[i*3]   = alpha * hr + (1-alpha) * bgR;
-        colors[i*3+1] = alpha * hg + (1-alpha) * bgG;
-        colors[i*3+2] = alpha * hb + (1-alpha) * bgB;
+      // Threshold: only show heat where activation exceeds a minimum
+      // activation is 0-1 normalized. Below 0.35 = gray (inactive). Above = colored.
+      const threshold = 0.35;
+      if (activation < threshold) {
+        // Gray — this region is not active at this timestamp
+        colors[i*3] = bgR; colors[i*3+1] = bgG; colors[i*3+2] = bgB;
       } else {
-        const [cr, cg, cb] = regionTintedHot(clamped, regionColor);
-        colors[i*3]   = cr > 0 ? cr : bgR;
-        colors[i*3+1] = cg > 0 ? cg : bgG;
-        colors[i*3+2] = cb > 0 ? cb : bgB;
+        // Active: scale intensity from threshold to 1
+        const intensity = (activation - threshold) / (1 - threshold);
+        // Use spatial seeds to create localized hotspot patches within the active region
+        const spotStrength = spatial > 0.4 ? intensity * (0.5 + spatial * 0.5) : intensity * 0.15;
+        const clamped = Math.max(0, Math.min(1, spotStrength));
+
+        if (mode === "heatmap") {
+          const [hr, hg, hb, alpha] = hotColor(clamped);
+          colors[i*3]   = alpha * hr + (1-alpha) * bgR;
+          colors[i*3+1] = alpha * hg + (1-alpha) * bgG;
+          colors[i*3+2] = alpha * hb + (1-alpha) * bgB;
+        } else {
+          const [cr, cg, cb] = regionTintedHot(clamped, regionColor);
+          colors[i*3]   = cr > 0 ? cr : bgR;
+          colors[i*3+1] = cg > 0 ? cg : bgG;
+          colors[i*3+2] = cb > 0 ? cb : bgB;
+        }
       }
     }
     colorAttr.needsUpdate = true;
@@ -207,21 +216,19 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
       group.rotation.x = rotRef.current.x;
       group.rotation.y = rotRef.current.y;
 
-      const prev = prevActivationRef.current;
-      const curr = currActivationRef.current;
-      if (prev && curr) {
+      // Interpolate raw vertex arrays and color meshes per-frame
+      const rv = rawVertsRef.current;
+      if (rv && rv.prev.length === rv.curr.length && rv.prev.length > 0) {
         const t = playbackTimeRef.current;
-        const frac = prev.second !== curr.second
-          ? Math.max(0, Math.min(1, (t - prev.second) / (curr.second - prev.second)))
+        const frac = rv.prevSec !== rv.currSec
+          ? Math.max(0, Math.min(1, (t - rv.prevSec) / (rv.currSec - rv.prevSec)))
           : 0;
-        regionMeshesRef.current.forEach((mesh, regionKey) => {
-          const cfg = REGION_CONFIG[regionKey]; if (!cfg) return;
-          const a = prev.scores[cfg.activationKey] ?? 0;
-          const b = curr.scores[cfg.activationKey] ?? 0;
-          const interp = a + (b - a) * frac;
-          const norm = Math.max(0, Math.min(1, (interp + 3) / 6));
-          applyVertexColors(mesh, regionKey, norm);
-        });
+        // Interpolate vertex-by-vertex
+        const interpolated = new Array(rv.prev.length);
+        for (let i = 0; i < rv.prev.length; i++) {
+          interpolated[i] = rv.prev[i] + (rv.curr[i] - rv.prev[i]) * frac;
+        }
+        colorMeshesFromVerts(interpolated);
       }
 
       renderer.render(scene, camera);
@@ -265,37 +272,104 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
     return () => { cancelAnimationFrame(frameRef.current); window.removeEventListener("resize", onResize); renderer.dispose(); if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement); };
   }, [applyVertexColors]);
 
-  // Fetch activations
+  // Store raw vertex arrays for per-vertex coloring
+  const rawVertsRef = useRef<{ prev: number[]; curr: number[]; prevSec: number; currSec: number } | null>(null);
+
+  // Color ALL mesh vertices directly from raw TRIBE v2 data
+  const colorMeshesFromVerts = useCallback((verts: number[]) => {
+    if (!verts || verts.length === 0) return;
+    const n = verts.length;
+    let vertOffset = 0;
+    const regionKeys = Array.from(regionMeshesRef.current.keys());
+    const totalMeshVerts = regionKeys.reduce((sum, rk) => {
+      const mesh = regionMeshesRef.current.get(rk);
+      return sum + (mesh ? mesh.geometry.getAttribute("position").count : 0);
+    }, 0);
+    if (totalMeshVerts === 0) return;
+
+    regionKeys.forEach((rk) => {
+      const mesh = regionMeshesRef.current.get(rk);
+      if (!mesh) return;
+      const geom = mesh.geometry;
+      const count = geom.getAttribute("position").count;
+      let colorAttr = geom.getAttribute("color") as THREE.BufferAttribute | null;
+      if (!colorAttr) {
+        colorAttr = new THREE.BufferAttribute(new Float32Array(count * 3), 3);
+        geom.setAttribute("color", colorAttr);
+      }
+      const colors = colorAttr.array as Float32Array;
+
+      for (let i = 0; i < count; i++) {
+        // Map mesh vertex → TRIBE v2 vertex proportionally
+        const idx = Math.min(n - 1, Math.floor((vertOffset + i) / totalMeshVerts * n));
+        const raw = verts[idx];
+        // Raw values range: [-0.63, +0.59]. Map to [0,1] with good contrast.
+        // Center on 0, spread ±0.3 to fill the color range
+        const norm = Math.max(0, Math.min(1, (raw + 0.15) / 0.4));
+
+        if (norm < 0.15) {
+          // Low activation: gray brain
+          colors[i*3] = 0.55; colors[i*3+1] = 0.53; colors[i*3+2] = 0.51;
+        } else {
+          const [hr, hg, hb, alpha] = hotColor(norm);
+          colors[i*3]   = alpha * hr + (1 - alpha) * 0.55;
+          colors[i*3+1] = alpha * hg + (1 - alpha) * 0.53;
+          colors[i*3+2] = alpha * hb + (1 - alpha) * 0.51;
+        }
+      }
+      colorAttr.needsUpdate = true;
+      vertOffset += count;
+    });
+  }, []);
+
+  // Fetch raw vertex data per timestamp
   useEffect(() => {
     let cancelled = false;
-    const fetchScores = async (sec: number): Promise<Record<string, number>> => {
-      const d = await getBrainMap(jobId, sec);
-      const v = d.vertex_activations; const n = v.length;
-      return {
-        Prefrontal: avg(v.slice(0, Math.floor(n*0.15))),
-        "Visual Cortex": avg(v.slice(Math.floor(n*0.15), Math.floor(n*0.35))),
-        Auditory: avg(v.slice(Math.floor(n*0.35), Math.floor(n*0.55))),
-        Limbic: avg(v.slice(Math.floor(n*0.55), Math.floor(n*0.75))),
-        "Default Mode": avg(v.slice(Math.floor(n*0.75))),
-      };
-    };
     (async () => {
       try {
-        const scores = await fetchScores(currentSecond);
+        const d = await getBrainMap(jobId, currentSecond);
         if (cancelled) return;
-        prevActivationRef.current = currActivationRef.current ?? { second: currentSecond, scores };
-        currActivationRef.current = { second: currentSecond, scores };
-        setRegionScores(scores);
-        if (!isPlaying) {
-          regionMeshesRef.current.forEach((mesh, rk) => {
-            const cfg = REGION_CONFIG[rk]; if (!cfg) return;
-            applyVertexColors(mesh, rk, Math.max(0, Math.min(1, ((scores[cfg.activationKey]??0)+3)/6)));
-          });
+        const v = d.vertex_activations;
+        const n = v.length;
+
+        // Compute region averages for sidebar bars
+        // Use RELATIVE scale: map the actual range of averages to 0-100
+        const regionAvgs: Record<string, number> = {
+          Prefrontal: avg(v.slice(0, Math.floor(n*0.15))),
+          "Visual Cortex": avg(v.slice(Math.floor(n*0.15), Math.floor(n*0.35))),
+          Auditory: avg(v.slice(Math.floor(n*0.35), Math.floor(n*0.55))),
+          Limbic: avg(v.slice(Math.floor(n*0.55), Math.floor(n*0.75))),
+          "Default Mode": avg(v.slice(Math.floor(n*0.75))),
+        };
+        // Scale to 0-100 using the actual min/max of THIS timestamp's averages
+        const vals = Object.values(regionAvgs);
+        const minV = Math.min(...vals);
+        const maxV = Math.max(...vals);
+        const range = maxV - minV || 0.01;
+        const scaled: Record<string, number> = {};
+        for (const [k, val] of Object.entries(regionAvgs)) {
+          // Map to 20-90 range (never fully empty or full)
+          scaled[k] = 20 + ((val - minV) / range) * 70;
         }
-        const next = await fetchScores(currentSecond + 1);
+        setRegionScores(scaled);
+
+        // Store for interpolation
+        const prev = rawVertsRef.current;
+        if (prev) {
+          rawVertsRef.current = { prev: prev.curr, curr: v, prevSec: prev.currSec, currSec: currentSecond };
+        } else {
+          rawVertsRef.current = { prev: v, curr: v, prevSec: currentSecond, currSec: currentSecond };
+        }
+
+        // Apply immediately if not playing
+        if (!isPlaying) {
+          colorMeshesFromVerts(v);
+        }
+
+        // Pre-fetch next second
+        const d2 = await getBrainMap(jobId, currentSecond + 1);
         if (cancelled) return;
-        prevActivationRef.current = { second: currentSecond, scores };
-        currActivationRef.current = { second: currentSecond + 1, scores: next };
+        rawVertsRef.current = { prev: v, curr: d2.vertex_activations, prevSec: currentSecond, currSec: currentSecond + 1 };
       } catch {}
     })();
     return () => { cancelled = true; };
@@ -379,7 +453,7 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
               <div className="w-2 h-2 rounded-full" style={{ backgroundColor: REGION_CONFIG[hoveredRegion]?.color }} />
               <span className="text-xs font-medium text-white/80">{REGION_CONFIG[hoveredRegion]?.label}</span>
               {regionScores[REGION_CONFIG[hoveredRegion]?.activationKey] !== undefined && (
-                <span className="text-xs text-white/40 tabular-nums">{Math.max(0, Math.min(100, ((regionScores[REGION_CONFIG[hoveredRegion]?.activationKey]+3)/6)*100)).toFixed(0)}%</span>
+                <span className="text-xs text-white/40 tabular-nums">{Math.round(regionScores[REGION_CONFIG[hoveredRegion]?.activationKey] ?? 0)}%</span>
               )}
             </div>
           </div>
@@ -401,8 +475,7 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
       <div className="grid grid-cols-1 gap-1.5">
         {DISPLAY_REGIONS.map(rk => {
           const cfg = REGION_CONFIG[rk]; if (!cfg) return null;
-          const raw = regionScores[cfg.activationKey] ?? 0;
-          const norm = Math.max(0, Math.min(100, ((raw+3)/6)*100));
+          const norm = Math.round(regionScores[cfg.activationKey] ?? 50);
           const active = selectedRegion===rk || hoveredRegion===rk;
           return (
             <button key={rk} onClick={() => setSelectedRegion(p=>p===rk?null:rk)}
@@ -423,7 +496,7 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
 
       {selectedRegion && (() => {
         const cfg = REGION_CONFIG[selectedRegion]; if (!cfg) return null;
-        const norm = Math.max(0, Math.min(100, (((regionScores[cfg.activationKey]??0)+3)/6)*100));
+        const norm = Math.round(regionScores[cfg.activationKey] ?? 0);
         return (
           <div className="glass-card !p-4 animate-fade-up" style={{ borderColor:cfg.color+"20" }}>
             <div className="flex items-center gap-2 mb-2">

@@ -289,14 +289,77 @@ function InstagramEmbed({
     return () => window.removeEventListener("blur", onWindowBlur);
   }, [onPlay]);
 
+  const embedUrl = extractInstagramEmbedUrl(url);
+
   return (
     <div className="rounded-xl overflow-hidden border border-white/[0.06] bg-black">
-      <div className="relative w-full max-w-[320px] mx-auto">
-        <div ref={containerRef}>
-          <div className="iframely-embed">
-            <a data-iframely-url="" href={url}>{url}</a>
+      <div className="relative w-full max-w-[320px] mx-auto aspect-[9/16]">
+        <div ref={containerRef} className="w-full h-full relative">
+          {embedUrl ? (
+            <iframe
+              ref={iframeRef as React.RefObject<HTMLIFrameElement>}
+              src={embedUrl}
+              className="w-full h-full border-0"
+              allowFullScreen
+              allow="autoplay; encrypted-media"
+              loading="lazy"
+              title="Instagram video"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-white/30 text-xs">
+              Unable to embed Instagram video
+            </div>
+          )}
+          {/* Sync indicator overlay */}
+          {isPlaying && (
+            <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-full bg-black/60 backdrop-blur-sm">
+              <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              <span className="text-[9px] text-white/60 font-medium">Synced</span>
+            </div>
+          )}
+        </div>
+        {/* Click overlay — ALWAYS intercepts clicks for play/pause sync */}
+        <div
+          className="absolute inset-0 cursor-pointer z-10"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            // Toggle NeuroPeer playback
+            handleTogglePlay();
+            // Simulate click on the Instagram iframe by briefly removing overlay
+            // This lets the Instagram player also start/stop
+            const overlay = e.currentTarget;
+            overlay.style.pointerEvents = "none";
+            setTimeout(() => {
+              // Click through to iframe
+              const iframe = iframeRef.current;
+              if (iframe) {
+                const rect = iframe.getBoundingClientRect();
+                const clickEvent = new MouseEvent("click", {
+                  clientX: rect.left + rect.width / 2,
+                  clientY: rect.top + rect.height / 2,
+                  bubbles: true,
+                });
+                iframe.dispatchEvent(clickEvent);
+              }
+              // Re-enable overlay
+              setTimeout(() => { overlay.style.pointerEvents = "auto"; }, 100);
+            }, 50);
+          }}
+        >
+          <div className={`absolute inset-0 flex items-center justify-center transition-all duration-200 ${isPlaying ? "bg-transparent" : "bg-black/30"}`}>
+            <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all duration-200 ${isPlaying ? "bg-black/30 scale-75 opacity-0 hover:opacity-100 hover:scale-100" : "bg-white/10 backdrop-blur-sm hover:bg-white/20"}`}>
+              {isPlaying ? (
+                <Pause className="w-6 h-6 text-white" />
+              ) : (
+                <Play className="w-6 h-6 text-white ml-1" />
+              )}
+            </div>
           </div>
         </div>
+      </div>
+      <div className="px-3 py-1 text-center">
+        <span className="text-[9px] text-white/20">Use controls below to sync brain visualization playback</span>
       </div>
       <Controls
         currentTime={currentTime}

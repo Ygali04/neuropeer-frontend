@@ -17,6 +17,8 @@ export async function callGLM(messages: Message[], temperature = 0.7, maxTokens 
   const key = process.env.GLM_KEY;
   if (!key) throw new Error("GLM_KEY not configured");
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 55000); // 55s timeout
   const res = await fetch(GLM_ENDPOINT, {
     method: "POST",
     headers: {
@@ -29,7 +31,9 @@ export async function callGLM(messages: Message[], temperature = 0.7, maxTokens 
       temperature,
       max_tokens: maxTokens,
     }),
+    signal: controller.signal,
   });
+  clearTimeout(timeout);
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
