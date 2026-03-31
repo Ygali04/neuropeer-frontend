@@ -6,15 +6,15 @@ export function isLightMode(): boolean {
 }
 
 export function chartBg(): string {
-  return isLightMode() ? "rgba(255, 255, 255, 0.5)" : "rgba(7, 6, 11, 0.6)";
+  return isLightMode() ? "rgba(245, 243, 239, 0.6)" : "rgba(7, 6, 11, 0.6)";
 }
 
 export function chartGrid(): string {
-  return isLightMode() ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.04)";
+  return isLightMode() ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.04)";
 }
 
 export function chartLabel(): string {
-  return isLightMode() ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.2)";
+  return isLightMode() ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.2)";
 }
 
 export function chartZones() {
@@ -27,25 +27,25 @@ export function chartZones() {
 }
 
 export function chartLine(): string {
-  return isLightMode() ? "#b83a08" : "#f97316";
+  return isLightMode() ? "#9a3412" : "#f97316";
 }
 
 export function chartLineFill(): [string, string, string] {
   return isLightMode()
-    ? ["rgba(184, 58, 8, 0.12)", "rgba(184, 58, 8, 0.03)", "rgba(184, 58, 8, 0)"]
+    ? ["rgba(154, 52, 18, 0.18)", "rgba(154, 52, 18, 0.05)", "rgba(154, 52, 18, 0)"]
     : ["rgba(249, 115, 22, 0.15)", "rgba(249, 115, 22, 0.03)", "rgba(249, 115, 22, 0)"];
 }
 
 export function chartEmotionLine(): string {
-  return isLightMode() ? "rgba(180, 83, 9, 0.4)" : "rgba(251, 191, 36, 0.3)";
+  return isLightMode() ? "rgba(146, 64, 14, 0.6)" : "rgba(251, 191, 36, 0.3)";
 }
 
 export function chartCognitiveLine(): string {
-  return isLightMode() ? "rgba(220, 38, 38, 0.5)" : "#f87171";
+  return isLightMode() ? "rgba(185, 28, 28, 0.7)" : "#f87171";
 }
 
 export function chartArousalLine(): string {
-  return isLightMode() ? "rgba(180, 83, 9, 0.7)" : "#fbbf24";
+  return isLightMode() ? "rgba(146, 64, 14, 0.85)" : "#fbbf24";
 }
 
 export function dotStroke(): string {
@@ -55,8 +55,8 @@ export function dotStroke(): string {
 export function modalityColors() {
   const light = isLightMode();
   return {
-    visual: light ? "#b83a08" : "#f97316",
-    audio: light ? "#b45309" : "#fbbf24",
-    text: light ? "#0d7365" : "#2dd4bf",
+    visual: light ? "#7c2d12" : "#f97316",
+    audio: light ? "#78350f" : "#fbbf24",
+    text: light ? "#044f44" : "#2dd4bf",
   };
 }

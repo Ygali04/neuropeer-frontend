@@ -5,110 +5,75 @@ interface Message {
   content: string;
 }
 
-const SYSTEM_PROMPT = `You are NeuroPeer's neural content strategist. You analyze video content performance using fMRI-grade brain response predictions from Meta's TRIBE v2 model, which predicts cortical vertex activations across 20,484 brain surface points.
+const SYSTEM_PROMPT = `You are NeuroPeer's neural content strategist. You analyze video content using fMRI-grade brain response predictions from Meta's TRIBE v2 model (20,484 cortical vertices at 1Hz).
 
-You provide actionable, neuroscience-grounded recommendations. Each insight should connect neural activation patterns to specific content decisions.
+Rules:
+- Respond ONLY with valid JSON. No markdown wrapping.
+- Keep text SHORT — every string must fit on a UI card (max 2 sentences per item).
+- Be specific to the video's actual scores. No generic advice.
+- Reference brain regions and neural mechanisms by name.`;
 
-IMPORTANT: Respond ONLY with valid JSON. No markdown wrapping, no explanation outside the JSON.`;
-
-function formatScores(ns: NeuralScoreBreakdown): string {
-  return [
-    `Overall Neural Score: ${Math.round(ns.total)}/100`,
-    `Hook Score (first 3s): ${Math.round(ns.hook_score)}`,
-    `Sustained Attention: ${Math.round(ns.sustained_attention)}`,
-    `Emotional Resonance: ${Math.round(ns.emotional_resonance)}`,
-    `Memory Encoding: ${Math.round(ns.memory_encoding)}`,
-    `Aesthetic Quality: ${Math.round(ns.aesthetic_quality)}`,
-    `Cognitive Accessibility: ${Math.round(ns.cognitive_accessibility)}`,
-  ].join("\n");
-}
-
-function formatMetrics(metrics: MetricScore[]): string {
-  return metrics
-    .sort((a, b) => a.score - b.score)
-    .map((m) => `${m.name}: ${Math.round(m.score)}/100 — ${m.description} (GTM proxy: ${m.gtm_proxy})`)
-    .join("\n");
+function topMetrics(metrics: MetricScore[], n: number, ascending: boolean): string {
+  const sorted = [...metrics].sort((a, b) => ascending ? a.score - b.score : b.score - a.score);
+  return sorted.slice(0, n).map(m => `${m.name}: ${Math.round(m.score)}/100`).join(", ");
 }
 
 function formatMoments(moments: KeyMoment[]): string {
-  return moments
-    .map((m) => `[${m.timestamp}s] ${m.type}: ${m.label} (activation score: ${Math.round(m.score)})`)
-    .join("\n");
+  return moments.slice(0, 6).map(m => `${m.timestamp}s: ${m.type} (${Math.round(m.score)})`).join("; ");
 }
 
 // ── Analysis Feedback ────────────────────────────────────────────────────────
 
 export function buildAnalysisFeedbackPrompt(result: AnalysisResult): Message[] {
-  const weakMetrics = result.metrics.filter((m) => m.score < 70).sort((a, b) => a.score - b.score);
-  const strongMetrics = result.metrics.filter((m) => m.score >= 50).sort((a, b) => b.score - a.score);
-
+  const ns = result.neural_score;
   return [
     { role: "system", content: SYSTEM_PROMPT },
     {
       role: "user",
-      content: `Analyze this ${result.content_type.replace("_", " ")} video (${result.duration_seconds}s).
+      content: `Video: ${result.content_type.replace("_", " ")} (${result.duration_seconds}s)
+Score: ${Math.round(ns.total)}/100 | Hook: ${Math.round(ns.hook_score)} | Attention: ${Math.round(ns.sustained_attention)} | Emotion: ${Math.round(ns.emotional_resonance)} | Memory: ${Math.round(ns.memory_encoding)} | Aesthetic: ${Math.round(ns.aesthetic_quality)} | Clarity: ${Math.round(ns.cognitive_accessibility)}
+Weakest: ${topMetrics(result.metrics, 5, true)}
+Strongest: ${topMetrics(result.metrics, 3, false)}
+Moments: ${formatMoments(result.key_moments)}
 
-NEURAL SCORE BREAKDOWN:
-${formatScores(result.neural_score)}
-
-ALL METRICS (sorted weakest first):
-${formatMetrics(result.metrics)}
-
-KEY TEMPORAL MOMENTS:
-${formatMoments(result.key_moments)}
-
-URL: ${result.url}
-
-Respond with this exact JSON structure:
+Return this JSON:
 {
-  "summary": "3-4 sentence executive assessment. Reference the overall score, identify the strongest dimension, name the critical weakness, and give a one-line recommendation.",
-  "report_title": "A creative 3-5 word title for this analysis report",
-  "priorities": [
-    "HIGHEST IMPACT: [Specific action] — explain exactly what to change and why it matters neurally",
-    "SECOND PRIORITY: [Specific action] — concrete recommendation tied to a weak metric",
-    "THIRD PRIORITY: [Specific action] — another improvement with expected neural impact"
-  ],
+  "summary": "2-3 sentence assessment. State score, top strength, critical weakness, one recommendation.",
+  "report_title": "Creative 3-5 word title",
   "action_items": [
-    "Quick win: [1-sentence actionable takeaway]",
-    "Content fix: [1-sentence specific edit to make]",
-    "Strategy shift: [1-sentence strategic recommendation]"
+    "Specific quick-win action (1 sentence, max 15 words)",
+    "Content edit to make (1 sentence, max 15 words)",
+    "Strategic shift (1 sentence, max 15 words)"
+  ],
+  "priorities": [
+    "TOP: What to fix first and why (1-2 sentences)",
+    "SECOND: Next improvement (1-2 sentences)",
+    "THIRD: Third improvement (1-2 sentences)"
   ],
   "category_strategies": {
     "Attention & Hook": {
-      "score_context": "Brief assessment of attention metrics performance",
-      "strategies": [
-        "Detailed strategy 1 with neuroscience rationale (cite NAcc/AIns activation patterns)",
-        "Detailed strategy 2 with specific timing recommendations"
-      ]
+      "score_context": "1 sentence assessment (max 20 words)",
+      "strategies": ["Strategy with neural rationale (2 sentences max)", "Second strategy (2 sentences max)"]
     },
     "Emotional Engagement": {
-      "score_context": "Brief assessment of emotional metrics",
-      "strategies": [
-        "Strategy for improving limbic activation patterns",
-        "Strategy for valence optimization"
-      ]
+      "score_context": "1 sentence (max 20 words)",
+      "strategies": ["Strategy (2 sentences max)", "Strategy (2 sentences max)"]
     },
     "Memory & Recall": {
-      "score_context": "Brief assessment of memory encoding",
-      "strategies": [
-        "Strategy for hippocampal activation improvement",
-        "Strategy for message clarity via Broca/Wernicke areas"
-      ]
+      "score_context": "1 sentence (max 20 words)",
+      "strategies": ["Strategy (2 sentences max)", "Strategy (2 sentences max)"]
     },
     "Production Quality": {
-      "score_context": "Brief assessment of aesthetic and sensory metrics",
-      "strategies": [
-        "Visual/audio production recommendations",
-        "Modality balance optimization"
-      ]
+      "score_context": "1 sentence (max 20 words)",
+      "strategies": ["Strategy (2 sentences max)", "Strategy (2 sentences max)"]
     }
   },
   "metric_tips": {
-    "Metric Name": "Specific tip for this metric, grounded in its neural substrate and what content changes would improve activation"
+    "WeakestMetric1": "1-sentence tip grounded in neural substrate",
+    "WeakestMetric2": "1-sentence tip",
+    "WeakestMetric3": "1-sentence tip"
   }
-}
-
-Include metric_tips for the 5 weakest metrics. Category strategies should be detailed (2-3 sentences each) and reference specific neural regions. The report_title should be punchy and memorable.`,
+}`
     },
   ];
 }
@@ -122,30 +87,14 @@ export function buildComparisonFeedbackPrompt(
   deltaMetrics: Record<string, number[]>
 ): Message[] {
   const videoSummaries = scores
-    .map((ns, i) => `Video ${i + 1} (${labels[i]}): Overall ${Math.round(ns.total)}/100 — Hook ${Math.round(ns.hook_score)}, Attention ${Math.round(ns.sustained_attention)}, Emotion ${Math.round(ns.emotional_resonance)}, Memory ${Math.round(ns.memory_encoding)}, Aesthetic ${Math.round(ns.aesthetic_quality)}, Clarity ${Math.round(ns.cognitive_accessibility)}`)
-    .join("\n");
-
-  const metricComparison = Object.entries(deltaMetrics)
-    .slice(0, 8)
-    .map(([name, vals]) => `${name}: ${vals.map((v, i) => `V${i + 1}=${Math.round(v)}`).join(", ")}`)
+    .map((ns, i) => `V${i + 1} (${labels[i]}): ${Math.round(ns.total)}/100 — Hook ${Math.round(ns.hook_score)}, Emotion ${Math.round(ns.emotional_resonance)}, Memory ${Math.round(ns.memory_encoding)}`)
     .join("\n");
 
   return [
     { role: "system", content: SYSTEM_PROMPT },
     {
       role: "user",
-      content: `Compare these ${scores.length} videos for neural engagement:
-
-${videoSummaries}
-
-METRIC COMPARISON:
-${metricComparison}
-
-Respond with this exact JSON structure:
-{
-  "recommendation": "2-3 sentences comparing the videos. State the winner clearly, explain WHY it wins (which specific dimensions), and suggest what the losing video(s) could learn from the winner.",
-  "winner_reason": "One sentence on the key differentiator"
-}`,
+      content: `Compare ${scores.length} videos:\n${videoSummaries}\n\nReturn JSON:\n{"recommendation":"2 sentences comparing videos and stating winner","winner_reason":"1 sentence key differentiator"}`
     },
   ];
 }

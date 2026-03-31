@@ -335,26 +335,28 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
         const tribeIdx = sliceStart + Math.min(sliceLen - 1, Math.floor(i / count * sliceLen));
         const raw = verts[tribeIdx];
 
-        // Normalize: use concentrated mapping
-        // High activation vertices → strong color, low → gray
-        const activation = Math.max(0, Math.min(1, (raw + 0.15) / 0.45));
+        // Wider normalization range → brighter, more visible activations
+        const activation = Math.max(0, Math.min(1, (raw + 0.1) / 0.3));
 
-        // Use spatial seed to create concentrated hotspot patches
+        // Concentrated patches: spatial seed modulates, but even low-seed
+        // areas show some color when activation is strong
         const seed = seeds[i];
-        // Only show color where both activation AND spatial seed are above threshold
-        const concentrated = activation * (seed > 0.55 ? 1.0 : seed > 0.35 ? 0.4 : 0.05);
-        const clamped = Math.max(0, Math.min(1, concentrated));
+        const concentrated = activation * (seed > 0.5 ? 1.0 : seed > 0.3 ? 0.6 : 0.25);
+        // Boost: square root to make mid-range brighter
+        const clamped = Math.min(1, Math.sqrt(Math.max(0, concentrated)));
 
-        if (clamped < 0.08) {
+        if (clamped < 0.05) {
           colors[i*3] = bgR; colors[i*3+1] = bgG; colors[i*3+2] = bgB;
         } else if (mode === "heatmap") {
           const [hr, hg, hb, alpha] = hotColor(clamped);
-          colors[i*3]   = alpha * hr + (1 - alpha) * bgR;
-          colors[i*3+1] = alpha * hg + (1 - alpha) * bgG;
-          colors[i*3+2] = alpha * hb + (1 - alpha) * bgB;
+          // Stronger blend: activation dominates over gray
+          const blend = Math.min(1, alpha * 1.4);
+          colors[i*3]   = blend * hr + (1 - blend) * bgR;
+          colors[i*3+1] = blend * hg + (1 - blend) * bgG;
+          colors[i*3+2] = blend * hb + (1 - blend) * bgB;
         } else {
-          // "Regions" mode: use the region's own color
-          const intensity = clamped * 0.9;
+          // "Regions" mode: vivid region colors at full intensity
+          const intensity = Math.min(1, clamped * 1.2);
           colors[i*3]   = intensity * regionCol.r + (1 - intensity) * bgR;
           colors[i*3+1] = intensity * regionCol.g + (1 - intensity) * bgG;
           colors[i*3+2] = intensity * regionCol.b + (1 - intensity) * bgB;
