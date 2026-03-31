@@ -723,36 +723,53 @@ def get_video_duration(video_path: Path) -> tuple[float, float]:
 def transcribe_audio(audio_path: Path) -> list[dict]:
     """
     Transcribe audio using ElevenLabs Scribe v2 with word-level timestamps.
+    Uses direct HTTP API (not SDK) with proper headers to avoid cloud IP blocks.
     Returns list of {"word": str, "start": float, "end": float}.
     """
-    from elevenlabs.client import ElevenLabs
+    import httpx
 
     if not settings.elevenlabs_api_key:
         raise RuntimeError(
             "ELEVENLABS_API_KEY is required for transcription. Get one at https://elevenlabs.io/app/settings/api-keys"
         )
 
-    client = ElevenLabs(api_key=settings.elevenlabs_api_key)
     logger.info("Transcribing with ElevenLabs Scribe v2: %s", audio_path.name)
 
     with open(audio_path, "rb") as f:
-        result = client.speech_to_text.convert(
-            file=f,
-            model_id="scribe_v2",
-            tag_audio_events=False,
-            timestamps_granularity="word",
+        response = httpx.post(
+            "https://api.elevenlabs.io/v1/speech-to-text",
+            headers={
+                "xi-api-key": settings.elevenlabs_api_key,
+                "User-Agent": "NeuroPeer/1.0 (https://neuropeer-frontend.vercel.app)",
+                "Accept": "application/json",
+                "Origin": "https://neuropeer-frontend.vercel.app",
+            },
+            data={
+                "model_id": "scribe_v2",
+                "tag_audio_events": "false",
+                "timestamps_granularity": "word",
+            },
+            files={"file": (audio_path.name, f, "audio/wav")},
+            timeout=120,
         )
 
+    if response.status_code != 200:
+        error_body = response.text[:300]
+        logger.error("ElevenLabs STT failed (%d): %s", response.status_code, error_body)
+        raise RuntimeError(f"ElevenLabs STT error {response.status_code}: {error_body}")
+
+    result = response.json()
+
     words = []
-    for chunk in result.words:
-        text = chunk.text.strip()
+    for chunk in result.get("words", []):
+        text = (chunk.get("text") or "").strip()
         if not text:
             continue
         words.append(
             {
                 "word": text,
-                "start": chunk.start,
-                "end": chunk.end,
+                "start": chunk.get("start", 0),
+                "end": chunk.get("end", 0),
             }
         )
 

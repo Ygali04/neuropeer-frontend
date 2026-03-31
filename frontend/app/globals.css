@@ -199,44 +199,44 @@ body {
 
 html.light {
   /* ── Core ────────────────────────────────────────────────────────────────── */
-  --background: #f8f7f4;
-  --foreground: #1a1714;
-  --muted: #7a7570;
-  --muted-foreground: #9a9590;
+  --background: #f5f3ef;
+  --foreground: #141210;
+  --muted: #5c5854;
+  --muted-foreground: #7a756f;
 
   /* ── White → Dark (inverts all text-white/xx, border-white/xx, bg-white/xx) */
-  --color-white: #1a1714;
+  --color-white: #141210;
 
-  /* ── Brand orange: bright → rich dark orange ─────────────────────────────── */
+  /* ── Brand orange: deep, rich, fully saturated ──────────────────────────── */
   --color-brand-50: #fff7ed;
   --color-brand-100: #ffedd5;
-  --color-brand-200: #fed7aa;
-  --color-brand-300: #c2410c;
-  --color-brand-400: #b83a08;
-  --color-brand-500: #9a3412;
-  --color-brand-600: #7c2d12;
-  --color-brand-700: #6c2710;
+  --color-brand-200: #c2410c;
+  --color-brand-300: #a8360a;
+  --color-brand-400: #9a3412;
+  --color-brand-500: #7c2d12;
+  --color-brand-600: #6c2710;
+  --color-brand-700: #5c200d;
 
-  /* ── Teal: bright → deep teal ────────────────────────────────────────────── */
-  --color-teal-400: #0d7365;
-  --color-teal-500: #0a5e52;
-  --color-teal-600: #064e42;
+  /* ── Teal/Cyan: much deeper ─────────────────────────────────────────────── */
+  --color-teal-400: #065f53;
+  --color-teal-500: #044f44;
+  --color-teal-600: #033f37;
 
-  /* ── Score colors: bright pastel → saturated dark ────────────────────────── */
-  --color-score-green: #059669;
-  --color-score-amber: #b45309;
-  --color-score-red: #dc2626;
+  /* ── Score colors: fully saturated, zero pastels ────────────────────────── */
+  --color-score-green: #047857;
+  --color-score-amber: #92400e;
+  --color-score-red: #b91c1c;
 
-  /* ── Tailwind built-in colors used throughout ────────────────────────────── */
-  --color-emerald-400: #059669;
-  --color-emerald-500: #047857;
-  --color-amber-400: #b45309;
-  --color-amber-500: #92400e;
-  --color-red-400: #dc2626;
-  --color-red-500: #b91c1c;
-  --color-purple-400: #7e22ce;
-  --color-blue-400: #2563eb;
-  --color-green-500: #15803d;
+  /* ── Tailwind built-in colors: all pushed much darker ───────────────────── */
+  --color-emerald-400: #047857;
+  --color-emerald-500: #065f46;
+  --color-amber-400: #92400e;
+  --color-amber-500: #78350f;
+  --color-red-400: #b91c1c;
+  --color-red-500: #991b1b;
+  --color-purple-400: #6b21a8;
+  --color-blue-400: #1d4ed8;
+  --color-green-500: #166534;
 }
 
 html.light body {
@@ -252,10 +252,10 @@ html.light ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
 /* ─── Light: Glass Card ────────────────────────────────────────────────────── */
 
 html.light .glass-card {
-  background: linear-gradient(135deg, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.65) 100%);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.03);
-  backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  backdrop-filter: blur(8px);
 }
 
 html.light .glass-card-hover:hover {
@@ -283,7 +283,7 @@ html.light .glow-brand {
 /* ─── Light: Text gradient ─────────────────────────────────────────────────── */
 
 html.light .text-gradient-brand {
-  background: linear-gradient(135deg, #b83a08 0%, #7c2d12 100%);
+  background: linear-gradient(135deg, #9a3412 0%, #6c2710 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
