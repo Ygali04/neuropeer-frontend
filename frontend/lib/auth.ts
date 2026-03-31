@@ -3,10 +3,8 @@ import Google from "next-auth/providers/google";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
-    Google({
-      clientId: process.env.AUTH_GOOGLE_ID!,
-      clientSecret: process.env.AUTH_GOOGLE_SECRET!,
-    }),
+    // NextAuth v5 auto-reads AUTH_GOOGLE_ID and AUTH_GOOGLE_SECRET from env
+    Google,
   ],
   session: { strategy: "jwt" },
   pages: {
