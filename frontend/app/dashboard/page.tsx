@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Brain } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { getProfile, getCampaigns } from "@/lib/api";
+import { getRunHistory } from "@/lib/run-history";
 import { MarketerProfileCard } from "@/components/MarketerProfileCard";
 import { ScoreTimeline } from "@/components/ScoreTimeline";
 import { CampaignCard } from "@/components/CampaignCard";
@@ -36,7 +37,42 @@ export default function DashboardPage() {
     const email = session?.user?.email;
     if (!email) return;
     getProfile(email).then(setProfile);
-    getCampaigns(email).then(setCampaigns);
+    getCampaigns(email).then((backendCampaigns) => {
+      // Merge with localStorage run history (for runs not yet in backend)
+      const localRuns = getRunHistory(email);
+      const backendJobIds = new Set(backendCampaigns.map(c => c.content_group_id));
+
+      const localCampaigns: CampaignSummary[] = localRuns
+        .filter(r => !backendJobIds.has(r.jobId))
+        .map(r => ({
+          content_group_id: r.jobId,
+          campaign_name: r.url.replace(/https?:\/\/(www\.)?/, "").split("/").slice(0, 2).join("/"),
+          media_count: 1,
+          latest_score: r.neuralScore,
+          first_score: r.neuralScore,
+          delta: 0,
+          content_type: r.contentType,
+          created_at: new Date(r.timestamp).toISOString(),
+          latest_at: new Date(r.timestamp).toISOString(),
+        }));
+
+      setCampaigns([...backendCampaigns, ...localCampaigns]);
+
+      // Build profile from local data if backend profile is empty
+      if (localRuns.length > 0) {
+        setProfile(prev => {
+          if (prev.total_analyses > 0) return prev; // backend has real data
+          const scores = [...backendCampaigns.map(c => c.latest_score), ...localRuns.map(r => r.neuralScore)];
+          const avg = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+          return {
+            ...prev,
+            user_email: email,
+            overall_score: avg,
+            total_analyses: localRuns.length + backendCampaigns.length,
+          };
+        });
+      }
+    });
   }, [session]);
 
   const sortedCampaigns = useMemo(() => {
