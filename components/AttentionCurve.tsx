@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { TrendingUp, Play, Pause, RotateCcw } from "lucide-react";
 import type { KeyMoment } from "@/lib/types";
+import { chartBg, chartGrid, chartLabel, chartZones, chartLine, chartLineFill, chartEmotionLine, dotStroke } from "@/lib/theme-colors";
 
 interface Props {
   attentionCurve: number[];
@@ -87,24 +88,25 @@ export function AttentionCurve({
     const n = attentionCurve.length;
 
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = "rgba(7, 6, 11, 0.6)";
+    ctx.fillStyle = chartBg();
     ctx.fillRect(0, 0, w, h);
 
     const xScale = (i: number) => pad.left + (i / (n - 1)) * plotW;
     const yScale = (v: number) => pad.top + plotH - (v / 100) * plotH;
 
     // Zone bands
+    const zones = chartZones();
     [
-      { from: 0, to: 33, color: "rgba(248, 113, 113, 0.04)" },
-      { from: 33, to: 66, color: "rgba(251, 191, 36, 0.03)" },
-      { from: 66, to: 100, color: "rgba(52, 211, 153, 0.03)" },
+      { from: 0, to: 33, color: zones.low },
+      { from: 33, to: 66, color: zones.mid },
+      { from: 66, to: 100, color: zones.high },
     ].forEach(({ from, to, color }) => {
       ctx.fillStyle = color;
       ctx.fillRect(pad.left, yScale(to), plotW, yScale(from) - yScale(to));
     });
 
     // Grid
-    ctx.strokeStyle = "rgba(255,255,255,0.04)";
+    ctx.strokeStyle = chartGrid();
     ctx.lineWidth = 1;
     [25, 50, 75].forEach((v) => {
       ctx.beginPath();
@@ -114,7 +116,7 @@ export function AttentionCurve({
     });
 
     // Y/X labels
-    ctx.fillStyle = "rgba(255,255,255,0.2)";
+    ctx.fillStyle = chartLabel();
     ctx.font = "10px system-ui";
     ctx.textAlign = "right";
     [0, 25, 50, 75, 100].forEach((v) => ctx.fillText(String(v), pad.left - 6, yScale(v) + 3));
@@ -126,7 +128,7 @@ export function AttentionCurve({
     if (emotionCurve && emotionCurve.length === n) {
       ctx.beginPath();
       emotionCurve.forEach((v, i) => { i === 0 ? ctx.moveTo(xScale(i), yScale(v)) : ctx.lineTo(xScale(i), yScale(v)); });
-      ctx.strokeStyle = "rgba(251, 191, 36, 0.3)";
+      ctx.strokeStyle = chartEmotionLine();
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }
@@ -134,7 +136,7 @@ export function AttentionCurve({
     // Attention curve
     ctx.beginPath();
     attentionCurve.forEach((v, i) => { i === 0 ? ctx.moveTo(xScale(i), yScale(v)) : ctx.lineTo(xScale(i), yScale(v)); });
-    ctx.strokeStyle = "#f97316";
+    ctx.strokeStyle = chartLine();
     ctx.lineWidth = 2.5;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -144,10 +146,11 @@ export function AttentionCurve({
     ctx.lineTo(xScale(n - 1), yScale(0));
     ctx.lineTo(xScale(0), yScale(0));
     ctx.closePath();
+    const fills = chartLineFill();
     const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + plotH);
-    grad.addColorStop(0, "rgba(249, 115, 22, 0.15)");
-    grad.addColorStop(0.6, "rgba(249, 115, 22, 0.03)");
-    grad.addColorStop(1, "rgba(249, 115, 22, 0)");
+    grad.addColorStop(0, fills[0]);
+    grad.addColorStop(0.6, fills[1]);
+    grad.addColorStop(1, fills[2]);
     ctx.fillStyle = grad;
     ctx.fill();
 
@@ -159,7 +162,7 @@ export function AttentionCurve({
       const mColor = MOMENT_COLORS[m.type] ?? "#fff";
       ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fillStyle = mColor + "15"; ctx.fill();
       ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2); ctx.fillStyle = mColor; ctx.fill();
-      ctx.strokeStyle = "rgba(7, 6, 11, 0.8)"; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.strokeStyle = dotStroke(); ctx.lineWidth = 1.5; ctx.stroke();
     });
   }, [attentionCurve, emotionCurve, keyMoments, height]);
 

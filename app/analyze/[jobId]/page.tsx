@@ -261,7 +261,7 @@ export default function AnalyzePage() {
   return (
     <div className="min-h-screen">
       {/* ── Nav ─────────────────────────────────────────────────────────────── */}
-      <header className="border-b border-white/[0.06] px-6 py-4 sticky top-0 z-10 backdrop-blur-xl bg-[#07060b]/80">
+      <header className="nav-backdrop border-b border-white/[0.06] px-6 py-4 sticky top-0 z-10 backdrop-blur-xl bg-[#07060b]/80">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3 group">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20 group-hover:shadow-brand-500/30 transition-shadow">

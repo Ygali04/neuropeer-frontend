@@ -326,10 +326,16 @@ html.light .bg-gradient-to-r[class*="brand"] {
   color: #fff !important;
 }
 
-/* ─── Light: Nav header backdrop ───────────────────────────────────────────── */
+/* ─── Light: Nav/header dark backgrounds ───────────────────────────────────── */
 
-html.light [class*="bg-\\[\\#07060b\\]"] {
+html.light .nav-backdrop {
   background-color: rgba(248, 247, 244, 0.9) !important;
+  border-bottom-color: rgba(0,0,0,0.06) !important;
+}
+
+html.light .progress-modal-bg {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border-color: rgba(0,0,0,0.08) !important;
 }
 
 /* ─── Light: Keep Google button white ──────────────────────────────────────── */

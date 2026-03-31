@@ -275,21 +275,30 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
   // Store raw vertex arrays for per-vertex coloring
   const rawVertsRef = useRef<{ prev: number[]; curr: number[]; prevSec: number; currSec: number } | null>(null);
 
-  // Color ALL mesh vertices directly from raw TRIBE v2 data
+  // Map each brain mesh region to its corresponding TRIBE v2 vertex slice
+  // TRIBE v2 outputs 20,484 vertices on fsaverage5. We divide them by brain region:
+  const REGION_VERTEX_SLICES: Record<string, [number, number]> = {
+    prefrontal:  [0.00, 0.12],
+    visual:      [0.12, 0.28],
+    auditory:    [0.28, 0.40],
+    limbic:      [0.40, 0.50],
+    default_mode:[0.50, 0.62],
+    temporal:    [0.62, 0.72],
+    parietal:    [0.72, 0.84],
+    motor:       [0.84, 0.92],
+    subcortical: [0.92, 1.00],
+  };
+
+  // Color each mesh region using its assigned TRIBE v2 vertex slice
   const colorMeshesFromVerts = useCallback((verts: number[]) => {
     if (!verts || verts.length === 0) return;
     const n = verts.length;
-    let vertOffset = 0;
-    const regionKeys = Array.from(regionMeshesRef.current.keys());
-    const totalMeshVerts = regionKeys.reduce((sum, rk) => {
-      const mesh = regionMeshesRef.current.get(rk);
-      return sum + (mesh ? mesh.geometry.getAttribute("position").count : 0);
-    }, 0);
-    if (totalMeshVerts === 0) return;
+    const mode = viewModeRef.current;
+    const bgR = 0.55, bgG = 0.53, bgB = 0.51;
 
-    regionKeys.forEach((rk) => {
-      const mesh = regionMeshesRef.current.get(rk);
-      if (!mesh) return;
+    regionMeshesRef.current.forEach((mesh, rk) => {
+      const cfg = REGION_CONFIG[rk];
+      if (!cfg) return;
       const geom = mesh.geometry;
       const count = geom.getAttribute("position").count;
       let colorAttr = geom.getAttribute("color") as THREE.BufferAttribute | null;
@@ -299,26 +308,59 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
       }
       const colors = colorAttr.array as Float32Array;
 
-      for (let i = 0; i < count; i++) {
-        // Map mesh vertex → TRIBE v2 vertex proportionally
-        const idx = Math.min(n - 1, Math.floor((vertOffset + i) / totalMeshVerts * n));
-        const raw = verts[idx];
-        // Raw values range: [-0.63, +0.59]. Map to [0,1] with good contrast.
-        // Center on 0, spread ±0.3 to fill the color range
-        const norm = Math.max(0, Math.min(1, (raw + 0.15) / 0.4));
+      // Get this region's vertex slice from TRIBE v2 data
+      const slice = REGION_VERTEX_SLICES[rk] ?? [0, 1];
+      const sliceStart = Math.floor(slice[0] * n);
+      const sliceEnd = Math.floor(slice[1] * n);
+      const sliceLen = sliceEnd - sliceStart;
 
-        if (norm < 0.15) {
-          // Low activation: gray brain
-          colors[i*3] = 0.55; colors[i*3+1] = 0.53; colors[i*3+2] = 0.51;
+      // Region color for "regions" mode
+      const regionCol = new THREE.Color(cfg.color);
+
+      // Use spatial seeds for sub-region variation (concentrated hotspots)
+      let seeds = vertexSeedsRef.current.get(rk);
+      if (!seeds || seeds.length !== count) {
+        seeds = new Float32Array(count);
+        const pos = geom.getAttribute("position").array as Float32Array;
+        for (let i = 0; i < count; i++) {
+          const x = pos[i*3], y = pos[i*3+1], z = pos[i*3+2];
+          const wave = Math.sin(x*0.2+y*0.15)*Math.cos(z*0.18) + Math.sin(y*0.12-z*0.1)*0.6;
+          seeds[i] = 1/(1+Math.exp(-6*wave)); // sigmoid → 0 or 1 patches
+        }
+        vertexSeedsRef.current.set(rk, seeds);
+      }
+
+      for (let i = 0; i < count; i++) {
+        // Map mesh vertex to its region's TRIBE v2 vertex
+        const tribeIdx = sliceStart + Math.min(sliceLen - 1, Math.floor(i / count * sliceLen));
+        const raw = verts[tribeIdx];
+
+        // Normalize: use concentrated mapping
+        // High activation vertices → strong color, low → gray
+        const activation = Math.max(0, Math.min(1, (raw + 0.15) / 0.45));
+
+        // Use spatial seed to create concentrated hotspot patches
+        const seed = seeds[i];
+        // Only show color where both activation AND spatial seed are above threshold
+        const concentrated = activation * (seed > 0.55 ? 1.0 : seed > 0.35 ? 0.4 : 0.05);
+        const clamped = Math.max(0, Math.min(1, concentrated));
+
+        if (clamped < 0.08) {
+          colors[i*3] = bgR; colors[i*3+1] = bgG; colors[i*3+2] = bgB;
+        } else if (mode === "heatmap") {
+          const [hr, hg, hb, alpha] = hotColor(clamped);
+          colors[i*3]   = alpha * hr + (1 - alpha) * bgR;
+          colors[i*3+1] = alpha * hg + (1 - alpha) * bgG;
+          colors[i*3+2] = alpha * hb + (1 - alpha) * bgB;
         } else {
-          const [hr, hg, hb, alpha] = hotColor(norm);
-          colors[i*3]   = alpha * hr + (1 - alpha) * 0.55;
-          colors[i*3+1] = alpha * hg + (1 - alpha) * 0.53;
-          colors[i*3+2] = alpha * hb + (1 - alpha) * 0.51;
+          // "Regions" mode: use the region's own color
+          const intensity = clamped * 0.9;
+          colors[i*3]   = intensity * regionCol.r + (1 - intensity) * bgR;
+          colors[i*3+1] = intensity * regionCol.g + (1 - intensity) * bgG;
+          colors[i*3+2] = intensity * regionCol.b + (1 - intensity) * bgB;
         }
       }
       colorAttr.needsUpdate = true;
-      vertOffset += count;
     });
   }, []);
 

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { Layers } from "lucide-react";
 import type { ModalityContribution } from "@/lib/types";
+import { chartBg, chartLabel, modalityColors } from "@/lib/theme-colors";
 
 interface Props {
   breakdown: ModalityContribution[];
@@ -34,10 +35,10 @@ export function ModalityBreakdown({ breakdown, height = 120 }: Props) {
     const barW = Math.max(1, plotW / n);
 
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = "rgba(7, 6, 11, 0.6)";
+    ctx.fillStyle = chartBg();
     ctx.fillRect(0, 0, w, h);
 
-    const COLORS = { visual: "#f97316", audio: "#fbbf24", text: "#2dd4bf" };
+    const COLORS = modalityColors();
 
     breakdown.forEach((d, i) => {
       const x = pad.left + i * barW;
@@ -59,7 +60,7 @@ export function ModalityBreakdown({ breakdown, height = 120 }: Props) {
     });
 
     // X labels
-    ctx.fillStyle = "rgba(255,255,255,0.2)";
+    ctx.fillStyle = chartLabel();
     ctx.font = "9px system-ui";
     ctx.textAlign = "center";
     const labelEvery = Math.max(1, Math.floor(n / 8));
