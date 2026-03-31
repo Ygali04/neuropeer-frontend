@@ -70,10 +70,11 @@ export function ScoreTimeline({ campaigns, overallScore }: Props) {
                 fontSize: 12,
                 color: "rgba(255,255,255,0.7)",
               }}
-              formatter={(value: number, _name: string, props: { payload: { name: string; delta: number } }) => {
-                const d = props.payload.delta;
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              formatter={(value: any, _name: any, props: any) => {
+                const d = props?.payload?.delta ?? 0;
                 const deltaStr = d !== 0 ? ` (${d >= 0 ? "+" : ""}${d})` : "";
-                return [`${value}/100${deltaStr}`, props.payload.name];
+                return [`${value}/100${deltaStr}`, props?.payload?.name ?? ""];
               }}
               labelFormatter={() => ""}
             />
