@@ -207,23 +207,34 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
       group.rotation.x = rotRef.current.x;
       group.rotation.y = rotRef.current.y;
 
-      const prev = prevActivationRef.current;
-      const curr = currActivationRef.current;
-      if (prev && curr) {
+      // Per-vertex interpolation between two full vertex arrays
+      const vPrev = rawVertsPrev.current;
+      const vCurr = rawVertsCurr.current;
+      if (vPrev && vCurr && vPrev.length === vCurr.length) {
         const t = playbackTimeRef.current;
-        const frac = prev.second !== curr.second
-          ? Math.max(0, Math.min(1, (t - prev.second) / (curr.second - prev.second)))
+        const { prev: pSec, curr: cSec } = rawVertsSec.current;
+        const frac = pSec !== cSec
+          ? Math.max(0, Math.min(1, (t - pSec) / (cSec - pSec)))
           : 0;
-        regionMeshesRef.current.forEach((mesh, regionKey) => {
-          const cfg = REGION_CONFIG[regionKey]; if (!cfg) return;
-          const a = prev.scores[cfg.activationKey] ?? 0;
-          const b = curr.scores[cfg.activationKey] ?? 0;
-          const interp = a + (b - a) * frac;
-          // Real TRIBE v2 values: mean≈0.004, std≈0.12, range≈[-0.6, 0.4]
-          // Scale to [0,1] using z-score-like normalization for visible contrast
-          const norm = Math.max(0, Math.min(1, (interp + 0.3) / 0.6));
-          applyVertexColors(mesh, regionKey, norm);
-        });
+        // Interpolate vertex-by-vertex
+        const interpolated = new Array(vPrev.length);
+        for (let i = 0; i < vPrev.length; i++) {
+          interpolated[i] = vPrev[i] + (vCurr[i] - vPrev[i]) * frac;
+        }
+        applyRawVertexHeatmap(interpolated);
+
+        // Also interpolate region scores for sidebar bars
+        const prev = prevActivationRef.current;
+        const curr = currActivationRef.current;
+        if (prev && curr) {
+          const interpScores: Record<string, number> = {};
+          for (const key of Object.keys(prev.scores)) {
+            const a = prev.scores[key] ?? 0;
+            const b = curr.scores[key] ?? 0;
+            interpScores[key] = a + (b - a) * frac;
+          }
+          setRegionScores(interpScores);
+        }
       }
 
       renderer.render(scene, camera);
@@ -267,37 +278,92 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
     return () => { cancelAnimationFrame(frameRef.current); window.removeEventListener("resize", onResize); renderer.dispose(); if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement); };
   }, [applyVertexColors]);
 
-  // Fetch activations
+  // Store raw vertex activations for current + next second
+  const rawVertsPrev = useRef<number[] | null>(null);
+  const rawVertsCurr = useRef<number[] | null>(null);
+  const rawVertsSec = useRef<{ prev: number; curr: number }>({ prev: 0, curr: 0 });
+
+  // Apply raw vertex activations directly to all meshes (true per-vertex heatmap)
+  const applyRawVertexHeatmap = useCallback((verts: number[], intensity: number = 1) => {
+    if (!verts || verts.length === 0) return;
+    const n = verts.length;
+    let vertexOffset = 0;
+    const regionKeys = Array.from(regionMeshesRef.current.keys());
+    const totalMeshVerts = regionKeys.reduce((sum, rk) => {
+      const mesh = regionMeshesRef.current.get(rk);
+      return sum + (mesh ? mesh.geometry.getAttribute("position").count : 0);
+    }, 0);
+
+    // Map TRIBE v2 vertices proportionally across mesh regions
+    regionKeys.forEach((rk) => {
+      const mesh = regionMeshesRef.current.get(rk);
+      if (!mesh) return;
+      const geom = mesh.geometry;
+      const count = geom.getAttribute("position").count;
+      let colorAttr = geom.getAttribute("color") as THREE.BufferAttribute | null;
+      if (!colorAttr) {
+        colorAttr = new THREE.BufferAttribute(new Float32Array(count * 3), 3);
+        geom.setAttribute("color", colorAttr);
+      }
+      const colors = colorAttr.array as Float32Array;
+      const bgR = 0.58, bgG = 0.56, bgB = 0.54;
+
+      for (let i = 0; i < count; i++) {
+        // Map mesh vertex to TRIBE v2 vertex
+        const tribeIdx = Math.min(n - 1, Math.floor((vertexOffset + i) / totalMeshVerts * n));
+        const raw = verts[tribeIdx] * intensity;
+        // Normalize: TRIBE v2 values ≈ [-0.6, 0.4], center on 0
+        const norm = Math.max(0, Math.min(1, (raw + 0.3) / 0.6));
+        const [hr, hg, hb, alpha] = hotColor(norm);
+        colors[i*3]   = alpha * hr + (1-alpha) * bgR;
+        colors[i*3+1] = alpha * hg + (1-alpha) * bgG;
+        colors[i*3+2] = alpha * hb + (1-alpha) * bgB;
+      }
+      colorAttr.needsUpdate = true;
+      vertexOffset += count;
+    });
+  }, []);
+
+  // Fetch activations — store FULL vertex arrays for interpolation
   useEffect(() => {
     let cancelled = false;
-    const fetchScores = async (sec: number): Promise<Record<string, number>> => {
+    const fetchData = async (sec: number) => {
       const d = await getBrainMap(jobId, sec);
-      const v = d.vertex_activations; const n = v.length;
-      return {
+      const v = d.vertex_activations;
+      const n = v.length;
+      // Also compute region averages for the sidebar bars
+      const scores: Record<string, number> = {
         Prefrontal: avg(v.slice(0, Math.floor(n*0.15))),
         "Visual Cortex": avg(v.slice(Math.floor(n*0.15), Math.floor(n*0.35))),
         Auditory: avg(v.slice(Math.floor(n*0.35), Math.floor(n*0.55))),
         Limbic: avg(v.slice(Math.floor(n*0.55), Math.floor(n*0.75))),
         "Default Mode": avg(v.slice(Math.floor(n*0.75))),
       };
+      return { verts: v, scores };
     };
     (async () => {
       try {
-        const scores = await fetchScores(currentSecond);
+        const curr = await fetchData(currentSecond);
         if (cancelled) return;
-        prevActivationRef.current = currActivationRef.current ?? { second: currentSecond, scores };
-        currActivationRef.current = { second: currentSecond, scores };
-        setRegionScores(scores);
+        rawVertsCurr.current = curr.verts;
+        rawVertsSec.current.curr = currentSecond;
+        setRegionScores(curr.scores);
+
+        // Apply immediately if not playing
         if (!isPlaying) {
-          regionMeshesRef.current.forEach((mesh, rk) => {
-            const cfg = REGION_CONFIG[rk]; if (!cfg) return;
-            applyVertexColors(mesh, rk, Math.max(0, Math.min(1, ((scores[cfg.activationKey]??0)+0.3)/0.6)));
-          });
+          applyRawVertexHeatmap(curr.verts);
         }
-        const next = await fetchScores(currentSecond + 1);
+
+        // Pre-fetch next second for smooth interpolation
+        const next = await fetchData(currentSecond + 1);
         if (cancelled) return;
-        prevActivationRef.current = { second: currentSecond, scores };
-        currActivationRef.current = { second: currentSecond + 1, scores: next };
+        rawVertsPrev.current = curr.verts;
+        rawVertsCurr.current = next.verts;
+        rawVertsSec.current = { prev: currentSecond, curr: currentSecond + 1 };
+
+        // Update region scores to reflect interpolation target
+        prevActivationRef.current = { second: currentSecond, scores: curr.scores };
+        currActivationRef.current = { second: currentSecond + 1, scores: next.scores };
       } catch {}
     })();
     return () => { cancelled = true; };

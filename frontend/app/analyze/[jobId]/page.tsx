@@ -14,6 +14,7 @@ import {
   ChevronDown,
   Share2,
   Check,
+  Sparkles,
 } from "lucide-react";
 
 import { connectJobWebSocket, getResult, exportReport } from "@/lib/api";
@@ -412,7 +413,8 @@ export default function AnalyzePage() {
             </Card>
 
             {/* Row 3: Brain Map + Key Moments + Video */}
-            <div className={`grid grid-cols-1 lg:grid-cols-2 gap-6 transition-all duration-700 ${result ? "animate-fade-up delay-200" : "opacity-50"}`}>
+            <CollapsibleSection title="Brain Activity & Key Moments" icon={<Brain className="w-4 h-4 text-brand-400" />} className={`transition-all duration-700 ${result ? "animate-fade-up delay-200" : "opacity-50"}`}>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
                 <BrainMap3D jobId={jobId} currentSecond={currentSecond} isPlaying={isPlaying} playbackTime={playbackTime} />
               </Card>
@@ -449,10 +451,12 @@ export default function AnalyzePage() {
                 )}
               </Card>
             </div>
+            </CollapsibleSection>
 
             {/* Row 4: Emotional + Modality (only when result is loaded) */}
             {result && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-up delay-300">
+              <CollapsibleSection title="Emotional & Modality Analysis" icon={<Sparkles className="w-4 h-4 text-amber-400" />} className="animate-fade-up delay-300">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card>
                   <EmotionalPanel arousaleCurve={result.emotional_arousal_curve} cognitiveCurve={result.cognitive_load_curve} currentSecond={currentSecond} height={120} />
                 </Card>
@@ -460,6 +464,7 @@ export default function AnalyzePage() {
                   <ModalityBreakdown breakdown={result.modality_breakdown} height={120} />
                 </Card>
               </div>
+              </CollapsibleSection>
             )}
             {!result && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 opacity-40">
