@@ -11,15 +11,18 @@ export async function POST(req: Request) {
     if (type === "analysis") {
       const result: AnalysisResult = body.data;
       const messages = buildAnalysisFeedbackPrompt(result);
-      const raw = await callGLM(messages, 0.7, 1000);
+      const raw = await callGLM(messages, 0.7, 2500);
 
-      // Parse JSON from GLM response (may have markdown wrapping)
-      const jsonStr = raw.replace(/^```json?\s*/, "").replace(/\s*```$/, "").trim();
+      // Parse JSON from GLM response (strip markdown wrapping if present)
+      const jsonStr = raw.replace(/^```json?\s*\n?/, "").replace(/\n?\s*```$/, "").trim();
       const parsed = JSON.parse(jsonStr);
 
       return NextResponse.json({
         summary: parsed.summary ?? "",
+        report_title: parsed.report_title ?? "",
         priorities: parsed.priorities ?? [],
+        action_items: parsed.action_items ?? [],
+        category_strategies: parsed.category_strategies ?? {},
         metric_tips: parsed.metric_tips ?? {},
       });
     }
@@ -32,9 +35,9 @@ export async function POST(req: Request) {
         deltaMetrics: Record<string, number[]>;
       };
       const messages = buildComparisonFeedbackPrompt(jobIds, scores, labels, deltaMetrics);
-      const raw = await callGLM(messages, 0.7, 600);
+      const raw = await callGLM(messages, 0.7, 800);
 
-      const jsonStr = raw.replace(/^```json?\s*/, "").replace(/\s*```$/, "").trim();
+      const jsonStr = raw.replace(/^```json?\s*\n?/, "").replace(/\n?\s*```$/, "").trim();
       const parsed = JSON.parse(jsonStr);
 
       return NextResponse.json({

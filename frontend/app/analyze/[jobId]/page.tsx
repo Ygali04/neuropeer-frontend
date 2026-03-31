@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -40,6 +40,29 @@ import { ModalityBreakdown } from "@/components/ModalityBreakdown";
 import { MetricCard } from "@/components/MetricCard";
 import { ImprovementStrategies } from "@/components/ImprovementStrategies";
 
+function CollapsibleSection({ title, icon, children, defaultOpen = true, className = "" }: {
+  title: string; icon: ReactNode; children: ReactNode; defaultOpen?: boolean; className?: string;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className={className}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between mb-3 group"
+      >
+        <div className="flex items-center gap-2">
+          {icon}
+          <h2 className="text-sm font-medium text-white/50 uppercase tracking-wider">{title}</h2>
+        </div>
+        <ChevronDown className={`w-4 h-4 text-white/20 group-hover:text-white/40 transition-all duration-300 ${open ? "" : "-rotate-90"}`} />
+      </button>
+      <div className={`transition-all duration-300 overflow-hidden ${open ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0"}`}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function AnalyzePage() {
   const { jobId } = useParams<{ jobId: string }>();
 
@@ -56,7 +79,10 @@ export default function AnalyzePage() {
   // ── AI Feedback state ──────────────────────────────────────────────────
   const [aiFeedback, setAiFeedback] = useState<{
     summary: string;
+    report_title: string;
     priorities: string[];
+    action_items: string[];
+    category_strategies: Record<string, { score_context: string; strategies: string[] }>;
     metric_tips: Record<string, string>;
   } | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -316,7 +342,22 @@ export default function AnalyzePage() {
                     </div>
                   )}
                 </div>
-                <div className="mt-5 space-y-2.5">
+                {/* AI Action Items */}
+                {aiFeedback?.action_items && aiFeedback.action_items.length > 0 && (
+                  <div className="mt-4 p-3 rounded-lg bg-brand-500/[0.05] border border-brand-500/10">
+                    <p className="text-[10px] text-brand-400 font-medium uppercase tracking-wider mb-2">Quick Takeaways</p>
+                    <div className="space-y-1.5">
+                      {aiFeedback.action_items.map((item, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <div className="w-1 h-1 rounded-full bg-brand-400 mt-1.5 flex-shrink-0" />
+                          <p className="text-[11px] text-white/50 leading-relaxed">{item}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-4 space-y-2.5">
                   {result ? (
                     result.metrics
                       .sort((a, b) => Math.abs(b.score - 50) - Math.abs(a.score - 50))

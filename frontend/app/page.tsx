@@ -13,12 +13,12 @@ import { getRunHistory, clearRunHistory, type RunHistoryEntry } from "@/lib/run-
 import type { ContentType } from "@/lib/types";
 
 const FEATURES = [
-  { icon: Zap, label: "Hook Score", color: "text-brand-400" },
-  { icon: Activity, label: "Attention Curve", color: "text-teal-400" },
-  { icon: Sparkles, label: "Emotional Resonance", color: "text-amber-400" },
-  { icon: Brain, label: "Memory Encoding", color: "text-purple-400" },
-  { icon: BarChart3, label: "Modality Breakdown", color: "text-blue-400" },
-  { icon: GitCompare, label: "A/B Comparison", color: "text-emerald-400" },
+  { icon: Zap, label: "Hook Score", color: "text-brand-400", desc: "Measures NAcc approach vs. AIns avoidance in first 3s — predicts thumb-stop rate.", cite: "Tong et al. (2020) PNAS" },
+  { icon: Activity, label: "Attention Curve", color: "text-teal-400", desc: "Tracks dorsal attention network activation over time — maps to viewer retention.", cite: "Hasson et al. (2004) Science" },
+  { icon: Sparkles, label: "Emotional Resonance", color: "text-amber-400", desc: "Limbic and amygdala activation intensity — drives sharing and engagement.", cite: "Chan et al. (2024) JMR" },
+  { icon: Brain, label: "Memory Encoding", color: "text-purple-400", desc: "Hippocampal formation activity — predicts brand recall and message retention.", cite: "Falk et al. (2012) Psych. Science" },
+  { icon: BarChart3, label: "Modality Breakdown", color: "text-blue-400", desc: "Ablation analysis: visual vs. audio vs. text contribution to neural engagement.", cite: "d'Ascoli et al. (2026) Meta FAIR" },
+  { icon: GitCompare, label: "A/B Comparison", color: "text-emerald-400", desc: "Side-by-side neural comparison of content variants with winner recommendation.", cite: "Genevsky et al. (2025) PNAS Nexus" },
 ];
 
 const STATS = [
@@ -86,6 +86,7 @@ export default function HomePage() {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            <Link href="/methodology" className="text-sm text-white/40 hover:text-white/70 transition-colors">Methodology</Link>
             <Link href="/compare" className="text-sm text-white/40 hover:text-white/70 transition-colors">A/B Compare</Link>
             <Badge variant="default">
               <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
@@ -181,12 +182,25 @@ export default function HomePage() {
           </p>
         </div>
 
-        {/* ── Feature Pills ───────────────────────────────────────────────── */}
+        {/* ── Feature Pills with hover modals ─────────────────────────────── */}
         <div className="flex flex-wrap justify-center gap-3 mt-12 animate-fade-up delay-400">
-          {FEATURES.map(({ icon: Icon, label, color }) => (
-            <div key={label} className="glass-card glass-card-hover !rounded-full flex items-center gap-2 px-4 py-2 cursor-default">
-              <Icon className={`w-3.5 h-3.5 ${color}`} />
-              <span className="text-xs text-white/50 font-medium">{label}</span>
+          {FEATURES.map(({ icon: Icon, label, color, desc, cite }) => (
+            <div key={label} className="relative group">
+              <div className="glass-card glass-card-hover !rounded-full flex items-center gap-2 px-4 py-2 cursor-default">
+                <Icon className={`w-3.5 h-3.5 ${color}`} />
+                <span className="text-xs text-white/50 font-medium">{label}</span>
+              </div>
+              {/* Hover modal */}
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto transition-all duration-200 z-50">
+                <div className="glass-card !bg-[#15131a]/95 backdrop-blur-xl p-4 rounded-xl shadow-2xl shadow-black/40 border border-white/[0.08]">
+                  <p className="text-xs text-white/60 leading-relaxed">{desc}</p>
+                  <p className="text-[10px] text-white/25 mt-2 italic">{cite}</p>
+                  <Link href="/methodology" className="inline-flex items-center gap-1 text-[10px] text-brand-400 hover:text-brand-300 mt-2 transition-colors">
+                    Learn more <ArrowRight className="w-2.5 h-2.5" />
+                  </Link>
+                </div>
+                <div className="w-2 h-2 bg-[#15131a] border-r border-b border-white/[0.08] rotate-45 mx-auto -mt-1" />
+              </div>
             </div>
           ))}
         </div>

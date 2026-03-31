@@ -1,11 +1,21 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// All app pages require authentication
-const protectedPaths = ["/analyze", "/compare"];
+const protectedPaths = ["/analyze"];
+// Public report pages — accessible without sign-in
+const publicPaths = [
+  "/analyze/demo-instagram-reel",
+  "/analyze/demo-youtube-preroll",
+  "/analyze/b5c2b795-3db7-4454-af30-48e7c237d375",
+];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Public paths bypass auth
+  if (publicPaths.some((p) => pathname.startsWith(p))) {
+    return NextResponse.next();
+  }
 
   const isProtected = protectedPaths.some((p) => pathname.startsWith(p));
 
