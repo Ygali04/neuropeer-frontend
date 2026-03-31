@@ -59,16 +59,16 @@ export function CampaignCard({ campaign, onRename }: Props) {
         </div>
 
         <div className="text-right flex-shrink-0 ml-4">
-          <div className="text-2xl font-bold tabular-nums" style={{ color: scoreColor }}>{campaign.latest_score}</div>
+          <div className="text-2xl font-bold tabular-nums" style={{ color: scoreColor }}>{Number(campaign.latest_score).toFixed(1)}</div>
           {campaign.delta !== 0 && (
-            <div className={`text-xs font-bold tabular-nums ${deltaColor}`}>{deltaSign}{campaign.delta}</div>
+            <div className={`text-xs font-bold tabular-nums ${deltaColor}`}>{deltaSign}{Number(campaign.delta).toFixed(1)}</div>
           )}
         </div>
       </div>
 
       {campaign.media_count > 1 && (
         <div className="flex items-center gap-2 mb-3">
-          <span className="text-[10px] text-white/30 tabular-nums">{campaign.first_score}</span>
+          <span className="text-[10px] text-white/30 tabular-nums">{Number(campaign.first_score).toFixed(1)}</span>
           <div className="flex-1 h-1 bg-white/[0.04] rounded-full overflow-hidden relative">
             <div
               className="h-full rounded-full"
@@ -78,7 +78,7 @@ export function CampaignCard({ campaign, onRename }: Props) {
               }}
             />
           </div>
-          <span className="text-[10px] font-medium tabular-nums" style={{ color: scoreColor }}>{campaign.latest_score}</span>
+          <span className="text-[10px] font-medium tabular-nums" style={{ color: scoreColor }}>{Number(campaign.latest_score).toFixed(1)}</span>
         </div>
       )}
 

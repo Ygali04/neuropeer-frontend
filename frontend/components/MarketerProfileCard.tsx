@@ -15,13 +15,13 @@ export function MarketerProfileCard({ profile, campaigns = [] }: Props) {
   const totalVideos = campaigns.reduce((sum, c) => sum + c.media_count, 0);
   const bestScore = campaigns.length > 0 ? Math.max(...campaigns.map(c => c.latest_score)) : 0;
   const totalCampaigns = campaigns.length;
-  const avgDelta = campaigns.length > 0 ? Math.round(campaigns.reduce((sum, c) => sum + c.delta, 0) / campaigns.length) : 0;
+  const avgDelta = campaigns.length > 0 ? campaigns.reduce((sum, c) => sum + c.delta, 0) / campaigns.length : 0;
 
   const stats = [
     { label: "Campaigns", value: totalCampaigns, icon: Target, color: "text-brand-400" },
     { label: "Videos Analyzed", value: totalVideos, icon: BarChart3, color: "text-teal-400" },
-    { label: "Best Score", value: bestScore, icon: Zap, color: "text-emerald-400" },
-    { label: "Avg Improvement", value: `${avgDelta >= 0 ? "+" : ""}${avgDelta}`, icon: TrendingUp, color: avgDelta > 0 ? "text-emerald-400" : avgDelta < 0 ? "text-red-400" : "text-white/40" },
+    { label: "Best Score", value: bestScore.toFixed(1), icon: Zap, color: "text-emerald-400" },
+    { label: "Avg Improvement", value: `${avgDelta >= 0 ? "+" : ""}${avgDelta.toFixed(1)}`, icon: TrendingUp, color: avgDelta > 0 ? "text-emerald-400" : avgDelta < 0 ? "text-red-400" : "text-white/40" },
   ];
 
   return (
@@ -37,7 +37,7 @@ export function MarketerProfileCard({ profile, campaigns = [] }: Props) {
           )}
         </div>
         <div className="text-right">
-          <div className={`text-4xl font-bold tabular-nums ${scoreColor}`}>{Math.round(profile.overall_score)}</div>
+          <div className={`text-4xl font-bold tabular-nums ${scoreColor}`}>{profile.overall_score.toFixed(1)}</div>
           <div className="text-[10px] text-white/30 uppercase tracking-wider">Overall Score</div>
         </div>
       </div>

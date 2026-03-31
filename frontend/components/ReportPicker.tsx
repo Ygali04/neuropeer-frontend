@@ -67,7 +67,7 @@ export function ReportPicker({ selectedIds, onSelect }: Props) {
             >
               {/* Score */}
               <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${scoreColor}15` }}>
-                <span className="text-xs font-bold tabular-nums" style={{ color: scoreColor }}>{Math.round(entry.score)}</span>
+                <span className="text-xs font-bold tabular-nums" style={{ color: scoreColor }}>{entry.score.toFixed(1)}</span>
               </div>
 
               {/* Info */}

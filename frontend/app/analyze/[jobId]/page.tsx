@@ -356,8 +356,8 @@ export default function AnalyzePage() {
                 <div className="glass-card !rounded-xl px-4 py-3 mb-6 flex items-center justify-between animate-fade-up">
                   <div className="flex items-center gap-3">
                     <RotateCcw className="w-4 h-4 text-brand-400" />
-                    <span className="text-sm text-white/50">vs previous run: <span className="text-white/70 font-medium">{parentRun.neural_score}</span> → <span className="text-white/70 font-medium">{Math.round(result.neural_score.total)}</span></span>
-                    <span className={`text-sm font-bold tabular-nums ${color}`}>{sign}{Math.round(delta)}</span>
+                    <span className="text-sm text-white/50">vs previous run: <span className="text-white/70 font-medium">{Number(parentRun.neural_score).toFixed(1)}</span> → <span className="text-white/70 font-medium">{result.neural_score.total.toFixed(1)}</span></span>
+                    <span className={`text-sm font-bold tabular-nums ${color}`}>{sign}{delta.toFixed(1)}</span>
                   </div>
                   <Link href={`/analyze/${result.parent_job_id}`} className="text-xs text-brand-400 hover:text-brand-300 transition-colors">View previous →</Link>
                 </div>
@@ -659,8 +659,8 @@ export default function AnalyzePage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold tabular-nums" style={{ color: run.neural_score >= 75 ? "var(--color-score-green)" : run.neural_score >= 50 ? "var(--color-score-amber)" : "var(--color-score-red)" }}>{run.neural_score}</span>
-                          {prev && delta !== 0 && (<span className={`text-[10px] font-bold tabular-nums ${delta > 0 ? "text-emerald-400" : "text-red-400"}`}>{sign}{Math.round(delta)}</span>)}
+                          <span className="text-sm font-bold tabular-nums" style={{ color: run.neural_score >= 75 ? "var(--color-score-green)" : run.neural_score >= 50 ? "var(--color-score-amber)" : "var(--color-score-red)" }}>{Number(run.neural_score).toFixed(1)}</span>
+                          {prev && delta !== 0 && (<span className={`text-[10px] font-bold tabular-nums ${delta > 0 ? "text-emerald-400" : "text-red-400"}`}>{sign}{delta.toFixed(1)}</span>)}
                         </div>
                       </Link>
                     );

@@ -97,7 +97,7 @@ export function NeuralScoreGauge({ breakdown, size = "lg" }: Props) {
             )}
             style={{ color }}
           >
-            {Math.round(total)}
+            {total.toFixed(1)}
           </span>
           <span className="text-white/20 text-xs mt-0.5">/ 100</span>
           <span
@@ -129,7 +129,7 @@ export function NeuralScoreGauge({ breakdown, size = "lg" }: Props) {
                   )}
                 </span>
                 <span className="text-white/60 font-medium tabular-nums">
-                  {Math.round(d.value)}
+                  {d.value.toFixed(1)}
                 </span>
               </div>
               <div className="h-1 bg-white/[0.04] rounded-full overflow-hidden">

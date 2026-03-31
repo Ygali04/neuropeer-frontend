@@ -56,7 +56,7 @@ export function MetricCard({ metric, expanded, onToggle }: Props) {
             className="absolute inset-0 flex items-center justify-center text-xs font-bold tabular-nums"
             style={{ color }}
           >
-            {Math.round(metric.score)}
+            {metric.score.toFixed(1)}
           </span>
         </div>
 
