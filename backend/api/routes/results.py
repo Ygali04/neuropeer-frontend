@@ -20,19 +20,113 @@ async def _get_redis() -> aioredis.Redis:
 
 
 async def _get_result(job_id: str) -> dict:
+    """
+    Retrieve result from Redis (fast cache) first, then fall back to
+    PostgreSQL (permanent storage) if the cache has expired.
+    """
     r = await _get_redis()
     raw = await r.get(f"neuropeer:result:{job_id}")
-    if not raw:
-        # Check if job is still processing
-        status_raw = await r.get(f"neuropeer:job_status:{job_id}")
-        if status_raw:
-            status_data = json.loads(status_raw)
-            raise HTTPException(
-                status_code=202,
-                detail={"status": status_data.get("status", "processing"), "message": "Analysis in progress"},
-            )
-        raise HTTPException(status_code=404, detail="Job not found")
-    return json.loads(raw)
+    if raw:
+        return json.loads(raw)
+
+    # Redis miss — try PostgreSQL (permanent storage)
+    result = await _load_from_db(job_id)
+    if result:
+        # Re-populate Redis cache for future requests (7 day TTL)
+        await r.set(f"neuropeer:result:{job_id}", json.dumps(result), ex=60 * 60 * 24 * 7)
+        return result
+
+    # Check if job is still processing
+    status_raw = await r.get(f"neuropeer:job_status:{job_id}")
+    if status_raw:
+        status_data = json.loads(status_raw)
+        raise HTTPException(
+            status_code=202,
+            detail={"status": status_data.get("status", "processing"), "message": "Analysis in progress"},
+        )
+    raise HTTPException(status_code=404, detail="Job not found")
+
+
+async def _load_from_db(job_id: str) -> dict | None:
+    """Load a completed result from PostgreSQL and reconstruct the full result dict."""
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from backend.models.db import Job, Result
+
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    try:
+        async with Session() as session:
+            from uuid import UUID as _UUID
+            stmt = select(Job, Result).join(Result, Result.job_id == Job.id).where(Job.id == _UUID(job_id))
+            row = (await session.execute(stmt)).first()
+            if not row:
+                return None
+
+            job, res = row
+
+            # Reconstruct timeseries from S3 if available
+            attention_curve: list[float] = []
+            arousal_curve: list[float] = []
+            cog_curve: list[float] = []
+            if res.timeseries_s3_key:
+                try:
+                    import io
+                    import boto3
+                    import numpy as np
+                    s3 = boto3.client(
+                        "s3",
+                        endpoint_url=settings.s3_endpoint_url or None,
+                        aws_access_key_id=settings.aws_access_key_id or None,
+                        aws_secret_access_key=settings.aws_secret_access_key or None,
+                        region_name=settings.aws_region,
+                    )
+                    response = s3.get_object(Bucket=settings.s3_bucket, Key=res.timeseries_s3_key)
+                    data = np.load(io.BytesIO(response["Body"].read()))
+                    attention_curve = data["attention"].tolist()
+                    arousal_curve = data["arousal"].tolist()
+                    cog_curve = data["cognitive_load"].tolist()
+                except Exception:
+                    pass  # timeseries unavailable — return empty arrays
+
+            return {
+                "job_id": str(job.id),
+                "url": job.url,
+                "content_type": job.content_type,
+                "duration_seconds": res.duration_seconds,
+                "neural_score": {
+                    "total": res.neural_score_total,
+                    "hook_score": res.hook_score,
+                    "sustained_attention": res.sustained_attention,
+                    "emotional_resonance": res.emotional_resonance,
+                    "memory_encoding": res.memory_encoding,
+                    "aesthetic_quality": res.aesthetic_quality,
+                    "cognitive_accessibility": res.cognitive_accessibility,
+                },
+                "metrics": res.metrics_json or [],
+                "attention_curve": attention_curve,
+                "emotional_arousal_curve": arousal_curve,
+                "cognitive_load_curve": cog_curve,
+                "key_moments": res.key_moments_json or [],
+                "modality_breakdown": res.modality_json or [],
+                "vertex_data_s3_key": res.vertex_data_s3_key,
+                "timeseries_s3_key": res.timeseries_s3_key,
+                "overarching_summary": res.overarching_summary or res.ai_summary or "",
+                "ai_summary": res.ai_summary or "",
+                "ai_report_title": res.ai_report_title or "",
+                "ai_action_items": res.ai_action_items or [],
+                "ai_priorities": res.ai_priorities or [],
+                "ai_category_strategies": res.ai_category_strategies or {},
+                "ai_metric_tips": res.ai_metric_tips or {},
+                "parent_job_id": str(job.parent_job_id) if job.parent_job_id else None,
+                "content_group_id": str(job.content_group_id) if job.content_group_id else None,
+            }
+    except Exception:
+        return None
+    finally:
+        await engine.dispose()
 
 
 @router.get("/results/{job_id}", response_model=AnalysisResult)
