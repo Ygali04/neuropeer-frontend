@@ -301,8 +301,11 @@ export HF_TOKEN="{settings.hf_token}"
 echo "=== NeuroPeer TRIBE v2 Inference ==="
 echo "Installing dependencies..."
 
+# Install system deps first (python3-venv missing on DataCrunch images)
+apt-get update -qq && apt-get install -y -qq python3-venv python3-pip ffmpeg > /dev/null 2>&1
+
 # Install tribev2 with optimized dependency resolution
-python3 -m venv /tmp/venv --system-site-packages
+python3 -m venv /tmp/venv
 source /tmp/venv/bin/activate
 pip install --upgrade pip -q
 
