@@ -64,7 +64,9 @@ export function AttentionCurve({
   const containerRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [isHovering, setIsHovering] = useState(false);
-  const padRef = useRef({ top: 16, right: 16, bottom: 32, left: 40 });
+  const padRef = useRef({ top: 16, right: 12, bottom: 28, left: 32 });
+  // Shared canvas dimensions so static + overlay stay aligned
+  const dimsRef = useRef({ w: 0, h: 0, dpr: 1 });
 
   // Draw static chart
   useEffect(() => {
@@ -75,10 +77,15 @@ export function AttentionCurve({
 
     const dpr = window.devicePixelRatio || 1;
     const displayWidth = canvas.clientWidth;
-    const displayHeight = height;
+    const displayHeight = Math.max(100, canvas.clientHeight || height);
     canvas.width = displayWidth * dpr;
     canvas.height = displayHeight * dpr;
     ctx.scale(dpr, dpr);
+    // Store for overlay alignment
+    dimsRef.current = { w: displayWidth, h: displayHeight, dpr };
+    // Also size the overlay canvas identically
+    const oc = overlayRef.current;
+    if (oc) { oc.width = displayWidth * dpr; oc.height = displayHeight * dpr; }
 
     const w = displayWidth;
     const h = displayHeight;
@@ -174,15 +181,12 @@ export function AttentionCurve({
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
 
-      const dpr = window.devicePixelRatio || 1;
-      const displayWidth = canvas.clientWidth;
-      const displayHeight = height;
-      canvas.width = displayWidth * dpr;
-      canvas.height = displayHeight * dpr;
+      // Reuse dims from static canvas to stay pixel-aligned
+      const { w, h, dpr } = dimsRef.current;
+      if (w === 0) return;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
       ctx.scale(dpr, dpr);
-
-      const w = displayWidth;
-      const h = displayHeight;
       const pad = padRef.current;
       const plotW = w - pad.left - pad.right;
       const plotH = h - pad.top - pad.bottom;
@@ -330,12 +334,12 @@ export function AttentionCurve({
 
   return (
     <div className="w-full">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-brand-400" />
           <h3 className="text-sm font-medium text-white/60">Attention Curve</h3>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
           {/* Playback controls */}
           <div className="flex items-center gap-1">
             {isPlaying ? (
@@ -365,7 +369,7 @@ export function AttentionCurve({
           </div>
 
           {/* Legend */}
-          <div className="flex items-center gap-4 text-xs text-white/30">
+          <div className="hidden sm:flex items-center gap-4 text-xs text-white/30">
             <span className="flex items-center gap-1.5">
               <span className="inline-block w-3 h-0.5 rounded-full bg-brand-500" /> Attention
             </span>
@@ -434,13 +438,13 @@ export function AttentionCurve({
         )}
       </div>
 
-      <div className="flex items-center justify-between mt-3">
-        <div className="flex gap-5 text-xs text-white/25">
-          <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-sm bg-emerald-400/50" />High engagement</span>
-          <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-sm bg-amber-400/50" />Declining</span>
-          <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-sm bg-red-400/50" />Drop-off risk</span>
+      <div className="flex flex-wrap items-center justify-between gap-2 mt-2 sm:mt-3">
+        <div className="flex flex-wrap gap-3 sm:gap-5 text-[10px] sm:text-xs text-white/25">
+          <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-sm bg-emerald-400/50" />High</span>
+          <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-sm bg-amber-400/50" />Mid</span>
+          <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-sm bg-red-400/50" />Drop-off</span>
         </div>
-        <span className="text-[10px] text-white/15">
+        <span className="hidden sm:inline text-[10px] text-white/15">
           {isPlaying ? "Playing…" : "Click to scrub · Hover for details · ▶ for timelapse"}
         </span>
       </div>

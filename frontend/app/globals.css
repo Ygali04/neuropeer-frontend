@@ -102,6 +102,18 @@ body {
   pointer-events: none;
 }
 
+/* ─── Tooltip Card ─────────────────────────────────────────────────────────── */
+
+.tooltip-card {
+  background: #15131a;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06);
+}
+
+html.light .tooltip-card {
+  background: #ffffff;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.06);
+}
+
 /* ─── Glow Effects ──────────────────────────────────────────────────────────── */
 
 .glow-brand {

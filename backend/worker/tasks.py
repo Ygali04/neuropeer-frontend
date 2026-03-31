@@ -214,6 +214,27 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
         neural_score = compute_neural_score(metrics, content_type_enum)
         key_moments = detect_key_moments(attn_curve, arousal_curve, cog_curve, predictions[Modality.FULL])
 
+        # ── Stage 5: AI Feedback generation ───────────────────────────────
+        _publish_progress(job_id, "scoring", 0.88, "Generating AI improvement strategies…")
+
+        from backend.pipeline.ai_feedback import generate_ai_feedback
+
+        _ai_input = {
+            "content_type": content_type,
+            "duration_seconds": media.duration_seconds,
+            "neural_score": neural_score.model_dump(),
+            "metrics": [m.model_dump() for m in metrics],
+            "key_moments": [km.model_dump() for km in key_moments],
+        }
+
+        parent_result_data = None
+        if parent_job_id:
+            raw_parent = _get_redis().get(f"neuropeer:result:{parent_job_id}")
+            if raw_parent:
+                parent_result_data = json.loads(raw_parent)
+
+        ai_feedback = generate_ai_feedback(_ai_input, parent_result_data)
+
         # ── Upload ALL artifacts to S3 ─────────────────────────────────────
         _publish_progress(job_id, "scoring", 0.90, "Uploading artifacts to S3…")
 
@@ -258,13 +279,22 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
             "modality_breakdown": [mb.model_dump() for mb in modality_breakdown],
             "vertex_data_s3_key": vertex_key,
             "timeseries_s3_key": timeseries_key,
+            "overarching_summary": ai_feedback.get("summary", ""),
+            "ai_summary": ai_feedback.get("summary", ""),
+            "ai_report_title": ai_feedback.get("report_title", ""),
+            "ai_action_items": ai_feedback.get("action_items", []),
+            "ai_priorities": ai_feedback.get("priorities", []),
+            "ai_category_strategies": ai_feedback.get("category_strategies", {}),
+            "ai_metric_tips": ai_feedback.get("metric_tips", {}),
+            "parent_job_id": parent_job_id,
+            "content_group_id": content_group_id,
         }
 
         # Redis cache (7 day TTL)
         _get_redis().set(f"neuropeer:result:{job_id}", json.dumps(result), ex=60 * 60 * 24 * 7)
 
         # Persist to PostgreSQL (permanent)
-        _persist_to_db(job_id, url, content_type, media.duration_seconds, neural_score, metrics_data, key_moments, modality_breakdown, vertex_key, timeseries_key)
+        _persist_to_db(job_id, url, content_type, media.duration_seconds, neural_score, metrics_data, key_moments, modality_breakdown, vertex_key, timeseries_key, ai_feedback=ai_feedback, parent_job_id=parent_job_id, content_group_id=content_group_id)
 
         _update_job_status(job_id, "complete")
         _publish_progress(job_id, "complete", 1.0, "Analysis complete!")
