@@ -126,9 +126,49 @@ export default function HomePage() {
           <UrlInputCard onSubmit={handleSubmit} loading={loading} showCompareOption onCompare={handleCompare} />
         </div>
 
-        {/* ── Powered by TRIBE v2 ──────────────────────────────────────── */}
-        <div className="flex flex-wrap justify-center gap-3 mt-10 animate-fade-up delay-400">
-          <span className="text-xs text-white/25">Powered by Meta TRIBE v2 — real fMRI-predicted cortical activations</span>
+        {/* ── Featured Real Report ─────────────────────────────────────── */}
+        <div className="w-full max-w-2xl mt-12 animate-fade-up delay-400">
+          <Link
+            href="/analyze/b5c2b795-3db7-4454-af30-48e7c237d375"
+            className="glass-card glass-card-hover p-5 flex items-center gap-5 group relative overflow-hidden"
+          >
+            {/* Glow accent */}
+            <div className="absolute -top-10 -right-10 w-32 h-32 rounded-full bg-brand-500/10 blur-2xl group-hover:bg-brand-500/20 transition-all" />
+
+            {/* Score circle */}
+            <div className="relative flex-shrink-0">
+              <div className="w-16 h-16 rounded-full flex items-center justify-center bg-gradient-to-br from-amber-500/20 to-brand-500/20 border border-amber-500/30">
+                <span className="font-[family-name:var(--font-display)] text-2xl font-bold text-amber-400">40.7</span>
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center">
+                <span className="text-[8px] text-green-400 font-bold">REAL</span>
+              </div>
+            </div>
+
+            {/* Info */}
+            <div className="flex-1 min-w-0 relative">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-brand-500/10 border border-brand-500/20 text-brand-400">
+                  TRIBE v2 Neural Analysis
+                </span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 border border-amber-500/20 text-amber-400">
+                  A100 GPU
+                </span>
+              </div>
+              <p className="text-sm text-white/70 font-medium truncate">Instagram Reel — NeuroPeer Demo</p>
+              <p className="text-[11px] text-white/30 mt-0.5">
+                64.9s · 20,484 vertices · 65 timesteps · Hook: 49.6 · Attention: 68.8 · Hold Rate: 87.7
+              </p>
+            </div>
+
+            {/* Arrow */}
+            <div className="flex-shrink-0 text-white/20 group-hover:text-brand-400 transition-colors">
+              <ExternalLink className="w-4 h-4" />
+            </div>
+          </Link>
+          <p className="text-center text-[10px] text-white/20 mt-2">
+            Real fMRI-predicted cortical activations from Meta TRIBE v2 on DataCrunch A100
+          </p>
         </div>
 
         {/* ── Feature Pills ───────────────────────────────────────────────── */}

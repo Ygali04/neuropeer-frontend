@@ -257,181 +257,266 @@ export default function AnalyzePage() {
           </div>
         )}
 
-        {/* Loading existing report (simple spinner, no pipeline steps) */}
-        {isLoadingReport && (
-          <div className="flex flex-col items-center justify-center py-32 gap-4">
-            <Loader2 className="w-8 h-8 text-brand-400 animate-spin" />
-            <p className="text-sm text-white/40">Loading report...</p>
-          </div>
-        )}
-
-        {/* Active computation in progress (full pipeline tracker) */}
-        {isActiveComputation && !result && (
-          <div className="flex flex-col items-center justify-center py-24 gap-8">
-            <div className="w-16 h-16 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center mb-4 animate-float">
-              <Brain className="w-8 h-8 text-brand-400" />
+        {/* ── Floating Progress Modal (over skeleton) ──────────────────── */}
+        {(isActiveComputation || isLoadingReport) && (
+          <div className="fixed inset-x-0 top-20 z-50 flex justify-center pointer-events-none">
+            <div className="pointer-events-auto glass-card !bg-[#12101a]/95 backdrop-blur-xl p-5 rounded-2xl shadow-2xl shadow-black/40 border border-white/[0.08] max-w-md w-full mx-4 animate-fade-up">
+              {isLoadingReport ? (
+                <div className="flex items-center gap-3">
+                  <Loader2 className="w-5 h-5 text-brand-400 animate-spin flex-shrink-0" />
+                  <p className="text-sm text-white/60">Loading report...</p>
+                </div>
+              ) : (
+                <ProgressTracker event={progress} />
+              )}
             </div>
-            <ProgressTracker event={progress} />
           </div>
         )}
 
-        {/* ── Results Dashboard ───────────────────────────────────────────── */}
-        {result && (
+        {/* ── Results Dashboard (shows skeleton when loading) ─────────────── */}
+        {(result || isActiveComputation || isLoadingReport) && (
           <div className="flex flex-col gap-6">
             {/* Row 1: Neural Score + Video info */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-up">
+            <div className={`grid grid-cols-1 lg:grid-cols-3 gap-6 transition-all duration-700 ${result ? "animate-fade-up" : "opacity-60"}`}>
               <Card className="lg:col-span-1">
                 <CardTitle>Neural Score</CardTitle>
-                <NeuralScoreGauge breakdown={result.neural_score} />
+                {result ? (
+                  <NeuralScoreGauge breakdown={result.neural_score} />
+                ) : (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="w-28 h-28 rounded-full border-4 border-white/[0.06] animate-pulse flex items-center justify-center">
+                      <div className="w-16 h-4 bg-white/[0.06] rounded animate-pulse" />
+                    </div>
+                  </div>
+                )}
               </Card>
 
               <Card className="lg:col-span-2 flex flex-col justify-between">
                 <div>
                   <CardTitle>Analyzed Content</CardTitle>
-                  <div className="flex items-center gap-2 mt-2 mb-1">
-                    <p className="text-white/80 text-sm font-medium truncate">{result.url}</p>
-                    <ExternalLink className="w-3 h-3 text-white/20 flex-shrink-0" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="default">{result.content_type.replace("_", " ")}</Badge>
-                    <Badge variant="default">{result.duration_seconds.toFixed(0)}s</Badge>
-                    <Badge variant="brand">{result.metrics.length} metrics</Badge>
-                  </div>
+                  {result ? (
+                    <>
+                      <div className="flex items-center gap-2 mt-2 mb-1">
+                        <p className="text-white/80 text-sm font-medium truncate">{result.url}</p>
+                        <ExternalLink className="w-3 h-3 text-white/20 flex-shrink-0" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="default">{result.content_type.replace("_", " ")}</Badge>
+                        <Badge variant="default">{result.duration_seconds.toFixed(0)}s</Badge>
+                        <Badge variant="brand">{result.metrics.length} metrics</Badge>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="mt-2 space-y-2">
+                      <div className="w-3/4 h-4 bg-white/[0.06] rounded animate-pulse" />
+                      <div className="flex gap-2">
+                        <div className="w-20 h-5 bg-white/[0.04] rounded-full animate-pulse" />
+                        <div className="w-12 h-5 bg-white/[0.04] rounded-full animate-pulse" />
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="mt-5 space-y-2.5">
-                  {result.metrics
-                    .sort((a, b) => Math.abs(b.score - 50) - Math.abs(a.score - 50))
-                    .slice(0, 3)
-                    .map((m) => (
-                      <div key={m.name} className="flex items-center justify-between text-sm">
-                        <span className="text-white/40">{m.name}</span>
-                        <span className="font-semibold tabular-nums" style={{
-                          color: m.score >= 70 ? "var(--color-score-green)" : m.score >= 45 ? "var(--color-score-amber)" : "var(--color-score-red)",
-                        }}>{m.score.toFixed(0)}/100</span>
+                  {result ? (
+                    result.metrics
+                      .sort((a, b) => Math.abs(b.score - 50) - Math.abs(a.score - 50))
+                      .slice(0, 3)
+                      .map((m) => (
+                        <div key={m.name} className="flex items-center justify-between text-sm">
+                          <span className="text-white/40">{m.name}</span>
+                          <span className="font-semibold tabular-nums" style={{
+                            color: m.score >= 70 ? "var(--color-score-green)" : m.score >= 45 ? "var(--color-score-amber)" : "var(--color-score-red)",
+                          }}>{m.score.toFixed(0)}/100</span>
+                        </div>
+                      ))
+                  ) : (
+                    [1, 2, 3].map((i) => (
+                      <div key={i} className="flex items-center justify-between">
+                        <div className="w-24 h-3 bg-white/[0.04] rounded animate-pulse" />
+                        <div className="w-12 h-3 bg-white/[0.04] rounded animate-pulse" />
                       </div>
-                    ))}
+                    ))
+                  )}
                 </div>
               </Card>
             </div>
 
             {/* Row 2: Attention Curve */}
-            <Card className="animate-fade-up delay-100">
-              <AttentionCurve
-                attentionCurve={result.attention_curve}
-                emotionCurve={result.emotional_arousal_curve}
-                keyMoments={result.key_moments}
-                onScrub={handleSeek}
-                height={180}
-                isPlaying={isPlaying}
-                playbackTime={playbackTime}
-                playbackSpeed={playbackSpeed}
-                onPlay={handlePlay}
-                onPause={handlePause}
-                onReset={handleReset}
-                onCycleSpeed={handleCycleSpeed}
-              />
+            <Card className={`transition-all duration-700 ${result ? "animate-fade-up delay-100" : "opacity-50"}`}>
+              {result ? (
+                <AttentionCurve
+                  attentionCurve={result.attention_curve}
+                  emotionCurve={result.emotional_arousal_curve}
+                  keyMoments={result.key_moments}
+                  onScrub={handleSeek}
+                  height={180}
+                  isPlaying={isPlaying}
+                  playbackTime={playbackTime}
+                  playbackSpeed={playbackSpeed}
+                  onPlay={handlePlay}
+                  onPause={handlePause}
+                  onReset={handleReset}
+                  onCycleSpeed={handleCycleSpeed}
+                />
+              ) : (
+                <div>
+                  <CardTitle>Attention Curve</CardTitle>
+                  <div className="h-[180px] flex items-end gap-[2px] px-4 pb-4 pt-8">
+                    {Array.from({ length: 60 }).map((_, i) => (
+                      <div key={i} className="flex-1 bg-white/[0.04] rounded-t animate-pulse" style={{ height: `${20 + Math.sin(i * 0.3) * 30 + 30}%`, animationDelay: `${i * 30}ms` }} />
+                    ))}
+                  </div>
+                </div>
+              )}
             </Card>
 
             {/* Row 3: Brain Map + Key Moments + Video */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-up delay-200">
+            <div className={`grid grid-cols-1 lg:grid-cols-2 gap-6 transition-all duration-700 ${result ? "animate-fade-up delay-200" : "opacity-50"}`}>
               <Card>
                 <BrainMap3D jobId={jobId} currentSecond={currentSecond} isPlaying={isPlaying} playbackTime={playbackTime} />
               </Card>
               <Card>
-                <KeyMomentsTimeline
-                  moments={result.key_moments}
-                  duration={result.duration_seconds}
-                  currentSecond={currentSecond}
-                  playbackTime={playbackTime}
-                  isPlaying={isPlaying}
-                  videoUrl={result.url}
-                  playbackSpeed={playbackSpeed}
-                  onSelect={handleSeek}
-                  onPlay={handlePlay}
-                  onPause={handlePause}
-                  onCycleSpeed={handleCycleSpeed}
-                />
+                {result ? (
+                  <KeyMomentsTimeline
+                    moments={result.key_moments}
+                    duration={result.duration_seconds}
+                    currentSecond={currentSecond}
+                    playbackTime={playbackTime}
+                    isPlaying={isPlaying}
+                    videoUrl={result.url}
+                    playbackSpeed={playbackSpeed}
+                    onSelect={handleSeek}
+                    onPlay={handlePlay}
+                    onPause={handlePause}
+                    onCycleSpeed={handleCycleSpeed}
+                  />
+                ) : (
+                  <div>
+                    <CardTitle>Key Moments</CardTitle>
+                    <div className="space-y-3 p-4">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-white/[0.04] animate-pulse" />
+                          <div className="flex-1 space-y-1">
+                            <div className="w-32 h-3 bg-white/[0.04] rounded animate-pulse" />
+                            <div className="w-20 h-2 bg-white/[0.03] rounded animate-pulse" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </Card>
             </div>
 
-            {/* Row 4: Emotional + Modality */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-up delay-300">
-              <Card>
-                <EmotionalPanel arousaleCurve={result.emotional_arousal_curve} cognitiveCurve={result.cognitive_load_curve} currentSecond={currentSecond} height={120} />
-              </Card>
-              <Card>
-                <ModalityBreakdown breakdown={result.modality_breakdown} height={120} />
-              </Card>
-            </div>
+            {/* Row 4: Emotional + Modality (only when result is loaded) */}
+            {result && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-up delay-300">
+                <Card>
+                  <EmotionalPanel arousaleCurve={result.emotional_arousal_curve} cognitiveCurve={result.cognitive_load_curve} currentSecond={currentSecond} height={120} />
+                </Card>
+                <Card>
+                  <ModalityBreakdown breakdown={result.modality_breakdown} height={120} />
+                </Card>
+              </div>
+            )}
+            {!result && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 opacity-40">
+                <Card><CardTitle>Emotional Panel</CardTitle><div className="h-[120px] animate-pulse bg-white/[0.02] rounded-lg m-4" /></Card>
+                <Card><CardTitle>Modality Breakdown</CardTitle><div className="h-[120px] animate-pulse bg-white/[0.02] rounded-lg m-4" /></Card>
+              </div>
+            )}
 
             {/* Row 5: All metric cards */}
-            <div className="animate-fade-up delay-400">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4 text-brand-400" />
-                  <h2 className="text-sm font-medium text-white/50 uppercase tracking-wider">All Metrics</h2>
+            {result && (
+              <div className="animate-fade-up delay-400">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-brand-400" />
+                    <h2 className="text-sm font-medium text-white/50 uppercase tracking-wider">All Metrics</h2>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const next = !metricsExpandAll;
+                      setMetricsExpandAll(next);
+                      if (next) {
+                        const allRows = new Set(result.metrics.map((_, i) => Math.floor(i / 3)));
+                        setExpandedRows(allRows);
+                      } else {
+                        setExpandedRows(new Set());
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-white/40 hover:text-white/60 hover:bg-white/[0.04] transition-all"
+                  >
+                    {metricsExpandAll ? "Collapse all" : "Expand all"}
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${metricsExpandAll ? "rotate-180" : ""}`} />
+                  </button>
                 </div>
-                <button
-                  onClick={() => {
-                    const next = !metricsExpandAll;
-                    setMetricsExpandAll(next);
-                    if (next) {
-                      const allRows = new Set(result.metrics.map((_, i) => Math.floor(i / 3)));
-                      setExpandedRows(allRows);
-                    } else {
-                      setExpandedRows(new Set());
-                    }
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-white/40 hover:text-white/60 hover:bg-white/[0.04] transition-all"
-                >
-                  {metricsExpandAll ? "Collapse all" : "Expand all"}
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${metricsExpandAll ? "rotate-180" : ""}`} />
-                </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {result.metrics.map((m, i) => {
+                    const row = Math.floor(i / 3);
+                    return (
+                      <MetricCard
+                        key={m.name}
+                        metric={m}
+                        expanded={expandedRows.has(row)}
+                        onToggle={() => {
+                          setExpandedRows((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(row)) next.delete(row);
+                            else next.add(row);
+                            return next;
+                          });
+                        }}
+                      />
+                    );
+                  })}
+                </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {result.metrics.map((m, i) => {
-                  const row = Math.floor(i / 3);
-                  return (
-                    <MetricCard
-                      key={m.name}
-                      metric={m}
-                      expanded={expandedRows.has(row)}
-                      onToggle={() => {
-                        setExpandedRows((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(row)) next.delete(row);
-                          else next.add(row);
-                          return next;
-                        });
-                      }}
-                    />
-                  );
-                })}
+            )}
+            {!result && (
+              <div className="opacity-40">
+                <div className="flex items-center gap-2 mb-4">
+                  <BarChart3 className="w-4 h-4 text-white/20" />
+                  <h2 className="text-sm font-medium text-white/30 uppercase tracking-wider">All Metrics</h2>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {Array.from({ length: 9 }).map((_, i) => (
+                    <div key={i} className="glass-card p-4 animate-pulse">
+                      <div className="w-20 h-3 bg-white/[0.04] rounded mb-3" />
+                      <div className="w-12 h-6 bg-white/[0.04] rounded" />
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Row 6: Improvement Strategies */}
-            <div className="animate-fade-up delay-500">
-              <div className="flex items-center gap-2 mb-4">
-                <Lightbulb className="w-4 h-4 text-brand-400" />
-                <h2 className="text-sm font-medium text-white/50 uppercase tracking-wider">Improvement Strategies</h2>
+            {result && (
+              <div className="animate-fade-up delay-500">
+                <div className="flex items-center gap-2 mb-4">
+                  <Lightbulb className="w-4 h-4 text-brand-400" />
+                  <h2 className="text-sm font-medium text-white/50 uppercase tracking-wider">Improvement Strategies</h2>
+                </div>
+                <ImprovementStrategies
+                  metrics={result.metrics}
+                  overarchingSummary={aiFeedback?.summary ?? result.overarching_summary}
+                  aiPriorities={aiFeedback?.priorities}
+                  aiMetricTips={aiFeedback?.metric_tips}
+                  aiLoading={aiLoading}
+                />
               </div>
-              <ImprovementStrategies
-                metrics={result.metrics}
-                overarchingSummary={aiFeedback?.summary ?? result.overarching_summary}
-                aiPriorities={aiFeedback?.priorities}
-                aiMetricTips={aiFeedback?.metric_tips}
-                aiLoading={aiLoading}
-              />
-            </div>
+            )}
 
             {/* A/B link */}
-            <Card className="text-center !py-8 animate-fade-up delay-600">
-              <p className="text-white/35 text-sm mb-4">Compare this content against another variant</p>
-              <Link href={`/compare?jobs=${jobId}`}>
-                <Button variant="primary" size="md"><GitCompare className="w-4 h-4" /> Start A/B Comparison</Button>
-              </Link>
-            </Card>
+            {result && (
+              <Card className="text-center !py-8 animate-fade-up delay-600">
+                <p className="text-white/35 text-sm mb-4">Compare this content against another variant</p>
+                <Link href={`/compare?jobs=${jobId}`}>
+                  <Button variant="primary" size="md"><GitCompare className="w-4 h-4" /> Start A/B Comparison</Button>
+                </Link>
+              </Card>
+            )}
           </div>
         )}
       </main>
