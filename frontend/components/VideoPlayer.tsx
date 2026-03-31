@@ -294,7 +294,7 @@ function InstagramEmbed({
   return (
     <div className="rounded-xl overflow-hidden border border-white/[0.06] bg-black">
       <div className="relative w-full max-w-[320px] mx-auto aspect-[9/16]">
-        <div ref={containerRef} className="w-full h-full">
+        <div ref={containerRef} className="w-full h-full relative">
           {embedUrl ? (
             <iframe
               ref={iframeRef as React.RefObject<HTMLIFrameElement>}
@@ -310,7 +310,31 @@ function InstagramEmbed({
               Unable to embed Instagram video
             </div>
           )}
+          {/* Sync indicator overlay */}
+          {isPlaying && (
+            <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-full bg-black/60 backdrop-blur-sm">
+              <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              <span className="text-[9px] text-white/60 font-medium">Synced</span>
+            </div>
+          )}
         </div>
+        {/* Click overlay for play/pause sync */}
+        <div
+          className="absolute inset-0 cursor-pointer z-10"
+          style={{ pointerEvents: isPlaying ? "none" : "auto" }}
+          onClick={handleTogglePlay}
+        >
+          {!isPlaying && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+              <div className="w-14 h-14 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center hover:bg-white/20 transition-colors">
+                <Play className="w-6 h-6 text-white ml-1" />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="px-3 py-1 text-center">
+        <span className="text-[9px] text-white/20">Use controls below to sync brain visualization playback</span>
       </div>
       <Controls
         currentTime={currentTime}

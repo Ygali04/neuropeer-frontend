@@ -219,7 +219,9 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
           const a = prev.scores[cfg.activationKey] ?? 0;
           const b = curr.scores[cfg.activationKey] ?? 0;
           const interp = a + (b - a) * frac;
-          const norm = Math.max(0, Math.min(1, (interp + 3) / 6));
+          // Real TRIBE v2 values: mean≈0.004, std≈0.12, range≈[-0.6, 0.4]
+          // Scale to [0,1] using z-score-like normalization for visible contrast
+          const norm = Math.max(0, Math.min(1, (interp + 0.3) / 0.6));
           applyVertexColors(mesh, regionKey, norm);
         });
       }
@@ -289,7 +291,7 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
         if (!isPlaying) {
           regionMeshesRef.current.forEach((mesh, rk) => {
             const cfg = REGION_CONFIG[rk]; if (!cfg) return;
-            applyVertexColors(mesh, rk, Math.max(0, Math.min(1, ((scores[cfg.activationKey]??0)+3)/6)));
+            applyVertexColors(mesh, rk, Math.max(0, Math.min(1, ((scores[cfg.activationKey]??0)+0.3)/0.6)));
           });
         }
         const next = await fetchScores(currentSecond + 1);
@@ -379,7 +381,7 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
               <div className="w-2 h-2 rounded-full" style={{ backgroundColor: REGION_CONFIG[hoveredRegion]?.color }} />
               <span className="text-xs font-medium text-white/80">{REGION_CONFIG[hoveredRegion]?.label}</span>
               {regionScores[REGION_CONFIG[hoveredRegion]?.activationKey] !== undefined && (
-                <span className="text-xs text-white/40 tabular-nums">{Math.max(0, Math.min(100, ((regionScores[REGION_CONFIG[hoveredRegion]?.activationKey]+3)/6)*100)).toFixed(0)}%</span>
+                <span className="text-xs text-white/40 tabular-nums">{Math.max(0, Math.min(100, ((regionScores[REGION_CONFIG[hoveredRegion]?.activationKey]+0.3)/0.6)*100)).toFixed(0)}%</span>
               )}
             </div>
           </div>
@@ -423,7 +425,7 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
 
       {selectedRegion && (() => {
         const cfg = REGION_CONFIG[selectedRegion]; if (!cfg) return null;
-        const norm = Math.max(0, Math.min(100, (((regionScores[cfg.activationKey]??0)+3)/6)*100));
+        const norm = Math.max(0, Math.min(100, (((regionScores[cfg.activationKey]??0)+0.3)/0.6)*100));
         return (
           <div className="glass-card !p-4 animate-fade-up" style={{ borderColor:cfg.color+"20" }}>
             <div className="flex items-center gap-2 mb-2">
