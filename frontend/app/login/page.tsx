@@ -59,14 +59,6 @@ function LoginInner() {
             Continue with Google
           </button>
 
-          {/* Mock mode shortcut */}
-            <button
-              onClick={() => router.push(callbackUrl)}
-              className="w-full mt-3 px-4 py-3 rounded-xl border border-white/[0.08] bg-white/[0.03] text-white/60 text-sm hover:bg-white/[0.06] transition-colors"
-            >
-              Continue as Demo User
-            </button>
-          )}
 
           <p className="text-[10px] text-white/15 mt-6 leading-relaxed">
             By signing in, you agree to our Terms of Service.

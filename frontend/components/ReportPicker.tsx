@@ -26,18 +26,6 @@ export function ReportPicker({ selectedIds, onSelect }: Props) {
   useEffect(() => {
     const items: PickerEntry[] = [];
 
-    // Demo reports
-      if (demo) {
-        items.push({
-          jobId: id,
-          url: demo.url,
-          score: demo.neural_score.total,
-          type: demo.content_type.replace("_", " "),
-          label: "demo",
-        });
-      }
-    }
-
     // Run history
     const history = getRunHistory(session?.user?.email ?? undefined);
     for (const h of history) {
