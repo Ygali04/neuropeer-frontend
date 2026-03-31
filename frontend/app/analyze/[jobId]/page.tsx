@@ -385,6 +385,46 @@ export default function AnalyzePage() {
               </Card>
             </div>
 
+            {/* AI Insights Summary Banner */}
+            {result && (
+              <div className="animate-fade-up delay-50">
+                {aiLoading && !aiFeedback && (
+                  <div className="glass-card p-4 flex items-center gap-3 !border-brand-500/15">
+                    <Loader2 className="w-4 h-4 text-brand-400 animate-spin flex-shrink-0" />
+                    <div>
+                      <p className="text-xs text-brand-400 font-medium">Generating AI Insights...</p>
+                      <p className="text-[10px] text-white/30 mt-0.5">GLM-4.7 is analyzing your neural report (~20s)</p>
+                    </div>
+                  </div>
+                )}
+                {aiFeedback?.summary && (
+                  <div className="glass-card p-4 !border-brand-500/15">
+                    <div className="flex items-start gap-3">
+                      <div className="w-6 h-6 rounded-lg bg-brand-500/10 border border-brand-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <Sparkles className="w-3 h-3 text-brand-400" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-xs text-brand-400 font-medium mb-1">AI Analysis Summary</p>
+                        <p className="text-sm text-white/60 leading-relaxed">{aiFeedback.summary}</p>
+                        {aiFeedback.action_items && aiFeedback.action_items.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-1.5">
+                            {aiFeedback.action_items.map((item, i) => (
+                              <div key={i} className="flex items-start gap-2">
+                                <div className="w-4 h-4 rounded-full bg-brand-500/10 border border-brand-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                  <span className="text-[8px] text-brand-400 font-bold">{i + 1}</span>
+                                </div>
+                                <p className="text-xs text-white/50 leading-relaxed">{item}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Row 2: Attention Curve */}
             <Card className={`transition-all duration-700 ${result ? "animate-fade-up delay-100" : "opacity-50"}`}>
               {result ? (
@@ -475,14 +515,10 @@ export default function AnalyzePage() {
               </div>
             )}
 
-            {/* Row 5: All metric cards */}
+            {/* Row 5: All metric cards (collapsible) */}
             {result && (
-              <div className="animate-fade-up delay-400">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <BarChart3 className="w-4 h-4 text-brand-400" />
-                    <h2 className="text-sm font-medium text-white/50 uppercase tracking-wider">All Metrics</h2>
-                  </div>
+              <CollapsibleSection title="All Metrics" icon={<BarChart3 className="w-4 h-4 text-brand-400" />} className="animate-fade-up delay-400">
+                <div className="flex justify-end mb-3">
                   <button
                     onClick={() => {
                       const next = !metricsExpandAll;
@@ -520,7 +556,7 @@ export default function AnalyzePage() {
                     );
                   })}
                 </div>
-              </div>
+              </CollapsibleSection>
             )}
             {!result && (
               <div className="opacity-40">
@@ -539,13 +575,9 @@ export default function AnalyzePage() {
               </div>
             )}
 
-            {/* Row 6: Improvement Strategies */}
+            {/* Row 6: Improvement Strategies (collapsible) */}
             {result && (
-              <div className="animate-fade-up delay-500">
-                <div className="flex items-center gap-2 mb-4">
-                  <Lightbulb className="w-4 h-4 text-brand-400" />
-                  <h2 className="text-sm font-medium text-white/50 uppercase tracking-wider">Improvement Strategies</h2>
-                </div>
+              <CollapsibleSection title="Improvement Strategies" icon={<Lightbulb className="w-4 h-4 text-amber-400" />} className="animate-fade-up delay-500">
                 <ImprovementStrategies
                   metrics={result.metrics}
                   overarchingSummary={aiFeedback?.summary ?? result.overarching_summary}
@@ -553,7 +585,7 @@ export default function AnalyzePage() {
                   aiMetricTips={aiFeedback?.metric_tips}
                   aiLoading={aiLoading}
                 />
-              </div>
+              </CollapsibleSection>
             )}
 
             {/* A/B link */}

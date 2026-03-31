@@ -318,19 +318,44 @@ function InstagramEmbed({
             </div>
           )}
         </div>
-        {/* Click overlay for play/pause sync */}
+        {/* Click overlay — ALWAYS intercepts clicks for play/pause sync */}
         <div
           className="absolute inset-0 cursor-pointer z-10"
-          style={{ pointerEvents: isPlaying ? "none" : "auto" }}
-          onClick={handleTogglePlay}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            // Toggle NeuroPeer playback
+            handleTogglePlay();
+            // Simulate click on the Instagram iframe by briefly removing overlay
+            // This lets the Instagram player also start/stop
+            const overlay = e.currentTarget;
+            overlay.style.pointerEvents = "none";
+            setTimeout(() => {
+              // Click through to iframe
+              const iframe = iframeRef.current;
+              if (iframe) {
+                const rect = iframe.getBoundingClientRect();
+                const clickEvent = new MouseEvent("click", {
+                  clientX: rect.left + rect.width / 2,
+                  clientY: rect.top + rect.height / 2,
+                  bubbles: true,
+                });
+                iframe.dispatchEvent(clickEvent);
+              }
+              // Re-enable overlay
+              setTimeout(() => { overlay.style.pointerEvents = "auto"; }, 100);
+            }, 50);
+          }}
         >
-          {!isPlaying && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-              <div className="w-14 h-14 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center hover:bg-white/20 transition-colors">
+          <div className={`absolute inset-0 flex items-center justify-center transition-all duration-200 ${isPlaying ? "bg-transparent" : "bg-black/30"}`}>
+            <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all duration-200 ${isPlaying ? "bg-black/30 scale-75 opacity-0 hover:opacity-100 hover:scale-100" : "bg-white/10 backdrop-blur-sm hover:bg-white/20"}`}>
+              {isPlaying ? (
+                <Pause className="w-6 h-6 text-white" />
+              ) : (
                 <Play className="w-6 h-6 text-white ml-1" />
-              </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
       <div className="px-3 py-1 text-center">
