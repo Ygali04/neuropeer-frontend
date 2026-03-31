@@ -193,18 +193,50 @@ body {
 /* ═══════════════════════════════════════════════════════════════════════════════
    LIGHT MODE
 
-   The core trick: redefine --color-white to a dark color so ALL Tailwind
-   text-white/xx, border-white/xx, bg-white/xx classes automatically invert.
+   Strategy: Override ALL Tailwind color CSS variables so every utility class
+   automatically adapts. Bright colors → darker/richer for white background.
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 html.light {
+  /* ── Core ────────────────────────────────────────────────────────────────── */
   --background: #f8f7f4;
   --foreground: #1a1714;
   --muted: #7a7570;
   --muted-foreground: #9a9590;
 
-  /* THE KEY: redefine "white" so text-white/60 becomes text-dark/60 in light mode */
+  /* ── White → Dark (inverts all text-white/xx, border-white/xx, bg-white/xx) */
   --color-white: #1a1714;
+
+  /* ── Brand orange: bright → rich dark orange ─────────────────────────────── */
+  --color-brand-50: #fff7ed;
+  --color-brand-100: #ffedd5;
+  --color-brand-200: #fed7aa;
+  --color-brand-300: #c2410c;
+  --color-brand-400: #b83a08;
+  --color-brand-500: #9a3412;
+  --color-brand-600: #7c2d12;
+  --color-brand-700: #6c2710;
+
+  /* ── Teal: bright → deep teal ────────────────────────────────────────────── */
+  --color-teal-400: #0d7365;
+  --color-teal-500: #0a5e52;
+  --color-teal-600: #064e42;
+
+  /* ── Score colors: bright pastel → saturated dark ────────────────────────── */
+  --color-score-green: #059669;
+  --color-score-amber: #b45309;
+  --color-score-red: #dc2626;
+
+  /* ── Tailwind built-in colors used throughout ────────────────────────────── */
+  --color-emerald-400: #059669;
+  --color-emerald-500: #047857;
+  --color-amber-400: #b45309;
+  --color-amber-500: #92400e;
+  --color-red-400: #dc2626;
+  --color-red-500: #b91c1c;
+  --color-purple-400: #7e22ce;
+  --color-blue-400: #2563eb;
+  --color-green-500: #15803d;
 }
 
 html.light body {
@@ -220,40 +252,38 @@ html.light ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
 /* ─── Light: Glass Card ────────────────────────────────────────────────────── */
 
 html.light .glass-card {
-  background: linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.6) 100%);
-  border: 1px solid rgba(0, 0, 0, 0.07);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.03), 0 4px 16px rgba(0,0,0,0.02);
+  background: linear-gradient(135deg, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.65) 100%);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.03);
   backdrop-filter: blur(12px);
 }
 
 html.light .glass-card-hover:hover {
-  border-color: rgba(249, 115, 22, 0.25);
-  box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.06), 0 8px 24px rgba(0, 0, 0, 0.06);
+  border-color: rgba(154, 52, 18, 0.3);
+  box-shadow: 0 0 0 1px rgba(154, 52, 18, 0.08), 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 
 /* ─── Light: Mesh Background ──────────────────────────────────────────────── */
 
 html.light .bg-mesh {
   background:
-    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(249, 115, 22, 0.03) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 50% at 80% 80%, rgba(45, 212, 191, 0.02) 0%, transparent 60%),
+    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(249, 115, 22, 0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 80% 80%, rgba(45, 212, 191, 0.03) 0%, transparent 60%),
     var(--background);
 }
 
-/* ─── Light: Hide noise overlay ────────────────────────────────────────────── */
-
 html.light .noise-overlay::before { opacity: 0; }
 
-/* ─── Light: Soften glows ──────────────────────────────────────────────────── */
+/* ─── Light: Glow → subtle shadow ──────────────────────────────────────────── */
 
 html.light .glow-brand {
-  box-shadow: 0 0 20px rgba(249, 115, 22, 0.08);
+  box-shadow: 0 0 20px rgba(154, 52, 18, 0.08);
 }
 
-/* ─── Light: Text gradient (darker for contrast) ──────────────────────────── */
+/* ─── Light: Text gradient ─────────────────────────────────────────────────── */
 
 html.light .text-gradient-brand {
-  background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
+  background: linear-gradient(135deg, #b83a08 0%, #7c2d12 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -262,38 +292,47 @@ html.light .text-gradient-brand {
 /* ─── Light: Selection ─────────────────────────────────────────────────────── */
 
 html.light ::selection {
-  background: rgba(249, 115, 22, 0.2);
+  background: rgba(154, 52, 18, 0.2);
   color: #1a1714;
 }
 
-/* ─── Light: Fix elements that use inline styles with dark backgrounds ────── */
+/* ─── Light: Inline dark backgrounds → white ───────────────────────────────── */
 
 html.light [style*="background: #15131a"],
 html.light [style*="background:#15131a"] {
   background: #ffffff !important;
   border-color: rgba(0,0,0,0.1) !important;
   box-shadow: 0 8px 24px rgba(0,0,0,0.08) !important;
+  color: #1a1714 !important;
 }
 
 html.light [style*="background: rgba(15, 13, 20"],
 html.light [style*="background: rgba(7, 6, 11"] {
-  background: rgba(255, 255, 255, 0.96) !important;
+  background: rgba(255, 255, 255, 0.97) !important;
+  color: #1a1714 !important;
 }
 
-/* ─── Light: Fix the Google sign-in button (should stay white) ─────────── */
+/* ─── Light: Gradient buttons (keep visible with darker orange) ────────────── */
 
-html.light .bg-white { background-color: #ffffff; }
-html.light .text-gray-800 { color: #1f2937; }
+html.light [class*="from-brand-400"][class*="to-brand-600"],
+html.light [class*="from-brand-500"][class*="to-brand-600"] {
+  --tw-gradient-from: #ea580c;
+  --tw-gradient-to: #9a3412;
+  color: #fff !important;
+}
 
-/* ─── Light: Fix brand gradient buttons (keep them orange, not dark) ────── */
-
-html.light [class*="from-brand-400"][class*="to-brand-600"] {
-  --tw-gradient-from: #fb923c;
-  --tw-gradient-to: #ea580c;
+/* Button text should stay white on orange buttons */
+html.light .bg-gradient-to-r[class*="brand"] {
+  color: #fff !important;
 }
 
 /* ─── Light: Nav header backdrop ───────────────────────────────────────────── */
 
 html.light [class*="bg-\\[\\#07060b\\]"] {
-  background-color: rgba(248, 247, 244, 0.85) !important;
+  background-color: rgba(248, 247, 244, 0.9) !important;
 }
+
+/* ─── Light: Keep Google button white ──────────────────────────────────────── */
+
+html.light .bg-white { background-color: #ffffff !important; color: #1f2937 !important; }
+html.light .text-gray-800 { color: #1f2937 !important; }
