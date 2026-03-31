@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { Heart } from "lucide-react";
+import { chartBg, chartGrid, chartLabel, chartArousalLine, chartCognitiveLine, isLightMode } from "@/lib/theme-colors";
 
 interface Props {
   arousaleCurve: number[];
@@ -39,14 +40,14 @@ export function EmotionalPanel({
     const n = arousaleCurve.length;
 
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = "rgba(7, 6, 11, 0.6)";
+    ctx.fillStyle = chartBg();
     ctx.fillRect(0, 0, w, h);
 
     const xScale = (i: number) => pad.left + (i / Math.max(n - 1, 1)) * plotW;
     const yScale = (v: number) => pad.top + plotH - (v / 100) * plotH;
 
     // Grid
-    ctx.strokeStyle = "rgba(255,255,255,0.04)";
+    ctx.strokeStyle = chartGrid();
     ctx.lineWidth = 1;
     [50].forEach((v) => {
       ctx.beginPath();
@@ -56,16 +57,16 @@ export function EmotionalPanel({
     });
 
     // Y labels
-    ctx.fillStyle = "rgba(255,255,255,0.2)";
+    ctx.fillStyle = chartLabel();
     ctx.font = "9px system-ui";
     ctx.textAlign = "right";
     [0, 50, 100].forEach((v) => ctx.fillText(String(v), pad.left - 4, yScale(v) + 3));
 
     // Arousal (amber)
-    drawLine(ctx, arousaleCurve, xScale, yScale, "#fbbf24", 2);
+    drawLine(ctx, arousaleCurve, xScale, yScale, chartArousalLine(), 2);
 
     // Cognitive load (red)
-    drawLine(ctx, cognitiveCurve, xScale, yScale, "#f87171", 2);
+    drawLine(ctx, cognitiveCurve, xScale, yScale, chartCognitiveLine(), 2);
 
     // Playhead
     if (currentSecond !== undefined && currentSecond < n) {
@@ -73,13 +74,13 @@ export function EmotionalPanel({
       ctx.beginPath();
       ctx.moveTo(x, pad.top);
       ctx.lineTo(x, pad.top + plotH);
-      ctx.strokeStyle = "rgba(249, 115, 22, 0.4)";
+      ctx.strokeStyle = isLightMode() ? "rgba(184, 58, 8, 0.4)" : "rgba(249, 115, 22, 0.4)";
       ctx.lineWidth = 1;
       ctx.stroke();
     }
 
     // X axis
-    ctx.fillStyle = "rgba(255,255,255,0.2)";
+    ctx.fillStyle = chartLabel();
     ctx.textAlign = "center";
     ctx.font = "9px system-ui";
     const labelEvery = Math.max(1, Math.floor(n / 6));
