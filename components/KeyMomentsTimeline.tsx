@@ -100,7 +100,7 @@ export function KeyMomentsTimeline({
       </div>
 
       {/* Moment cards */}
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1.5 max-h-[50vh] sm:max-h-none overflow-y-auto">
         {moments.map((m, i) => {
           const cfg = MOMENT_CONFIG[m.type];
           const Icon = cfg.icon;

@@ -28,7 +28,7 @@ export function MetricCard({ metric, expanded, onToggle }: Props) {
   return (
     <div
       className={cn(
-        "glass-card glass-card-hover !p-4 cursor-pointer",
+        "glass-card glass-card-hover !p-3 sm:!p-4 cursor-pointer",
         expanded && "!border-white/[0.1]"
       )}
       onClick={onToggle}
