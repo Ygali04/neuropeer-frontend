@@ -72,6 +72,62 @@ def _save_to_s3(data: bytes, key: str) -> str:
     return key
 
 
+def _persist_to_db(job_id, url, content_type, duration, neural_score, metrics_data, key_moments, modality_breakdown, vertex_key, timeseries_key):
+    """Write Job + Result rows to PostgreSQL for permanent storage."""
+    import asyncio
+    from datetime import UTC, datetime
+    from uuid import UUID
+
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from backend.models.db import Job, Result
+
+    async def _write():
+        engine = create_async_engine(settings.database_url)
+        Session = async_sessionmaker(engine, expire_on_commit=False)
+        async with Session() as session:
+            # Update or create Job row
+            from sqlalchemy import select
+            stmt = select(Job).where(Job.id == UUID(job_id))
+            existing = (await session.execute(stmt)).scalar_one_or_none()
+            if existing:
+                existing.status = "complete"
+                existing.completed_at = datetime.now(UTC).replace(tzinfo=None)
+            else:
+                session.add(Job(
+                    id=UUID(job_id), url=url, content_type=content_type,
+                    status="complete",
+                    created_at=datetime.now(UTC).replace(tzinfo=None),
+                    completed_at=datetime.now(UTC).replace(tzinfo=None),
+                ))
+                await session.flush()
+
+            # Create Result row
+            session.add(Result(
+                job_id=UUID(job_id), duration_seconds=duration,
+                neural_score_total=neural_score.total,
+                hook_score=neural_score.hook_score,
+                sustained_attention=neural_score.sustained_attention,
+                emotional_resonance=neural_score.emotional_resonance,
+                memory_encoding=neural_score.memory_encoding,
+                aesthetic_quality=neural_score.aesthetic_quality,
+                cognitive_accessibility=neural_score.cognitive_accessibility,
+                timeseries_s3_key=timeseries_key,
+                vertex_data_s3_key=vertex_key,
+                metrics_json=metrics_data,
+                key_moments_json=[km.model_dump() for km in key_moments],
+                modality_json=[mb.model_dump() for mb in modality_breakdown],
+            ))
+            await session.commit()
+        await engine.dispose()
+
+    try:
+        asyncio.run(_write())
+        logger.info("Persisted job %s to PostgreSQL", job_id)
+    except Exception as exc:
+        logger.warning("Failed to persist to DB (non-fatal): %s", exc)
+
+
 @celery_app.task(name="neuropeer.analyze", bind=True, max_retries=1)
 def run_analysis(self, job_id: str, url: str, content_type: str) -> dict:
     """
@@ -138,25 +194,43 @@ def run_analysis(self, job_id: str, url: str, content_type: str) -> dict:
         neural_score = compute_neural_score(metrics, content_type_enum)
         key_moments = detect_key_moments(attn_curve, arousal_curve, cog_curve, predictions[Modality.FULL])
 
-        # Save timeseries to S3
+        # ── Upload ALL artifacts to S3 ─────────────────────────────────────
+        _publish_progress(job_id, "scoring", 0.90, "Uploading artifacts to S3…")
+
+        # Timeseries
         ts_buffer = io.BytesIO()
-        np.savez_compressed(
-            ts_buffer,
-            attention=attn_curve,
-            arousal=arousal_curve,
-            cognitive_load=cog_curve,
-        )
-        timeseries_key = f"predictions/{job_id}/timeseries.npz"
+        np.savez_compressed(ts_buffer, attention=attn_curve, arousal=arousal_curve, cognitive_load=cog_curve)
+        timeseries_key = f"jobs/{job_id}/timeseries.npz"
         _save_to_s3(ts_buffer.getvalue(), timeseries_key)
 
-        # Build final result dict using Pydantic model_dump()
+        # Video file
+        video_key = f"jobs/{job_id}/video{media.video_path.suffix}"
+        _save_to_s3(media.video_path.read_bytes(), video_key)
+
+        # Audio file
+        audio_key = f"jobs/{job_id}/audio.wav"
+        _save_to_s3(media.audio_path.read_bytes(), audio_key)
+
+        # Transcript
+        transcript_key = f"jobs/{job_id}/transcript.json"
+        _save_to_s3(json.dumps({"words": media.transcript_words, "text": " ".join(w["word"] for w in media.transcript_words)}).encode(), transcript_key)
+
+        # Metrics + Neural Score
+        metrics_data = [m.model_dump() for m in metrics]
+        _save_to_s3(json.dumps(metrics_data, indent=2).encode(), f"jobs/{job_id}/metrics.json")
+        _save_to_s3(json.dumps(neural_score.model_dump(), indent=2).encode(), f"jobs/{job_id}/neural_score.json")
+        _save_to_s3(json.dumps([km.model_dump() for km in key_moments], indent=2).encode(), f"jobs/{job_id}/key_moments.json")
+
+        logger.info("All artifacts uploaded to S3 for job %s", job_id)
+
+        # ── Build result + store in Redis + PostgreSQL ────────────────────
         result = {
             "job_id": job_id,
             "url": url,
             "content_type": content_type,
             "duration_seconds": media.duration_seconds,
             "neural_score": neural_score.model_dump(),
-            "metrics": [m.model_dump() for m in metrics],
+            "metrics": metrics_data,
             "attention_curve": attn_curve.tolist(),
             "emotional_arousal_curve": arousal_curve.tolist(),
             "cognitive_load_curve": cog_curve.tolist(),
@@ -166,11 +240,12 @@ def run_analysis(self, job_id: str, url: str, content_type: str) -> dict:
             "timeseries_s3_key": timeseries_key,
         }
 
-        _get_redis().set(
-            f"neuropeer:result:{job_id}",
-            json.dumps(result),
-            ex=60 * 60 * 24 * 7,
-        )
+        # Redis cache (7 day TTL)
+        _get_redis().set(f"neuropeer:result:{job_id}", json.dumps(result), ex=60 * 60 * 24 * 7)
+
+        # Persist to PostgreSQL (permanent)
+        _persist_to_db(job_id, url, content_type, media.duration_seconds, neural_score, metrics_data, key_moments, modality_breakdown, vertex_key, timeseries_key)
+
         _update_job_status(job_id, "complete")
         _publish_progress(job_id, "complete", 1.0, "Analysis complete!")
         return result

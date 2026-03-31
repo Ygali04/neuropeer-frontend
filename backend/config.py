@@ -1,3 +1,4 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -6,18 +7,29 @@ class Settings(BaseSettings):
     app_name: str = "NeuroPeer"
     debug: bool = False
 
-    # Database
+    # Database (Railway provides postgresql://, we need postgresql+asyncpg://)
     database_url: str = "postgresql+asyncpg://neuropeer:neuropeer@localhost:5432/neuropeer"
+
+    @model_validator(mode="after")
+    def fix_database_url(self):
+        """Railway provides postgresql:// but asyncpg needs postgresql+asyncpg://"""
+        if self.database_url.startswith("postgresql://"):
+            self.database_url = self.database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return self
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
 
-    # S3 / Storage
-    s3_bucket: str = "neuropeer-media"
-    s3_endpoint_url: str = ""  # leave empty for AWS, set for MinIO
+    # S3 / Storage (supports AWS S3, Backblaze B2, MinIO)
+    # For B2: endpoint_url=https://s3.us-west-004.backblazeb2.com, region=us-west-004
+    s3_bucket: str = "NeuroPeer"
+    s3_endpoint_url: str = ""  # leave empty for AWS, set for B2/MinIO
     aws_access_key_id: str = ""
     aws_secret_access_key: str = ""
-    aws_region: str = "us-east-1"
+    aws_region: str = "us-west-004"
+
+    # Server port (Railway assigns PORT dynamically)
+    port: int = 8000
 
     # JWT
     secret_key: str = "change-me-in-production"
