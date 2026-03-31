@@ -289,13 +289,27 @@ function InstagramEmbed({
     return () => window.removeEventListener("blur", onWindowBlur);
   }, [onPlay]);
 
+  const embedUrl = extractInstagramEmbedUrl(url);
+
   return (
     <div className="rounded-xl overflow-hidden border border-white/[0.06] bg-black">
-      <div className="relative w-full max-w-[320px] mx-auto">
-        <div ref={containerRef}>
-          <div className="iframely-embed">
-            <a data-iframely-url="" href={url}>{url}</a>
-          </div>
+      <div className="relative w-full max-w-[320px] mx-auto aspect-[9/16]">
+        <div ref={containerRef} className="w-full h-full">
+          {embedUrl ? (
+            <iframe
+              ref={iframeRef as React.RefObject<HTMLIFrameElement>}
+              src={embedUrl}
+              className="w-full h-full border-0"
+              allowFullScreen
+              allow="autoplay; encrypted-media"
+              loading="lazy"
+              title="Instagram video"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-white/30 text-xs">
+              Unable to embed Instagram video
+            </div>
+          )}
         </div>
       </div>
       <Controls

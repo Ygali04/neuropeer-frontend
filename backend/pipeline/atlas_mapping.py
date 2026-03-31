@@ -129,7 +129,9 @@ def aggregate_all_rois(predictions: np.ndarray) -> dict[str, np.ndarray]:
 
 def compute_r_squared(a: np.ndarray, b: np.ndarray) -> float:
     """Pearson R² between two 1D timeseries (used for modality coherence)."""
-    if len(a) < 2:
+    # Truncate to shorter length (ablation passes may differ by 1-2 timesteps)
+    n = min(len(a), len(b))
+    if n < 2:
         return 0.0
-    corr = np.corrcoef(a, b)[0, 1]
+    corr = np.corrcoef(a[:n], b[:n])[0, 1]
     return float(corr**2)
