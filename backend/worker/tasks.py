@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import tempfile
+import uuid
 from pathlib import Path
 
 import numpy as np
@@ -72,7 +73,7 @@ def _save_to_s3(data: bytes, key: str) -> str:
     return key
 
 
-def _persist_to_db(job_id, url, content_type, duration, neural_score, metrics_data, key_moments, modality_breakdown, vertex_key, timeseries_key):
+def _persist_to_db(job_id, url, content_type, duration, neural_score, metrics_data, key_moments, modality_breakdown, vertex_key, timeseries_key, ai_feedback=None, parent_job_id=None, content_group_id=None):
     """Write Job + Result rows to PostgreSQL for permanent storage."""
     import asyncio
     from datetime import UTC, datetime
@@ -99,6 +100,8 @@ def _persist_to_db(job_id, url, content_type, duration, neural_score, metrics_da
                     status="complete",
                     created_at=datetime.now(UTC).replace(tzinfo=None),
                     completed_at=datetime.now(UTC).replace(tzinfo=None),
+                    parent_job_id=UUID(parent_job_id) if parent_job_id else None,
+                    content_group_id=UUID(content_group_id) if content_group_id else uuid.uuid4(),
                 ))
                 await session.flush()
 
@@ -117,6 +120,13 @@ def _persist_to_db(job_id, url, content_type, duration, neural_score, metrics_da
                 metrics_json=metrics_data,
                 key_moments_json=[km.model_dump() for km in key_moments],
                 modality_json=[mb.model_dump() for mb in modality_breakdown],
+                overarching_summary=ai_feedback.get("summary") if ai_feedback else None,
+                ai_summary=ai_feedback.get("summary") if ai_feedback else None,
+                ai_report_title=ai_feedback.get("report_title") if ai_feedback else None,
+                ai_action_items=ai_feedback.get("action_items") if ai_feedback else None,
+                ai_priorities=ai_feedback.get("priorities") if ai_feedback else None,
+                ai_category_strategies=ai_feedback.get("category_strategies") if ai_feedback else None,
+                ai_metric_tips=ai_feedback.get("metric_tips") if ai_feedback else None,
             ))
             await session.commit()
         await engine.dispose()
@@ -129,7 +139,7 @@ def _persist_to_db(job_id, url, content_type, duration, neural_score, metrics_da
 
 
 @celery_app.task(name="neuropeer.analyze", bind=True, max_retries=1)
-def run_analysis(self, job_id: str, url: str, content_type: str) -> dict:
+def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: str | None = None) -> dict:
     """
     Full NeuroPeer analysis pipeline for a single video URL.
     Streams progress events at each stage.
@@ -147,6 +157,16 @@ def run_analysis(self, job_id: str, url: str, content_type: str) -> dict:
     from backend.pipeline.metric_engine import compute_all_metrics
     from backend.pipeline.neural_score import compute_neural_score, detect_key_moments
     from backend.pipeline.remote_gpu import run_inference_backend
+
+    # Resolve content_group_id from parent or generate new
+    content_group_id = None
+    if parent_job_id:
+        raw_parent = _get_redis().get(f"neuropeer:result:{parent_job_id}")
+        if raw_parent:
+            parent_data = json.loads(raw_parent)
+            content_group_id = parent_data.get("content_group_id")
+    if not content_group_id:
+        content_group_id = str(uuid.uuid4())
 
     work_dir = Path(tempfile.mkdtemp(prefix=f"neuropeer_{job_id}_", dir=settings.temp_dir))
 

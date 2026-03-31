@@ -19,6 +19,7 @@ async def submit_analysis(request: AnalyzeRequest) -> JobCreatedResponse:
     # Dispatch to Celery worker (non-blocking)
     run_analysis.apply_async(
         args=[job_id, request.url, request.content_type.value],
+        kwargs={"parent_job_id": str(request.parent_job_id) if request.parent_job_id else None},
         task_id=job_id,
     )
 
@@ -26,4 +27,5 @@ async def submit_analysis(request: AnalyzeRequest) -> JobCreatedResponse:
         job_id=uuid.UUID(job_id),
         websocket_url=f"/ws/job/{job_id}",
         status=JobStatus.queued,
+        parent_job_id=request.parent_job_id,
     )

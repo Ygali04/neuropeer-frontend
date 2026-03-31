@@ -91,6 +91,55 @@ async def get_brain_map(job_id: UUID, timestamp: float = 0.0) -> dict:
     ).model_dump()
 
 
+@router.get("/results/{job_id}/history")
+async def get_run_history(job_id: UUID) -> dict:
+    """Get all runs in the same content group as this job."""
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from backend.models.db import Job, Result
+
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with Session() as session:
+        # Find the content_group_id for this job
+        stmt = select(Job).where(Job.id == job_id)
+        job = (await session.execute(stmt)).scalar_one_or_none()
+        if not job:
+            await engine.dispose()
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        group_id = job.content_group_id
+
+        # Fetch all jobs in the same group
+        stmt = (
+            select(Job, Result.neural_score_total)
+            .outerjoin(Result, Result.job_id == Job.id)
+            .where(Job.content_group_id == group_id)
+            .order_by(Job.created_at.asc())
+        )
+        rows = (await session.execute(stmt)).all()
+
+    await engine.dispose()
+
+    runs = []
+    for row_job, score in rows:
+        runs.append({
+            "job_id": str(row_job.id),
+            "url": row_job.url,
+            "neural_score": round(score) if score else 0,
+            "created_at": row_job.created_at.isoformat() if row_job.created_at else "",
+            "parent_job_id": str(row_job.parent_job_id) if row_job.parent_job_id else None,
+            "is_current": str(row_job.id) == str(job_id),
+        })
+
+    return {
+        "content_group_id": str(group_id),
+        "runs": runs,
+    }
+
+
 @router.get("/results/{job_id}/status")
 async def get_status(job_id: UUID) -> dict:
     """Check job status without retrieving full results."""
