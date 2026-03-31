@@ -33,6 +33,7 @@ class AnalyzeRequest(BaseModel):
     url: str
     content_type: ContentType = ContentType.custom
     label: str | None = None  # user-provided name for A/B labeling
+    parent_job_id: UUID | None = None  # link to previous run for delta-aware feedback
 
     @field_validator("url")
     @classmethod
@@ -63,6 +64,8 @@ class JobCreatedResponse(BaseModel):
     job_id: UUID
     websocket_url: str
     status: JobStatus = JobStatus.queued
+    parent_job_id: UUID | None = None
+    content_group_id: UUID | None = None
 
 
 class ProgressEvent(BaseModel):
@@ -117,6 +120,15 @@ class AnalysisResult(BaseModel):
     cognitive_load_curve: list[float]  # per-second
     key_moments: list[KeyMoment]
     modality_breakdown: list[ModalityContribution]
+    overarching_summary: str | None = None
+    ai_summary: str | None = None
+    ai_report_title: str | None = None
+    ai_action_items: list[str] | None = None
+    ai_priorities: list[str] | None = None
+    ai_category_strategies: dict | None = None
+    ai_metric_tips: dict | None = None
+    parent_job_id: UUID | None = None
+    content_group_id: UUID | None = None
 
 
 class BrainMapFrame(BaseModel):
@@ -131,3 +143,17 @@ class ComparisonResult(BaseModel):
     winner_job_id: UUID
     recommendation: str
     delta_metrics: dict[str, list[float]]  # metric_name -> [score_per_video]
+
+
+class RunHistoryEntry(BaseModel):
+    job_id: UUID
+    url: str
+    neural_score: float
+    created_at: str
+    parent_job_id: UUID | None = None
+    is_current: bool = False
+
+
+class RunHistoryResponse(BaseModel):
+    content_group_id: UUID
+    runs: list[RunHistoryEntry]

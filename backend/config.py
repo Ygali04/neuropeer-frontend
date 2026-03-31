@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     # Transcription (ElevenLabs Scribe v2)
     elevenlabs_api_key: str = ""
 
+    # AI Feedback (OpenRouter)
+    openrouter_api_key: str = ""
+
     # Inference
     device: str = "cuda"  # cuda / cpu
     temp_dir: str = "/tmp/neuropeer"

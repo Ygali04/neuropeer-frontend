@@ -32,6 +32,14 @@ class Job(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
+    # Linked runs
+    parent_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True
+    )
+    content_group_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), default=uuid.uuid4, nullable=False
+    )
+
     result: Mapped[Result | None] = relationship("Result", back_populates="job", uselist=False)
 
 
@@ -58,6 +66,15 @@ class Result(Base):
     metrics_json: Mapped[dict | None] = mapped_column(JSON)  # list[MetricScore]
     key_moments_json: Mapped[dict | None] = mapped_column(JSON)  # list[KeyMoment]
     modality_json: Mapped[dict | None] = mapped_column(JSON)  # list[ModalityContribution]
+
+    # AI-generated feedback (persisted once during pipeline)
+    ai_summary: Mapped[str | None] = mapped_column(Text)
+    ai_report_title: Mapped[str | None] = mapped_column(Text)
+    ai_action_items: Mapped[dict | None] = mapped_column(JSON)
+    ai_priorities: Mapped[dict | None] = mapped_column(JSON)
+    ai_category_strategies: Mapped[dict | None] = mapped_column(JSON)
+    ai_metric_tips: Mapped[dict | None] = mapped_column(JSON)
+    overarching_summary: Mapped[str | None] = mapped_column(Text)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
