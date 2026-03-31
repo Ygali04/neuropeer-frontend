@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Target,
   ArrowRight,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { METRIC_STRATEGIES, type ImprovementStrategy } from "@/lib/metric-info";
@@ -29,11 +30,17 @@ const CATEGORY_CONFIG: Record<
   emotional: { label: "Emotional", icon: Heart, color: "#f87171", bg: "rgba(248, 113, 113, 0.06)" },
 };
 
+interface CategoryStrategy {
+  score_context: string;
+  strategies: string[];
+}
+
 interface Props {
   metrics: MetricScore[];
   overarchingSummary?: string;
   aiPriorities?: string[];
   aiMetricTips?: Record<string, string>;
+  aiCategoryStrategies?: Record<string, CategoryStrategy>;
   aiLoading?: boolean;
 }
 
@@ -50,7 +57,7 @@ function parseSummary(text: string): { sentences: string[] } {
   return { sentences };
 }
 
-export function ImprovementStrategies({ metrics, overarchingSummary, aiPriorities, aiMetricTips, aiLoading }: Props) {
+export function ImprovementStrategies({ metrics, overarchingSummary, aiPriorities, aiMetricTips, aiCategoryStrategies, aiLoading }: Props) {
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
 
   const improvableMetrics = metrics
@@ -310,6 +317,55 @@ export function ImprovementStrategies({ metrics, overarchingSummary, aiPrioritie
           })}
         </div>
       </div>
+
+      {/* ── AI-Generated Category Strategies ──────────────────────────────── */}
+      {aiCategoryStrategies && Object.keys(aiCategoryStrategies).length > 0 && (
+        <div>
+          <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Sparkles className="w-3.5 h-3.5 text-brand-400" />
+            AI Deep-Dive Strategies
+          </h3>
+          <div className="flex flex-col gap-3">
+            {Object.entries(aiCategoryStrategies).map(([category, data]) => (
+              <div key={category} className="glass-card !p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-2 h-2 rounded-full bg-brand-400" />
+                  <h4 className="text-sm font-medium text-white/70">{category}</h4>
+                </div>
+                <p className="text-xs text-white/30 mb-3 italic">{data.score_context}</p>
+                <div className="space-y-2">
+                  {data.strategies.map((strategy, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <div className="w-4 h-4 rounded bg-brand-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span className="text-[9px] font-bold text-brand-400">{i + 1}</span>
+                      </div>
+                      <p className="text-xs text-white/45 leading-relaxed">{strategy}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── AI Metric-Specific Tips ────────────────────────────────────────── */}
+      {aiMetricTips && Object.keys(aiMetricTips).length > 0 && (
+        <div>
+          <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Target className="w-3.5 h-3.5 text-amber-400" />
+            Metric-Specific Recommendations
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {Object.entries(aiMetricTips).map(([metric, tip]) => (
+              <div key={metric} className="glass-card !p-3">
+                <p className="text-xs font-medium text-white/60 mb-1">{metric}</p>
+                <p className="text-[11px] text-white/35 leading-relaxed">{tip}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

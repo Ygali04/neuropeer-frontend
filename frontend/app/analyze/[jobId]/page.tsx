@@ -162,9 +162,19 @@ export default function AnalyzePage() {
     setIsPlaying(false); playbackTimeRef.current = 0; setPlaybackTime(0); setCurrentSecond(0);
   }, []);
 
-  // ── AI Feedback fetcher ──────────────────────────────────────────────
+  // ── AI Feedback: load from result (persisted) or generate via GLM ──
   useEffect(() => {
-    if (!result || aiLoading || aiFeedback) return;
+    if (!result || aiFeedback) return;
+
+    // Check if AI feedback is already persisted in the result
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const persisted = (result as any).ai_feedback;
+    if (persisted && typeof persisted === "object" && persisted.summary) {
+      setAiFeedback(persisted as NonNullable<typeof aiFeedback>);
+      return;
+    }
+
+    // Otherwise, generate via GLM (first-time only)
     setAiLoading(true);
     fetch("/api/generate-feedback", {
       method: "POST",
@@ -172,7 +182,9 @@ export default function AnalyzePage() {
       body: JSON.stringify({ type: "analysis", data: result }),
     })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((data) => setAiFeedback(data))
+      .then((data) => {
+        if (data.summary) setAiFeedback(data);
+      })
       .catch((err) => console.warn("AI feedback unavailable:", err.message))
       .finally(() => setAiLoading(false));
   }, [result]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -583,6 +595,7 @@ export default function AnalyzePage() {
                   overarchingSummary={aiFeedback?.summary ?? result.overarching_summary}
                   aiPriorities={aiFeedback?.priorities}
                   aiMetricTips={aiFeedback?.metric_tips}
+                  aiCategoryStrategies={aiFeedback?.category_strategies}
                   aiLoading={aiLoading}
                 />
               </CollapsibleSection>
