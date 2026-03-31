@@ -73,7 +73,7 @@ def _save_to_s3(data: bytes, key: str) -> str:
     return key
 
 
-def _persist_to_db(job_id, url, content_type, duration, neural_score, metrics_data, key_moments, modality_breakdown, vertex_key, timeseries_key, ai_feedback=None, parent_job_id=None, content_group_id=None):
+def _persist_to_db(job_id, url, content_type, duration, neural_score, metrics_data, key_moments, modality_breakdown, vertex_key, timeseries_key, ai_feedback=None, parent_job_id=None, content_group_id=None, campaign_name=None, user_email=None):
     """Write Job + Result rows to PostgreSQL for permanent storage."""
     import asyncio
     from datetime import UTC, datetime
@@ -102,6 +102,8 @@ def _persist_to_db(job_id, url, content_type, duration, neural_score, metrics_da
                     completed_at=datetime.now(UTC).replace(tzinfo=None),
                     parent_job_id=UUID(parent_job_id) if parent_job_id else None,
                     content_group_id=UUID(content_group_id) if content_group_id else uuid.uuid4(),
+                    campaign_name=campaign_name,
+                    user_email=user_email,
                 ))
                 await session.flush()
 
@@ -139,7 +141,7 @@ def _persist_to_db(job_id, url, content_type, duration, neural_score, metrics_da
 
 
 @celery_app.task(name="neuropeer.analyze", bind=True, max_retries=1)
-def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: str | None = None) -> dict:
+def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: str | None = None, user_email: str | None = None) -> dict:
     """
     Full NeuroPeer analysis pipeline for a single video URL.
     Streams progress events at each stage.
@@ -260,6 +262,12 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
 
         ai_feedback = generate_ai_feedback(_ai_input, parent_result_data)
 
+        # ── Stage 6: Campaign naming (first video in group only) ──────────
+        campaign_name = None
+        if not parent_job_id:
+            from backend.pipeline.campaign_naming import generate_campaign_name
+            campaign_name = generate_campaign_name(url, content_type, ai_feedback.get("summary", ""))
+
         # ── Upload ALL artifacts to S3 ─────────────────────────────────────
         _publish_progress(job_id, "scoring", 0.90, "Uploading artifacts to S3…")
 
@@ -313,13 +321,20 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
             "ai_metric_tips": ai_feedback.get("metric_tips", {}),
             "parent_job_id": parent_job_id,
             "content_group_id": content_group_id,
+            "campaign_name": campaign_name,
+            "user_email": user_email,
         }
 
         # Redis cache (7 day TTL)
         _get_redis().set(f"neuropeer:result:{job_id}", json.dumps(result), ex=60 * 60 * 24 * 7)
 
         # Persist to PostgreSQL (permanent)
-        _persist_to_db(job_id, url, content_type, media.duration_seconds, neural_score, metrics_data, key_moments, modality_breakdown, vertex_key, timeseries_key, ai_feedback=ai_feedback, parent_job_id=parent_job_id, content_group_id=content_group_id)
+        _persist_to_db(job_id, url, content_type, media.duration_seconds, neural_score, metrics_data, key_moments, modality_breakdown, vertex_key, timeseries_key, ai_feedback=ai_feedback, parent_job_id=parent_job_id, content_group_id=content_group_id, campaign_name=campaign_name, user_email=user_email)
+
+        # ── Update marketer profile ───────────────────────────────────────
+        if user_email:
+            from backend.pipeline.marketer_profile import update_marketer_profile
+            update_marketer_profile(user_email)
 
         _update_job_status(job_id, "complete")
         _publish_progress(job_id, "complete", 1.0, "Analysis complete!")

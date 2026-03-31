@@ -19,7 +19,10 @@ async def submit_analysis(request: AnalyzeRequest) -> JobCreatedResponse:
     # Dispatch to Celery worker (non-blocking)
     run_analysis.apply_async(
         args=[job_id, request.url, request.content_type.value],
-        kwargs={"parent_job_id": str(request.parent_job_id) if request.parent_job_id else None},
+        kwargs={
+            "parent_job_id": str(request.parent_job_id) if request.parent_job_id else None,
+            "user_email": request.user_email,
+        },
         task_id=job_id,
     )
 
