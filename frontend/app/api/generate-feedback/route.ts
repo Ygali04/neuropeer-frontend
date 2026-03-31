@@ -3,6 +3,9 @@ import { callGLM } from "@/lib/glm";
 import { buildAnalysisFeedbackPrompt, buildComparisonFeedbackPrompt } from "@/lib/feedback-prompts";
 import type { AnalysisResult, NeuralScoreBreakdown } from "@/lib/types";
 
+// Allow up to 60s for GLM inference
+export const maxDuration = 60;
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();

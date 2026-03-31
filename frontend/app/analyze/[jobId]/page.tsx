@@ -41,7 +41,7 @@ import { ModalityBreakdown } from "@/components/ModalityBreakdown";
 import { MetricCard } from "@/components/MetricCard";
 import { ImprovementStrategies } from "@/components/ImprovementStrategies";
 
-function CollapsibleSection({ title, icon, children, defaultOpen = true, className = "" }: {
+function CollapsibleSection({ title, icon, children, defaultOpen = false, className = "" }: {
   title: string; icon: ReactNode; children: ReactNode; defaultOpen?: boolean; className?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -49,17 +49,19 @@ function CollapsibleSection({ title, icon, children, defaultOpen = true, classNa
     <div className={className}>
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between mb-3 group"
+        className="w-full flex items-center justify-between py-3 px-1 group border-b border-white/[0.06] hover:border-white/[0.12] transition-colors"
       >
         <div className="flex items-center gap-2">
           {icon}
           <h2 className="text-sm font-medium text-white/50 uppercase tracking-wider">{title}</h2>
         </div>
-        <ChevronDown className={`w-4 h-4 text-white/20 group-hover:text-white/40 transition-all duration-300 ${open ? "" : "-rotate-90"}`} />
+        <ChevronDown className={`w-4 h-4 text-white/20 group-hover:text-white/40 transition-transform duration-300 ${open ? "rotate-0" : "-rotate-90"}`} />
       </button>
-      <div className={`transition-all duration-300 overflow-hidden ${open ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0"}`}>
-        {children}
-      </div>
+      {open && (
+        <div className="pt-4 animate-fade-up">
+          {children}
+        </div>
+      )}
     </div>
   );
 }
