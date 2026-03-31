@@ -261,28 +261,26 @@ export default function AnalyzePage() {
   return (
     <div className="min-h-screen">
       {/* ── Nav ─────────────────────────────────────────────────────────────── */}
-      <header className="nav-backdrop border-b border-white/[0.06] px-6 py-4 sticky top-0 z-10 backdrop-blur-xl bg-[#07060b]/80">
+      <header className="nav-backdrop border-b border-white/[0.06] px-4 sm:px-6 py-3 sm:py-4 sticky top-0 z-10 backdrop-blur-xl bg-[#07060b]/80">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20 group-hover:shadow-brand-500/30 transition-shadow">
-              <Brain className="w-4 h-4 text-white" />
+          <Link href="/" className="flex items-center gap-2 sm:gap-3 group">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
+              <Brain className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
             </div>
-            <div className="flex items-center gap-2">
-              <span className="font-[family-name:var(--font-display)] text-white font-semibold tracking-tight">
-                NeuroPeer
-              </span>
-            </div>
+            <span className="font-[family-name:var(--font-display)] text-white font-semibold tracking-tight text-sm sm:text-base">
+              NeuroPeer
+            </span>
           </Link>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
             {result && (
               <>
-                <Button variant="ghost" size="sm" onClick={handleShare}>
+                <Button variant="ghost" size="sm" onClick={handleShare} className="!px-2 sm:!px-3">
                   {shareCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
-                  {shareCopied ? "Copied!" : "Share"}
+                  <span className="hidden sm:inline">{shareCopied ? "Copied!" : "Share"}</span>
                 </Button>
-                <Button variant="secondary" size="sm" onClick={handleExport} disabled={exporting}>
+                <Button variant="secondary" size="sm" onClick={handleExport} disabled={exporting} className="!px-2 sm:!px-3">
                   {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                  {exporting ? "Generating..." : "Export PDF"}
+                  <span className="hidden sm:inline">{exporting ? "Generating..." : "Export PDF"}</span>
                 </Button>
               </>
             )}
@@ -292,7 +290,7 @@ export default function AnalyzePage() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-8">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
         {error && (
           <div className="glass-card !border-red-500/20 px-5 py-4 text-red-400 text-sm mb-6 flex items-center gap-3">
             <div className="w-2 h-2 rounded-full bg-red-400 flex-shrink-0" />
@@ -440,7 +438,7 @@ export default function AnalyzePage() {
             )}
 
             {/* Row 2: Attention Curve */}
-            <Card className={`transition-all duration-700 ${result ? "animate-fade-up delay-100" : "opacity-50"}`}>
+            <Card className={`chart-container transition-all duration-700 ${result ? "animate-fade-up delay-100" : "opacity-50"}`}>
               {result ? (
                 <AttentionCurve
                   attentionCurve={result.attention_curve}
@@ -512,11 +510,11 @@ export default function AnalyzePage() {
             {/* Row 4: Emotional + Modality (only when result is loaded) */}
             {result && (
               <CollapsibleSection title="Emotional & Modality Analysis" icon={<Sparkles className="w-4 h-4 text-amber-400" />} className="animate-fade-up delay-300">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                <Card className="chart-container-sm">
                   <EmotionalPanel arousaleCurve={result.emotional_arousal_curve} cognitiveCurve={result.cognitive_load_curve} currentSecond={currentSecond} height={120} />
                 </Card>
-                <Card>
+                <Card className="chart-container-sm">
                   <ModalityBreakdown breakdown={result.modality_breakdown} height={120} />
                 </Card>
               </div>

@@ -21,7 +21,7 @@ function LoginInner() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6">
       {/* Decorative orb */}
-      <div className="absolute top-32 left-1/2 -translate-x-1/2 w-[500px] h-[300px] rounded-full bg-gradient-to-b from-brand-500/[0.06] to-transparent blur-3xl pointer-events-none" />
+      <div className="absolute top-32 left-1/2 -translate-x-1/2 w-[90vw] sm:w-[500px] h-[200px] sm:h-[300px] rounded-full bg-gradient-to-b from-brand-500/[0.06] to-transparent blur-3xl pointer-events-none" />
 
       <div className="w-full max-w-sm relative">
         {/* Logo */}

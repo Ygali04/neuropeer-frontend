@@ -119,9 +119,9 @@ function ComparePageInner() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-6 py-10">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
         <div className="mb-8 animate-fade-up">
-          <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold text-white mb-2">
+          <h1 className="font-[family-name:var(--font-display)] text-2xl sm:text-3xl font-bold text-white mb-2">
             A/B Neural Comparison
           </h1>
           <p className="text-white/35 text-sm">
@@ -268,7 +268,7 @@ function ComparePageInner() {
                     </div>
 
                     {/* Dimension bars */}
-                    <div className="grid grid-cols-2 gap-x-5 gap-y-2.5 mb-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-2 sm:gap-y-2.5 mb-4 sm:mb-5">
                       {dims.map((d) => {
                         const c = d.value >= 75 ? "var(--color-score-green)" : d.value >= 50 ? "var(--color-score-amber)" : "var(--color-score-red)";
                         return (

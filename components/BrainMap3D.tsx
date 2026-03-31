@@ -183,7 +183,7 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
     const container = containerRef.current;
     if (!container) return;
     const width = container.clientWidth;
-    const height = 380;
+    const height = Math.min(380, container.clientHeight || 380);
     const scene = new THREE.Scene();
 
     const camera = new THREE.PerspectiveCamera(35, width / height, 0.1, 100);
@@ -267,7 +267,7 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
       })
       .catch(e => { console.error("Brain load error:", e); setLoading(false); });
 
-    const onResize = () => { const w=container.clientWidth; camera.aspect=w/height; camera.updateProjectionMatrix(); renderer.setSize(w,height); };
+    const onResize = () => { const w=container.clientWidth; const h=container.clientHeight||height; camera.aspect=w/h; camera.updateProjectionMatrix(); renderer.setSize(w,h); };
     window.addEventListener("resize", onResize);
     return () => { cancelAnimationFrame(frameRef.current); window.removeEventListener("resize", onResize); renderer.dispose(); if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement); };
   }, [applyVertexColors]);
@@ -487,7 +487,7 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
 
       <div ref={containerRef}
         className="relative w-full rounded-xl overflow-hidden cursor-grab active:cursor-grabbing"
-        style={{ height: 380, background: "radial-gradient(ellipse at 50% 40%, #100e16 0%, #050408 100%)" }}
+        style={{ height: "min(380px, 55vh)", background: "radial-gradient(ellipse at 50% 40%, #100e16 0%, #050408 100%)" }}
         onMouseDown={onMD} onMouseMove={onMM} onMouseUp={onMU} onMouseLeave={onMU} onClick={onClick}
       >
         {hoveredRegion && !mouseRef.current.isDown && (

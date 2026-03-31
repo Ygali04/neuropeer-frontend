@@ -338,6 +338,13 @@ html.light .progress-modal-bg {
   border-color: rgba(0,0,0,0.08) !important;
 }
 
+/* ─── Mobile: Responsive canvas chart heights ─────────────────────────────── */
+
+@media (max-width: 639px) {
+  .chart-container canvas { max-height: 130px !important; }
+  .chart-container-sm canvas { max-height: 90px !important; }
+}
+
 /* ─── Light: Keep Google button white ──────────────────────────────────────── */
 
 html.light .bg-white { background-color: #ffffff !important; color: #1f2937 !important; }

@@ -86,10 +86,10 @@ export default function HomePage() {
               <span className="font-[family-name:var(--font-display)] text-white font-semibold text-lg tracking-tight">NeuroPeer</span>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <Link href="/methodology" className="text-sm text-white/40 hover:text-white/70 transition-colors">Methodology</Link>
-            <Link href="/compare" className="text-sm text-white/40 hover:text-white/70 transition-colors">A/B Compare</Link>
-            <Badge variant="default">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Link href="/methodology" className="hidden sm:block text-sm text-white/40 hover:text-white/70 transition-colors">Methodology</Link>
+            <Link href="/compare" className="hidden sm:block text-sm text-white/40 hover:text-white/70 transition-colors">A/B Compare</Link>
+            <Badge variant="default" className="hidden sm:inline-flex">
               <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
               TRIBE v2
             </Badge>
@@ -100,8 +100,8 @@ export default function HomePage() {
       </header>
 
       {/* ── Hero ────────────────────────────────────────────────────────────── */}
-      <main className="flex-1 flex flex-col items-center justify-center px-6 py-20">
-        <div className="absolute top-32 left-1/2 -translate-x-1/2 w-[600px] h-[400px] rounded-full bg-gradient-to-b from-brand-500/[0.07] to-transparent blur-3xl pointer-events-none" />
+      <main className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 py-12 sm:py-20">
+        <div className="absolute top-32 left-1/2 -translate-x-1/2 w-[90vw] sm:w-[600px] h-[300px] sm:h-[400px] rounded-full bg-gradient-to-b from-brand-500/[0.07] to-transparent blur-3xl pointer-events-none" />
 
         <div className="max-w-2xl w-full mx-auto text-center mb-14 relative">
           <div className="animate-fade-up">
@@ -111,7 +111,7 @@ export default function HomePage() {
             </Badge>
           </div>
 
-          <h1 className="font-[family-name:var(--font-display)] text-5xl sm:text-6xl font-bold text-white mb-6 leading-[1.1] tracking-tight animate-fade-up delay-100">
+          <h1 className="font-[family-name:var(--font-display)] text-3xl sm:text-5xl lg:text-6xl font-bold text-white mb-6 leading-[1.1] tracking-tight animate-fade-up delay-100">
             Predict how brains
             <br />
             <span className="text-gradient-brand">respond to your content</span>
@@ -208,10 +208,10 @@ export default function HomePage() {
         </div>
 
         {/* ── Stats ───────────────────────────────────────────────────────── */}
-        <div className="mt-16 grid grid-cols-3 gap-10 max-w-lg w-full text-center animate-fade-up delay-500">
+        <div className="mt-12 sm:mt-16 grid grid-cols-3 gap-4 sm:gap-10 max-w-lg w-full text-center animate-fade-up delay-500">
           {STATS.map(({ value, label, sublabel }) => (
             <div key={label} className="group">
-              <div className="font-[family-name:var(--font-display)] text-3xl font-bold text-white group-hover:text-gradient-brand transition-all">{value}</div>
+              <div className="font-[family-name:var(--font-display)] text-xl sm:text-3xl font-bold text-white group-hover:text-gradient-brand transition-all">{value}</div>
               <div className="text-xs text-white/40 mt-1 font-medium">{label}</div>
               <div className="text-[10px] text-white/20 mt-0.5">{sublabel}</div>
             </div>
