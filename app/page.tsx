@@ -76,7 +76,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen flex flex-col">
       {/* ── Nav ─────────────────────────────────────────────────────────────── */}
-      <header className="border-b border-white/[0.06] px-6 py-4">
+      <header className="nav-backdrop border-b border-white/[0.06] px-4 sm:px-6 py-3 sm:py-4 backdrop-blur-xl bg-[#07060b]/80">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20">

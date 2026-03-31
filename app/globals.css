@@ -341,8 +341,10 @@ html.light .bg-gradient-to-r[class*="brand"] {
 /* ─── Light: Nav/header dark backgrounds ───────────────────────────────────── */
 
 html.light .nav-backdrop {
-  background-color: rgba(248, 247, 244, 0.9) !important;
-  border-bottom-color: rgba(0,0,0,0.06) !important;
+  background-color: rgba(245, 243, 239, 0.92) !important;
+  background: rgba(245, 243, 239, 0.92) !important;
+  border-bottom-color: rgba(0,0,0,0.08) !important;
+  --tw-bg-opacity: 1 !important;
 }
 
 html.light .progress-modal-bg {
