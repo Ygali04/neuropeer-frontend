@@ -204,7 +204,7 @@ function YouTubePlayer({
         ref={containerRef}
         className={cn(
           "relative w-full mx-auto [&_iframe]:absolute [&_iframe]:inset-0 [&_iframe]:w-full [&_iframe]:h-full",
-          isVertical ? "max-w-[225px] aspect-[9/16]" : "aspect-video"
+          isVertical ? "max-w-[80vw] sm:max-w-[225px] aspect-[9/16]" : "aspect-video"
         )}
       />
       <Controls

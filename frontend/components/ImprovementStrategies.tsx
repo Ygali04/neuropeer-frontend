@@ -151,7 +151,7 @@ export function ImprovementStrategies({ metrics, overarchingSummary, aiPrioritie
           <Lightbulb className="w-3.5 h-3.5 text-brand-400" />
           Priority Actions
         </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {topActions.map(({ metric, strategy, topAction }, i) => {
             const catConfig = CATEGORY_CONFIG[strategy.category];
             return (

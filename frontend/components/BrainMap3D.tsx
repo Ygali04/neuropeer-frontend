@@ -183,7 +183,7 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
     const container = containerRef.current;
     if (!container) return;
     const width = container.clientWidth;
-    const height = 380;
+    const height = Math.min(380, container.clientHeight || 380);
     const scene = new THREE.Scene();
 
     const camera = new THREE.PerspectiveCamera(35, width / height, 0.1, 100);
@@ -267,7 +267,7 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
       })
       .catch(e => { console.error("Brain load error:", e); setLoading(false); });
 
-    const onResize = () => { const w=container.clientWidth; camera.aspect=w/height; camera.updateProjectionMatrix(); renderer.setSize(w,height); };
+    const onResize = () => { const w=container.clientWidth; const h=container.clientHeight||height; camera.aspect=w/h; camera.updateProjectionMatrix(); renderer.setSize(w,h); };
     window.addEventListener("resize", onResize);
     return () => { cancelAnimationFrame(frameRef.current); window.removeEventListener("resize", onResize); renderer.dispose(); if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement); };
   }, [applyVertexColors]);
@@ -338,14 +338,13 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
         // Wider normalization range → brighter, more visible activations
         const activation = Math.max(0, Math.min(1, (raw + 0.1) / 0.3));
 
-        // Concentrated patches: spatial seed modulates, but even low-seed
-        // areas show some color when activation is strong
+        // Concentrated patches: spatial seed gates which vertices show color
         const seed = seeds[i];
-        const concentrated = activation * (seed > 0.5 ? 1.0 : seed > 0.3 ? 0.6 : 0.25);
-        // Boost: square root to make mid-range brighter
+        const concentrated = activation * (seed > 0.55 ? 1.0 : seed > 0.35 ? 0.5 : 0.12);
         const clamped = Math.min(1, Math.sqrt(Math.max(0, concentrated)));
 
-        if (clamped < 0.05) {
+        // Higher threshold = more gray, less filled regions
+        if (clamped < 0.25) {
           colors[i*3] = bgR; colors[i*3+1] = bgG; colors[i*3+2] = bgB;
         } else if (mode === "heatmap") {
           const [hr, hg, hb, alpha] = hotColor(clamped);
@@ -488,7 +487,7 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
 
       <div ref={containerRef}
         className="relative w-full rounded-xl overflow-hidden cursor-grab active:cursor-grabbing"
-        style={{ height: 380, background: "radial-gradient(ellipse at 50% 40%, #100e16 0%, #050408 100%)" }}
+        style={{ height: "min(380px, 55vh)", background: "radial-gradient(ellipse at 50% 40%, #100e16 0%, #050408 100%)" }}
         onMouseDown={onMD} onMouseMove={onMM} onMouseUp={onMU} onMouseLeave={onMU} onClick={onClick}
       >
         {hoveredRegion && !mouseRef.current.isDown && (
