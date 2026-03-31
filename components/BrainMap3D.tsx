@@ -97,13 +97,13 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
   const currActivationRef = useRef<ActivationSnapshot | null>(null);
   const playbackTimeRef = useRef(0);
   const vertexSeedsRef = useRef<Map<string, Float32Array>>(new Map());
-  const viewModeRef = useRef<ViewMode>("heatmap");
+  const viewModeRef = useRef<ViewMode>("regions");
 
   const [loading, setLoading] = useState(true);
   const [regionScores, setRegionScores] = useState<Record<string, number>>({});
   const [hoveredRegion, setHoveredRegion] = useState<string | null>(null);
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>("heatmap");
+  const [viewMode, setViewMode] = useState<ViewMode>("regions");
 
   useEffect(() => { playbackTimeRef.current = playbackTime; }, [playbackTime]);
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
