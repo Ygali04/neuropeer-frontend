@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
-import { getDemoResult } from "@/lib/demo-results";
 
 export async function generateMetadata({ params }: { params: Promise<{ jobId: string }> }): Promise<Metadata> {
   const { jobId } = await params;
-  const demo = getDemoResult(jobId);
 
   if (!demo) {
     return {

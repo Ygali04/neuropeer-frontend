@@ -11,7 +11,6 @@ function LoginInner() {
   const { status, signIn } = useAuth();
   const callbackUrl = searchParams.get("callbackUrl") || "/";
 
-  const IS_MOCK = process.env.NEXT_PUBLIC_MOCK === "1";
 
   // Already authenticated — redirect
   if (status === "authenticated") {
@@ -61,7 +60,6 @@ function LoginInner() {
           </button>
 
           {/* Mock mode shortcut */}
-          {IS_MOCK && (
             <button
               onClick={() => router.push(callbackUrl)}
               className="w-full mt-3 px-4 py-3 rounded-xl border border-white/[0.08] bg-white/[0.03] text-white/60 text-sm hover:bg-white/[0.06] transition-colors"

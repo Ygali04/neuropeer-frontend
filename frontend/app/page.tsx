@@ -126,25 +126,9 @@ export default function HomePage() {
           <UrlInputCard onSubmit={handleSubmit} loading={loading} showCompareOption onCompare={handleCompare} />
         </div>
 
-        {/* ── Example Reports ──────────────────────────────────────────── */}
+        {/* ── Powered by TRIBE v2 ──────────────────────────────────────── */}
         <div className="flex flex-wrap justify-center gap-3 mt-10 animate-fade-up delay-400">
-          <span className="text-xs text-white/25 self-center mr-1">Try an example:</span>
-          <Link
-            href="/analyze/demo-instagram-reel"
-            className="glass-card glass-card-hover !rounded-full flex items-center gap-2 px-4 py-2"
-          >
-            <span className="text-sm">📱</span>
-            <span className="text-xs text-white/50 font-medium">Instagram Reel</span>
-            <span className="text-[10px] text-brand-400 font-semibold tabular-nums">72</span>
-          </Link>
-          <Link
-            href="/analyze/demo-youtube-preroll"
-            className="glass-card glass-card-hover !rounded-full flex items-center gap-2 px-4 py-2"
-          >
-            <span className="text-sm">▶</span>
-            <span className="text-xs text-white/50 font-medium">YouTube Pre-roll</span>
-            <span className="text-[10px] text-brand-400 font-semibold tabular-nums">81</span>
-          </Link>
+          <span className="text-xs text-white/25">Powered by Meta TRIBE v2 — real fMRI-predicted cortical activations</span>
         </div>
 
         {/* ── Feature Pills ───────────────────────────────────────────────── */}

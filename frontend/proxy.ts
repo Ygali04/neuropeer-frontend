@@ -1,21 +1,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const IS_MOCK = process.env.NEXT_PUBLIC_MOCK === "1";
-// Analysis reports are public — no auth required to view results
-// Only protect submission and account pages when auth is fully deployed
-const protectedPaths: string[] = [];
-const DEMO_PATHS = ["/analyze/demo-instagram-reel", "/analyze/demo-youtube-preroll"];
+// All app pages require authentication
+const protectedPaths = ["/analyze", "/compare"];
 
 export function proxy(request: NextRequest) {
-  if (IS_MOCK) return NextResponse.next();
-
   const { pathname } = request.nextUrl;
-
-  // Demo reports are always public
-  if (DEMO_PATHS.some((p) => pathname.startsWith(p))) {
-    return NextResponse.next();
-  }
 
   const isProtected = protectedPaths.some((p) => pathname.startsWith(p));
 

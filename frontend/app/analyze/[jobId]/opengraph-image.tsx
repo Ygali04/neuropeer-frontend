@@ -1,5 +1,4 @@
 import { ImageResponse } from "next/og";
-import { getDemoResult } from "@/lib/demo-results";
 
 export const runtime = "edge";
 export const alt = "NeuroPeer Analysis Report";
@@ -8,7 +7,6 @@ export const contentType = "image/png";
 
 export default async function Image({ params }: { params: Promise<{ jobId: string }> }) {
   const { jobId } = await params;
-  const demo = getDemoResult(jobId);
 
   const score = demo?.neural_score.total ?? 0;
   const url = demo?.url ?? "Video Analysis";
