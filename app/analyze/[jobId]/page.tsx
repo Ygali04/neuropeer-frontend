@@ -322,12 +322,17 @@ export default function AnalyzePage() {
 
         {/* ── Floating Progress Modal (over skeleton) ──────────────────── */}
         {(isActiveComputation || isLoadingReport) && (
-          <div className="fixed inset-x-0 top-20 z-50 flex justify-center pointer-events-none">
-            <div className="pointer-events-auto tooltip-card backdrop-blur-xl p-5 rounded-2xl shadow-2xl border border-white/[0.08] max-w-md w-full mx-4 animate-fade-up">
+          <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 sm:pt-24 pointer-events-none">
+            <div className="pointer-events-auto tooltip-card backdrop-blur-xl p-5 sm:p-6 rounded-2xl shadow-2xl border border-white/[0.08] max-w-lg w-full mx-4 animate-fade-up">
               {isLoadingReport ? (
-                <div className="flex items-center gap-3">
-                  <Loader2 className="w-5 h-5 text-brand-400 animate-spin flex-shrink-0" />
-                  <p className="text-sm text-white/60">Loading report...</p>
+                <div className="flex items-center gap-3 py-2">
+                  <div className="w-8 h-8 rounded-lg bg-brand-500/10 flex items-center justify-center">
+                    <Loader2 className="w-4 h-4 text-brand-400 animate-spin" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-white/70 font-medium">Loading report</p>
+                    <p className="text-[11px] text-white/30">Fetching analysis data...</p>
+                  </div>
                 </div>
               ) : (
                 <ProgressTracker event={progress} />

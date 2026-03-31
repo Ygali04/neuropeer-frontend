@@ -100,3 +100,26 @@ export interface ComparisonResult {
   recommendation: string;
   delta_metrics: Record<string, number[]>;
 }
+
+export interface CampaignSummary {
+  content_group_id: string;
+  campaign_name: string | null;
+  media_count: number;
+  latest_score: number;
+  first_score: number;
+  delta: number;
+  content_type: string;
+  created_at: string;
+  latest_at: string;
+}
+
+export interface MarketerProfile {
+  user_email: string;
+  overall_score: number;
+  total_analyses: number;
+  ai_summary: string | null;
+  ai_strengths: { metric: string; insight: string }[];
+  ai_weaknesses: { metric: string; insight: string }[];
+  ai_trends: { metric: string; direction: string; insight: string }[];
+  last_refreshed_at: string | null;
+}
