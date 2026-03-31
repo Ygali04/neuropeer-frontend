@@ -125,6 +125,18 @@ export async function renameCampaign(
   });
 }
 
+export async function deleteCampaign(contentGroupId: string): Promise<void> {
+  await fetch(`${API_BASE}/api/v1/campaigns/${contentGroupId}`, { method: "DELETE" });
+}
+
+export async function bulkDeleteCampaigns(contentGroupIds: string[]): Promise<void> {
+  await fetch(`${API_BASE}/api/v1/campaigns/bulk-delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content_group_ids: contentGroupIds }),
+  });
+}
+
 // ── WebSocket ────────────────────────────────────────────────────────────────
 
 export function connectJobWebSocket(

@@ -124,9 +124,9 @@ async def list_campaigns(user_email: str | None = None) -> list[dict]:
                 "content_group_id": str(cg_id),
                 "campaign_name": name,
                 "media_count": count,
-                "latest_score": round(latest_score),
-                "first_score": round(first_score),
-                "delta": round(latest_score - first_score),
+                "latest_score": round(latest_score, 1),
+                "first_score": round(first_score, 1),
+                "delta": round(latest_score - first_score, 1),
                 "content_type": ct or "custom",
                 "created_at": created.isoformat() if created else "",
                 "latest_at": latest.isoformat() if latest else "",
@@ -135,6 +135,69 @@ async def list_campaigns(user_email: str | None = None) -> list[dict]:
 
     await engine.dispose()
     return campaigns
+
+
+@router.delete("/campaigns/{content_group_id}")
+async def delete_campaign(content_group_id: UUID) -> dict:
+    """Delete a campaign and all its jobs/results."""
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with Session() as session:
+        # Delete results first (FK constraint)
+        jobs_stmt = select(Job.id).where(Job.content_group_id == content_group_id)
+        job_ids = (await session.execute(jobs_stmt)).scalars().all()
+        if not job_ids:
+            await engine.dispose()
+            raise HTTPException(status_code=404, detail="Campaign not found")
+
+        from sqlalchemy import delete as sql_delete
+        await session.execute(sql_delete(Result).where(Result.job_id.in_(job_ids)))
+        await session.execute(sql_delete(Job).where(Job.content_group_id == content_group_id))
+        await session.commit()
+
+    # Clean Redis cache
+    r = aioredis.from_url(settings.redis_url, decode_responses=True)
+    for jid in job_ids:
+        await r.delete(f"neuropeer:result:{jid}")
+        await r.delete(f"neuropeer:job_status:{jid}")
+    await r.aclose()
+
+    await engine.dispose()
+    return {"deleted": len(job_ids), "content_group_id": str(content_group_id)}
+
+
+@router.post("/campaigns/bulk-delete")
+async def bulk_delete_campaigns(body: dict) -> dict:
+    """Delete multiple campaigns at once. Body: {"content_group_ids": ["uuid", ...]}"""
+    ids = body.get("content_group_ids", [])
+    if not ids:
+        raise HTTPException(status_code=400, detail="No campaign IDs provided")
+
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    total_deleted = 0
+
+    async with Session() as session:
+        for cg_id in ids:
+            jobs_stmt = select(Job.id).where(Job.content_group_id == UUID(cg_id))
+            job_ids = (await session.execute(jobs_stmt)).scalars().all()
+            if job_ids:
+                from sqlalchemy import delete as sql_delete
+                await session.execute(sql_delete(Result).where(Result.job_id.in_(job_ids)))
+                await session.execute(sql_delete(Job).where(Job.content_group_id == UUID(cg_id)))
+                total_deleted += len(job_ids)
+
+                r = aioredis.from_url(settings.redis_url, decode_responses=True)
+                for jid in job_ids:
+                    await r.delete(f"neuropeer:result:{jid}")
+                    await r.delete(f"neuropeer:job_status:{jid}")
+                await r.aclose()
+
+        await session.commit()
+
+    await engine.dispose()
+    return {"deleted_jobs": total_deleted, "deleted_campaigns": len(ids)}
 
 
 @router.put("/campaigns/{content_group_id}/name")
