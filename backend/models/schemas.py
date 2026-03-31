@@ -34,6 +34,7 @@ class AnalyzeRequest(BaseModel):
     content_type: ContentType = ContentType.custom
     label: str | None = None  # user-provided name for A/B labeling
     parent_job_id: UUID | None = None  # link to previous run for delta-aware feedback
+    user_email: str | None = None
 
     @field_validator("url")
     @classmethod
@@ -157,3 +158,26 @@ class RunHistoryEntry(BaseModel):
 class RunHistoryResponse(BaseModel):
     content_group_id: UUID
     runs: list[RunHistoryEntry]
+
+
+class CampaignSummary(BaseModel):
+    content_group_id: UUID
+    campaign_name: str | None = None
+    media_count: int
+    latest_score: float
+    first_score: float
+    delta: float
+    content_type: str
+    created_at: str
+    latest_at: str
+
+
+class MarketerProfileResponse(BaseModel):
+    user_email: str
+    overall_score: float
+    total_analyses: int
+    ai_summary: str | None = None
+    ai_strengths: list[dict] | None = None
+    ai_weaknesses: list[dict] | None = None
+    ai_trends: list[dict] | None = None
+    last_refreshed_at: str | None = None

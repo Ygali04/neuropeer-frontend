@@ -174,10 +174,13 @@ def _datacrunch_create_instance(
     logger.info("Created startup script: %s", script_obj.id)
 
     # Find available instance type + location
+    # VRAM cap: only allow single-GPU instances (1x prefix) to avoid
+    # accidentally provisioning multi-GPU monsters ($14+/hr)
+    # TRIBE v2 needs ~30GB VRAM — a single A100 80GB is plenty
+    ALLOWED_PREFIXES = ["1A100", "1H100", "1L40", "1A6000", "1RTX"]
     avail = client.instances.get_availabilities()
     inst_type = settings.datacrunch_instance_type
     location = None
-    gpu_keywords = ["A100", "H100", "H200", "L40"]
 
     # Try preferred type first
     for entry in avail:
@@ -187,13 +190,13 @@ def _datacrunch_create_instance(
             location = loc
             break
 
-    # Fallback: any GPU
+    # Fallback: any SINGLE-GPU instance (capped by prefix)
     if not location:
         for entry in avail:
             loc = entry["location_code"] if isinstance(entry, dict) else entry.location_code
             types = entry["availabilities"] if isinstance(entry, dict) else entry.availabilities
             for t in types:
-                if any(kw in t for kw in gpu_keywords):
+                if any(t.startswith(p) for p in ALLOWED_PREFIXES):
                     inst_type = t
                     location = loc
                     break
@@ -202,7 +205,7 @@ def _datacrunch_create_instance(
 
     if not location:
         client.startup_scripts.delete_by_id(script_obj.id)
-        raise DataCrunchError(f"No GPU instances available. Checked: {avail}")
+        raise DataCrunchError(f"No single-GPU instances available. Checked: {avail}")
 
     logger.info("Using %s in %s", inst_type, location)
 

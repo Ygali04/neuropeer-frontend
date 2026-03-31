@@ -39,6 +39,8 @@ class Job(Base):
     content_group_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), default=uuid.uuid4, nullable=False
     )
+    campaign_name: Mapped[str | None] = mapped_column(Text)
+    user_email: Mapped[str | None] = mapped_column(Text)
 
     result: Mapped[Result | None] = relationship("Result", back_populates="job", uselist=False)
 
@@ -79,6 +81,22 @@ class Result(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     job: Mapped[Job] = relationship("Job", back_populates="result")
+
+
+class MarketerProfile(Base):
+    __tablename__ = "marketer_profiles"
+
+    user_email: Mapped[str] = mapped_column(Text, primary_key=True)
+    overall_score: Mapped[float] = mapped_column(Float, default=0)
+    total_analyses: Mapped[int] = mapped_column(default=0)
+    ai_summary: Mapped[str | None] = mapped_column(Text)
+    ai_strengths: Mapped[dict | None] = mapped_column(JSON)
+    ai_weaknesses: Mapped[dict | None] = mapped_column(JSON)
+    ai_trends: Mapped[dict | None] = mapped_column(JSON)
+    last_refreshed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    refresh_threshold: Mapped[int] = mapped_column(default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 async def get_session() -> AsyncSession:

@@ -45,6 +45,8 @@ class Settings(BaseSettings):
 
     # AI Feedback (OpenRouter)
     openrouter_api_key: str = ""
+    # Cheap model for simple naming tasks
+    openrouter_cheap_model: str = "meta-llama/llama-3.2-1b-instruct:free"
 
     # Inference
     device: str = "cuda"  # cuda / cpu

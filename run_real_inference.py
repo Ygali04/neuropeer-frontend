@@ -125,16 +125,17 @@ def main():
     avail = client.instances.get_availabilities()
     gpu_candidates = []
     # Priority: preferred type first, then A100s, then H100s, then others
-    gpu_keywords = ["A100", "H100", "H200", "L40", "A6000", "RTX", "V100"]
+    # ONLY allow single-GPU instances (1x prefix) to avoid multi-GPU costs
+    ALLOWED_PREFIXES = ["1A100", "1H100", "1L40", "1A6000", "1RTX", "1V100"]
     for entry in avail:
         loc_code = entry["location_code"] if isinstance(entry, dict) else entry.location_code
         instance_list = entry["availabilities"] if isinstance(entry, dict) else entry.availabilities
         # Preferred type first
         if INSTANCE_TYPE in instance_list:
             gpu_candidates.insert(0, (INSTANCE_TYPE, loc_code))
-        # Then all other GPU types
+        # Then single-GPU types only
         for itype in instance_list:
-            if any(kw in itype for kw in gpu_keywords) and (itype, loc_code) not in gpu_candidates:
+            if any(itype.startswith(p) for p in ALLOWED_PREFIXES) and (itype, loc_code) not in gpu_candidates:
                 gpu_candidates.append((itype, loc_code))
     if not gpu_candidates:
         raise RuntimeError(f"No GPU instances available anywhere. Availabilities: {avail}")

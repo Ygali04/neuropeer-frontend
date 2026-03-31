@@ -12,10 +12,12 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://neuropeer-api-produ
 export async function submitAnalysis(
   url: string,
   contentType: ContentType,
-  parentJobId?: string
+  parentJobId?: string,
+  userEmail?: string
 ): Promise<{ job_id: string; websocket_url: string }> {
   const body: Record<string, unknown> = { url, content_type: contentType };
   if (parentJobId) body.parent_job_id = parentJobId;
+  if (userEmail) body.user_email = userEmail;
 
   const res = await fetch(`${API_BASE}/api/v1/analyze`, {
     method: "POST",
@@ -93,6 +95,34 @@ export async function getRunHistory(
   const res = await fetch(`${API_BASE}/api/v1/results/${jobId}/history`);
   if (!res.ok) return { content_group_id: "", runs: [] };
   return res.json();
+}
+
+export async function getProfile(
+  userEmail: string
+): Promise<import("./types").MarketerProfile> {
+  const res = await fetch(`${API_BASE}/api/v1/profile?user_email=${encodeURIComponent(userEmail)}`);
+  if (!res.ok) return { user_email: userEmail, overall_score: 0, total_analyses: 0, ai_summary: null, ai_strengths: [], ai_weaknesses: [], ai_trends: [], last_refreshed_at: null };
+  return res.json();
+}
+
+export async function getCampaigns(
+  userEmail?: string
+): Promise<import("./types").CampaignSummary[]> {
+  const params = userEmail ? `?user_email=${encodeURIComponent(userEmail)}` : "";
+  const res = await fetch(`${API_BASE}/api/v1/campaigns${params}`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function renameCampaign(
+  contentGroupId: string,
+  name: string
+): Promise<void> {
+  await fetch(`${API_BASE}/api/v1/campaigns/${contentGroupId}/name`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
 }
 
 // ── WebSocket ────────────────────────────────────────────────────────────────
