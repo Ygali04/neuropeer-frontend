@@ -83,7 +83,7 @@ export default function DashboardPage() {
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-6 sm:space-y-8">
         {/* ── Top: Marketer Profile ──────────────────────────────────────────── */}
-        <MarketerProfileCard profile={profile} />
+        <MarketerProfileCard profile={profile} campaigns={campaigns} />
 
         {/* ── Middle: Score Timeline ────────────────────────────────────────── */}
         <ScoreTimeline campaigns={sortedCampaigns} overallScore={profile.overall_score} />

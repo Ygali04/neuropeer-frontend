@@ -1,14 +1,28 @@
 "use client";
 
-import { TrendingUp, TrendingDown, Minus, Brain } from "lucide-react";
-import type { MarketerProfile } from "@/lib/types";
+import { TrendingUp, TrendingDown, Minus, Brain, BarChart3, Clock, Zap, Target } from "lucide-react";
+import type { MarketerProfile, CampaignSummary } from "@/lib/types";
 
 interface Props {
   profile: MarketerProfile;
+  campaigns?: CampaignSummary[];
 }
 
-export function MarketerProfileCard({ profile }: Props) {
+export function MarketerProfileCard({ profile, campaigns = [] }: Props) {
   const scoreColor = profile.overall_score >= 75 ? "text-emerald-400" : profile.overall_score >= 50 ? "text-amber-400" : "text-red-400";
+
+  // Compute stats from campaigns
+  const totalVideos = campaigns.reduce((sum, c) => sum + c.media_count, 0);
+  const bestScore = campaigns.length > 0 ? Math.max(...campaigns.map(c => c.latest_score)) : 0;
+  const totalCampaigns = campaigns.length;
+  const avgDelta = campaigns.length > 0 ? Math.round(campaigns.reduce((sum, c) => sum + c.delta, 0) / campaigns.length) : 0;
+
+  const stats = [
+    { label: "Campaigns", value: totalCampaigns, icon: Target, color: "text-brand-400" },
+    { label: "Videos Analyzed", value: totalVideos, icon: BarChart3, color: "text-teal-400" },
+    { label: "Best Score", value: bestScore, icon: Zap, color: "text-emerald-400" },
+    { label: "Avg Improvement", value: `${avgDelta >= 0 ? "+" : ""}${avgDelta}`, icon: TrendingUp, color: avgDelta > 0 ? "text-emerald-400" : avgDelta < 0 ? "text-red-400" : "text-white/40" },
+  ];
 
   return (
     <div className="glass-card p-6 space-y-4">
@@ -27,6 +41,21 @@ export function MarketerProfileCard({ profile }: Props) {
           <div className="text-[10px] text-white/30 uppercase tracking-wider">Overall Score</div>
         </div>
       </div>
+
+      {/* Stat tiles */}
+      {totalVideos > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-white/[0.06]">
+          {stats.map(({ label, value, icon: Icon, color }) => (
+            <div key={label} className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+              <Icon className={`w-4 h-4 ${color} flex-shrink-0`} />
+              <div>
+                <div className="text-sm font-bold text-white/80 tabular-nums">{value}</div>
+                <div className="text-[9px] text-white/30 uppercase tracking-wider">{label}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {(profile.ai_strengths?.length > 0 || profile.ai_weaknesses?.length > 0) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-white/[0.06]">
