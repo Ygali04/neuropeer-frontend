@@ -90,7 +90,7 @@ export function MetricCard({ metric, expanded, onToggle }: Props) {
       {/* Animated slide-open content */}
       <div
         ref={contentRef}
-        className="overflow-hidden transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        className={`transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] ${expanded ? "overflow-visible" : "overflow-hidden"}`}
         style={{
           maxHeight: expanded ? contentRef.current?.scrollHeight ?? 500 : 0,
           opacity: expanded ? 1 : 0,

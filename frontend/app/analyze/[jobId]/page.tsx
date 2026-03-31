@@ -299,8 +299,8 @@ export default function AnalyzePage() {
 
         {/* ── Re-analyze Modal ──────────────────────────────────────────────── */}
         {showReanalyze && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="glass-card p-6 max-w-md w-full mx-4 space-y-4">
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowReanalyze(false)}>
+            <div className="tooltip-card p-6 max-w-md w-full mx-4 space-y-4 rounded-2xl shadow-2xl border border-white/[0.1]" onClick={(e) => e.stopPropagation()}>
               <h3 className="text-lg font-semibold text-white">Re-analyze</h3>
               <p className="text-sm text-white/40">Run a new analysis linked to this report to track improvement.</p>
               <Button className="w-full" onClick={() => handleReanalyze()} disabled={reanalyzeLoading}>
@@ -309,7 +309,7 @@ export default function AnalyzePage() {
               </Button>
               <div className="relative">
                 <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/[0.06]" /></div>
-                <div className="relative flex justify-center"><span className="px-3 text-[10px] text-white/20 uppercase tracking-wider" style={{ background: "var(--background)" }}>or</span></div>
+                <div className="relative flex justify-center"><span className="px-3 text-[10px] text-white/20 uppercase tracking-wider tooltip-card rounded">or</span></div>
               </div>
               <div className="flex gap-2">
                 <input type="text" placeholder="Paste new video URL…" value={reanalyzeUrl} onChange={(e) => setReanalyzeUrl(e.target.value)} className="flex-1 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-brand-500/50" />
@@ -323,7 +323,7 @@ export default function AnalyzePage() {
         {/* ── Floating Progress Modal (over skeleton) ──────────────────── */}
         {(isActiveComputation || isLoadingReport) && (
           <div className="fixed inset-x-0 top-20 z-50 flex justify-center pointer-events-none">
-            <div className="pointer-events-auto glass-card !bg-[#12101a]/95 backdrop-blur-xl p-5 rounded-2xl shadow-2xl shadow-black/40 border border-white/[0.08] max-w-md w-full mx-4 animate-fade-up">
+            <div className="pointer-events-auto tooltip-card backdrop-blur-xl p-5 rounded-2xl shadow-2xl border border-white/[0.08] max-w-md w-full mx-4 animate-fade-up">
               {isLoadingReport ? (
                 <div className="flex items-center gap-3">
                   <Loader2 className="w-5 h-5 text-brand-400 animate-spin flex-shrink-0" />
