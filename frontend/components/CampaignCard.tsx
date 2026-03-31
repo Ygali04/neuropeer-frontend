@@ -87,7 +87,7 @@ export function CampaignCard({ campaign, onRename }: Props) {
           {new Date(campaign.created_at).toLocaleDateString()} — {new Date(campaign.latest_at).toLocaleDateString()}
         </span>
         <Link
-          href={`/analyze/${campaign.content_group_id}`}
+          href={`/analyze/${campaign.latest_job_id ?? campaign.content_group_id}`}
           className="text-[10px] text-brand-400 hover:text-brand-300 transition-colors opacity-0 group-hover:opacity-100"
         >
           View campaign →

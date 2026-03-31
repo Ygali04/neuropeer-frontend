@@ -9,10 +9,41 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+import json
+
+import redis.asyncio as aioredis
+
 from backend.config import settings
 from backend.models.db import Job, Result
 
 router = APIRouter(tags=["Campaigns"])
+
+
+class AssignRequest(BaseModel):
+    job_id: str
+    user_email: str
+    campaign_name: str | None = None
+
+
+@router.post("/campaigns/assign")
+async def assign_job_to_user(body: AssignRequest) -> dict:
+    """Assign a job to a user's profile and optionally name the campaign."""
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with Session() as session:
+        stmt = select(Job).where(Job.id == UUID(body.job_id))
+        job = (await session.execute(stmt)).scalar_one_or_none()
+        if not job:
+            await engine.dispose()
+            raise HTTPException(status_code=404, detail="Job not found")
+        job.user_email = body.user_email
+        if body.campaign_name:
+            job.campaign_name = body.campaign_name
+        await session.commit()
+
+    await engine.dispose()
+    return {"job_id": body.job_id, "user_email": body.user_email, "campaign_name": body.campaign_name}
 
 
 class RenameRequest(BaseModel):
@@ -45,25 +76,49 @@ async def list_campaigns(user_email: str | None = None) -> list[dict]:
         )
         groups = (await session.execute(groups_stmt)).all()
 
+        # Redis for reading cached scores (source of truth for frontend)
+        r = aioredis.from_url(settings.redis_url, decode_responses=True)
+
         campaigns = []
         for cg_id, name, count, ct, created, latest in groups:
-            latest_stmt = (
-                select(Result.neural_score_total)
-                .join(Job, Job.id == Result.job_id)
-                .where(Job.content_group_id == cg_id)
+            # Get latest and first job IDs
+            latest_job_stmt = (
+                select(Job.id)
+                .where(Job.content_group_id == cg_id, Job.status == "complete")
                 .order_by(Job.created_at.desc())
                 .limit(1)
             )
-            latest_score = (await session.execute(latest_stmt)).scalar_one_or_none() or 0
+            latest_job_id = (await session.execute(latest_job_stmt)).scalar_one_or_none()
 
-            first_stmt = (
-                select(Result.neural_score_total)
-                .join(Job, Job.id == Result.job_id)
-                .where(Job.content_group_id == cg_id)
+            first_job_stmt = (
+                select(Job.id)
+                .where(Job.content_group_id == cg_id, Job.status == "complete")
                 .order_by(Job.created_at.asc())
                 .limit(1)
             )
-            first_score = (await session.execute(first_stmt)).scalar_one_or_none() or 0
+            first_job_id = (await session.execute(first_job_stmt)).scalar_one_or_none()
+
+            # Read scores from Redis first (matches what frontend report shows), fall back to DB
+            latest_score = 0
+            first_score = 0
+
+            if latest_job_id:
+                raw = await r.get(f"neuropeer:result:{latest_job_id}")
+                if raw:
+                    latest_score = json.loads(raw).get("neural_score", {}).get("total", 0)
+                else:
+                    res = (await session.execute(select(Result.neural_score_total).where(Result.job_id == latest_job_id))).scalar_one_or_none()
+                    latest_score = res or 0
+
+            if first_job_id:
+                raw = await r.get(f"neuropeer:result:{first_job_id}")
+                if raw:
+                    first_score = json.loads(raw).get("neural_score", {}).get("total", 0)
+                else:
+                    res = (await session.execute(select(Result.neural_score_total).where(Result.job_id == first_job_id))).scalar_one_or_none()
+                    first_score = res or 0
+
+            await r.aclose()
 
             campaigns.append({
                 "content_group_id": str(cg_id),
@@ -75,6 +130,7 @@ async def list_campaigns(user_email: str | None = None) -> list[dict]:
                 "content_type": ct or "custom",
                 "created_at": created.isoformat() if created else "",
                 "latest_at": latest.isoformat() if latest else "",
+                "latest_job_id": str(latest_job_id) if latest_job_id else None,
             })
 
     await engine.dispose()
