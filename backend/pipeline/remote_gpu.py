@@ -104,7 +104,7 @@ def _run_on_datacrunch(
 
     try:
         # 2. Create instance (finds available GPU, creates startup script)
-        instance_id, script_id = _datacrunch_create_instance(job_id, video_s3_key, vertex_key, sentinel_done, sentinel_error)
+        instance_id, script_id = _datacrunch_create_instance(job_id, video_s3_key, events_s3_key, vertex_key, sentinel_done, sentinel_error)
         logger.info("DataCrunch instance %s created for job %s", instance_id, job_id)
 
         # 3. Poll S3 for sentinel
@@ -151,6 +151,7 @@ def _datacrunch_client():
 def _datacrunch_create_instance(
     job_id: str,
     video_s3_key: str,
+    events_s3_key: str,
     output_s3_key: str,
     sentinel_done: str,
     sentinel_error: str,
@@ -168,7 +169,7 @@ def _datacrunch_create_instance(
         logger.info("Using SSH key: %s", ssh_key_ids[0])
 
     # Create startup script as a separate resource (SDK requirement)
-    script_content = _build_startup_script(video_s3_key, output_s3_key, sentinel_done, sentinel_error)
+    script_content = _build_startup_script(video_s3_key, events_s3_key, output_s3_key, sentinel_done, sentinel_error)
     script_obj = client.startup_scripts.create(name=f"neuropeer-{job_id[:8]}", script=script_content)
     logger.info("Created startup script: %s", script_obj.id)
 
@@ -271,6 +272,7 @@ def _datacrunch_delete(instance_id: str) -> None:
 
 def _build_startup_script(
     video_s3_key: str,
+    events_s3_key: str,
     output_s3_key: str,
     sentinel_done: str,
     sentinel_error: str,
