@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Brain, Zap, BarChart3, GitCompare, Activity, Sparkles, Clock, ExternalLink, Trash2 } from "lucide-react";
+import { Brain, Zap, BarChart3, GitCompare, Activity, Sparkles, Clock, ExternalLink, Trash2, ArrowRight } from "lucide-react";
 import { UrlInputCard } from "@/components/UrlInputCard";
 import { UserMenu } from "@/components/UserMenu";
 import { Badge } from "@/components/ui/badge";
@@ -126,16 +126,28 @@ export default function HomePage() {
           <UrlInputCard onSubmit={handleSubmit} loading={loading} showCompareOption onCompare={handleCompare} />
         </div>
 
-        {/* ── Featured Real Report ─────────────────────────────────────── */}
-        <div className="w-full max-w-2xl mt-12 animate-fade-up delay-400">
+        {/* ── Disclaimer ────────────────────────────────────────────────── */}
+        <div className="w-full max-w-2xl mt-6 animate-fade-up delay-350">
+          <div className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-amber-500/[0.06] border border-amber-500/10">
+            <Clock className="w-3.5 h-3.5 text-amber-400/60 flex-shrink-0" />
+            <p className="text-[11px] text-amber-400/60">
+              Full neural analysis takes ~7 minutes — includes GPU instance provisioning, TRIBE v2 inference (4 modality passes), and 20-metric computation.
+            </p>
+          </div>
+        </div>
+
+        {/* ── See an Example ──────────────────────────────────────────────── */}
+        <div className="w-full max-w-2xl mt-14 animate-fade-up delay-400">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-1 h-4 rounded-full bg-gradient-to-b from-brand-400 to-brand-600" />
+            <h2 className="font-[family-name:var(--font-display)] text-sm font-semibold text-white/60 uppercase tracking-wider">See an Example</h2>
+          </div>
           <Link
             href="/analyze/b5c2b795-3db7-4454-af30-48e7c237d375"
             className="glass-card glass-card-hover p-5 flex items-center gap-5 group relative overflow-hidden"
           >
-            {/* Glow accent */}
             <div className="absolute -top-10 -right-10 w-32 h-32 rounded-full bg-brand-500/10 blur-2xl group-hover:bg-brand-500/20 transition-all" />
 
-            {/* Score circle */}
             <div className="relative flex-shrink-0">
               <div className="w-16 h-16 rounded-full flex items-center justify-center bg-gradient-to-br from-amber-500/20 to-brand-500/20 border border-amber-500/30">
                 <span className="font-[family-name:var(--font-display)] text-2xl font-bold text-amber-400">40.7</span>
@@ -145,7 +157,6 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Info */}
             <div className="flex-1 min-w-0 relative">
               <div className="flex items-center gap-2 mb-1">
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-brand-500/10 border border-brand-500/20 text-brand-400">
@@ -155,15 +166,14 @@ export default function HomePage() {
                   A100 GPU
                 </span>
               </div>
-              <p className="text-sm text-white/70 font-medium truncate">Instagram Reel — NeuroPeer Demo</p>
+              <p className="text-sm text-white/70 font-medium truncate">BlackMirror - Instagram Reel</p>
               <p className="text-[11px] text-white/30 mt-0.5">
                 64.9s · 20,484 vertices · 65 timesteps · Hook: 49.6 · Attention: 68.8 · Hold Rate: 87.7
               </p>
             </div>
 
-            {/* Arrow */}
             <div className="flex-shrink-0 text-white/20 group-hover:text-brand-400 transition-colors">
-              <ExternalLink className="w-4 h-4" />
+              <ArrowRight className="w-4 h-4" />
             </div>
           </Link>
           <p className="text-center text-[10px] text-white/20 mt-2">
@@ -192,8 +202,8 @@ export default function HomePage() {
           ))}
         </div>
 
-        {/* ── Past Runs ───────────────────────────────────────────────────── */}
-        {history.length > 0 && (
+        {/* ── Past Runs (only for logged-in users) ─────────────────────── */}
+        {session && history.length > 0 && (
           <div className="w-full max-w-2xl mt-20 animate-fade-up delay-600">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
