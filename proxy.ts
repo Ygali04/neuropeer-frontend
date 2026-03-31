@@ -1,17 +1,19 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const IS_MOCK = process.env.NEXT_PUBLIC_MOCK === "1";
 const protectedPaths = ["/analyze"];
-const DEMO_PATHS = ["/analyze/demo-instagram-reel", "/analyze/demo-youtube-preroll"];
+// Public report pages — accessible without sign-in
+const publicPaths = [
+  "/analyze/demo-instagram-reel",
+  "/analyze/demo-youtube-preroll",
+  "/analyze/b5c2b795-3db7-4454-af30-48e7c237d375",
+];
 
 export function proxy(request: NextRequest) {
-  if (IS_MOCK) return NextResponse.next();
-
   const { pathname } = request.nextUrl;
 
-  // Demo reports are always public
-  if (DEMO_PATHS.some((p) => pathname.startsWith(p))) {
+  // Public paths bypass auth
+  if (publicPaths.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
 
