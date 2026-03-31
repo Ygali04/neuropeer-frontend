@@ -192,6 +192,9 @@ body {
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    LIGHT MODE
+
+   The core trick: redefine --color-white to a dark color so ALL Tailwind
+   text-white/xx, border-white/xx, bg-white/xx classes automatically invert.
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 html.light {
@@ -199,6 +202,9 @@ html.light {
   --foreground: #1a1714;
   --muted: #7a7570;
   --muted-foreground: #9a9590;
+
+  /* THE KEY: redefine "white" so text-white/60 becomes text-dark/60 in light mode */
+  --color-white: #1a1714;
 }
 
 html.light body {
@@ -214,39 +220,37 @@ html.light ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
 /* ─── Light: Glass Card ────────────────────────────────────────────────────── */
 
 html.light .glass-card {
-  background: linear-gradient(135deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.5) 100%);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.03);
+  background: linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.6) 100%);
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03), 0 4px 16px rgba(0,0,0,0.02);
+  backdrop-filter: blur(12px);
 }
 
 html.light .glass-card-hover:hover {
   border-color: rgba(249, 115, 22, 0.25);
-  box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.08), 0 8px 32px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.06), 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 
-/* ─── Light: Gradient Mesh Background ──────────────────────────────────────── */
+/* ─── Light: Mesh Background ──────────────────────────────────────────────── */
 
 html.light .bg-mesh {
   background:
-    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(249, 115, 22, 0.04) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 50% at 80% 80%, rgba(45, 212, 191, 0.03) 0%, transparent 60%),
-    radial-gradient(ellipse 50% 40% at 50% 50%, rgba(168, 85, 247, 0.02) 0%, transparent 60%),
+    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(249, 115, 22, 0.03) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 80% 80%, rgba(45, 212, 191, 0.02) 0%, transparent 60%),
     var(--background);
 }
 
-/* ─── Light: Noise Overlay (hidden in light mode) ──────────────────────────── */
+/* ─── Light: Hide noise overlay ────────────────────────────────────────────── */
 
-html.light .noise-overlay::before {
-  opacity: 0;
-}
+html.light .noise-overlay::before { opacity: 0; }
 
-/* ─── Light: Glow Effects ──────────────────────────────────────────────────── */
+/* ─── Light: Soften glows ──────────────────────────────────────────────────── */
 
 html.light .glow-brand {
-  box-shadow: 0 0 30px rgba(249, 115, 22, 0.1), 0 0 60px rgba(249, 115, 22, 0.03);
+  box-shadow: 0 0 20px rgba(249, 115, 22, 0.08);
 }
 
-/* ─── Light: Text Gradient ─────────────────────────────────────────────────── */
+/* ─── Light: Text gradient (darker for contrast) ──────────────────────────── */
 
 html.light .text-gradient-brand {
   background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
@@ -262,23 +266,34 @@ html.light ::selection {
   color: #1a1714;
 }
 
-/* ─── Light: Generic overrides for white/[opacity] text ────────────────────── */
-/* These handle the widespread use of text-white/xx in the codebase */
+/* ─── Light: Fix elements that use inline styles with dark backgrounds ────── */
 
-html.light {
-  /* Borders */
-  & [class*="border-white\\/"] { border-color: rgba(0, 0, 0, 0.08); }
-  & [class*="border-white\\/\\["] { border-color: rgba(0, 0, 0, 0.08); }
+html.light [style*="background: #15131a"],
+html.light [style*="background:#15131a"] {
+  background: #ffffff !important;
+  border-color: rgba(0,0,0,0.1) !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.08) !important;
+}
 
-  /* Invert key opaque backgrounds used in tooltips/dropdowns */
-  & [style*="background: #15131a"],
-  & [style*="background:#15131a"] {
-    background: #ffffff !important;
-    border-color: rgba(0,0,0,0.1) !important;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.1) !important;
-  }
-  & [style*="background: rgba(15, 13, 20"],
-  & [style*="background: rgba(7, 6, 11"] {
-    background: rgba(255, 255, 255, 0.95) !important;
-  }
+html.light [style*="background: rgba(15, 13, 20"],
+html.light [style*="background: rgba(7, 6, 11"] {
+  background: rgba(255, 255, 255, 0.96) !important;
+}
+
+/* ─── Light: Fix the Google sign-in button (should stay white) ─────────── */
+
+html.light .bg-white { background-color: #ffffff; }
+html.light .text-gray-800 { color: #1f2937; }
+
+/* ─── Light: Fix brand gradient buttons (keep them orange, not dark) ────── */
+
+html.light [class*="from-brand-400"][class*="to-brand-600"] {
+  --tw-gradient-from: #fb923c;
+  --tw-gradient-to: #ea580c;
+}
+
+/* ─── Light: Nav header backdrop ───────────────────────────────────────────── */
+
+html.light [class*="bg-\\[\\#07060b\\]"] {
+  background-color: rgba(248, 247, 244, 0.85) !important;
 }
