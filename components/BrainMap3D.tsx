@@ -338,14 +338,13 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
         // Wider normalization range → brighter, more visible activations
         const activation = Math.max(0, Math.min(1, (raw + 0.1) / 0.3));
 
-        // Concentrated patches: spatial seed modulates, but even low-seed
-        // areas show some color when activation is strong
+        // Concentrated patches: spatial seed gates which vertices show color
         const seed = seeds[i];
-        const concentrated = activation * (seed > 0.5 ? 1.0 : seed > 0.3 ? 0.6 : 0.25);
-        // Boost: square root to make mid-range brighter
+        const concentrated = activation * (seed > 0.55 ? 1.0 : seed > 0.35 ? 0.5 : 0.12);
         const clamped = Math.min(1, Math.sqrt(Math.max(0, concentrated)));
 
-        if (clamped < 0.05) {
+        // Higher threshold = more gray, less filled regions
+        if (clamped < 0.25) {
           colors[i*3] = bgR; colors[i*3+1] = bgG; colors[i*3+2] = bgB;
         } else if (mode === "heatmap") {
           const [hr, hg, hb, alpha] = hotColor(clamped);
