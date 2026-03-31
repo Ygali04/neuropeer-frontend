@@ -190,13 +190,7 @@ async def _run_profile_update(user_email: str) -> None:
             total = profile.total_analyses
             threshold = profile.refresh_threshold or 0
 
-            # ── 2. Decide whether to regenerate the full AI profile ───────
-            if total < threshold + 5:
-                await session.commit()
-                return
-
-            # ── 3. Aggregate campaign data ────────────────────────────────
-            # Get all jobs belonging to this user that have a result
+            # ── 2. Always recompute overall_score ────────────────────────
             jobs_stmt = (
                 select(Job)
                 .where(Job.user_email == user_email)
@@ -226,45 +220,45 @@ async def _run_profile_update(user_email: str) -> None:
 
             # Compute overall_score (mean of neural_score_total across latest campaigns)
             overall_score = mean(r.neural_score_total for r in results)
-
-            # Aggregate per-metric averages across all latest results
-            metric_sums: dict[str, list[float]] = {}
-            for result in results:
-                if not result.metrics_json:
-                    continue
-                for m in result.metrics_json:
-                    name = m.get("name", "")
-                    score = m.get("score")
-                    if name and score is not None:
-                        metric_sums.setdefault(name, []).append(float(score))
-
-            metric_averages: dict[str, float] = {
-                name: mean(scores) for name, scores in metric_sums.items() if scores
-            }
-
-            num_campaigns = len(results)
-
-            # ── 4. Call OpenRouter for AI profile ─────────────────────────
-            messages = _build_profile_prompt(
-                overall_score=overall_score,
-                metric_averages=metric_averages,
-                total_analyses=total,
-                num_campaigns=num_campaigns,
-            )
-            ai_data = _call_openrouter(messages)
-
-            # ── 5. Persist updated profile ────────────────────────────────
             profile.overall_score = overall_score
-            profile.refresh_threshold = total  # next refresh at total + 5
-
-            if ai_data:
-                profile.ai_summary = ai_data.get("summary") or profile.ai_summary
-                profile.ai_strengths = ai_data.get("strengths") or profile.ai_strengths
-                profile.ai_weaknesses = ai_data.get("weaknesses") or profile.ai_weaknesses
-                profile.ai_trends = ai_data.get("trends") or profile.ai_trends
-                profile.last_refreshed_at = now
-
             profile.updated_at = now
+
+            # ── 3. Only regenerate AI profile every 5 analyses ───────────
+            if total >= threshold + 5:
+                # Aggregate per-metric averages across all latest results
+                metric_sums: dict[str, list[float]] = {}
+                for result in results:
+                    if not result.metrics_json:
+                        continue
+                    for m in result.metrics_json:
+                        name = m.get("name", "")
+                        score = m.get("score")
+                        if name and score is not None:
+                            metric_sums.setdefault(name, []).append(float(score))
+
+                metric_averages: dict[str, float] = {
+                    name: mean(scores) for name, scores in metric_sums.items() if scores
+                }
+
+                num_campaigns = len(results)
+
+                messages = _build_profile_prompt(
+                    overall_score=overall_score,
+                    metric_averages=metric_averages,
+                    total_analyses=total,
+                    num_campaigns=num_campaigns,
+                )
+                ai_data = _call_openrouter(messages)
+
+                profile.refresh_threshold = total  # next refresh at total + 5
+
+                if ai_data:
+                    profile.ai_summary = ai_data.get("summary") or profile.ai_summary
+                    profile.ai_strengths = ai_data.get("strengths") or profile.ai_strengths
+                    profile.ai_weaknesses = ai_data.get("weaknesses") or profile.ai_weaknesses
+                    profile.ai_trends = ai_data.get("trends") or profile.ai_trends
+                    profile.last_refreshed_at = now
+
             await session.commit()
 
             logger.info(
