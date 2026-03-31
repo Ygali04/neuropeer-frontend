@@ -189,3 +189,96 @@ body {
   background: rgba(249, 115, 22, 0.3);
   color: #fff;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   LIGHT MODE
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+html.light {
+  --background: #f8f7f4;
+  --foreground: #1a1714;
+  --muted: #7a7570;
+  --muted-foreground: #9a9590;
+}
+
+html.light body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* ─── Light: Scrollbar ─────────────────────────────────────────────────────── */
+
+html.light ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); }
+html.light ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
+
+/* ─── Light: Glass Card ────────────────────────────────────────────────────── */
+
+html.light .glass-card {
+  background: linear-gradient(135deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.5) 100%);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.03);
+}
+
+html.light .glass-card-hover:hover {
+  border-color: rgba(249, 115, 22, 0.25);
+  box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.08), 0 8px 32px rgba(0, 0, 0, 0.08);
+}
+
+/* ─── Light: Gradient Mesh Background ──────────────────────────────────────── */
+
+html.light .bg-mesh {
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(249, 115, 22, 0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 80% 80%, rgba(45, 212, 191, 0.03) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 50% 50%, rgba(168, 85, 247, 0.02) 0%, transparent 60%),
+    var(--background);
+}
+
+/* ─── Light: Noise Overlay (hidden in light mode) ──────────────────────────── */
+
+html.light .noise-overlay::before {
+  opacity: 0;
+}
+
+/* ─── Light: Glow Effects ──────────────────────────────────────────────────── */
+
+html.light .glow-brand {
+  box-shadow: 0 0 30px rgba(249, 115, 22, 0.1), 0 0 60px rgba(249, 115, 22, 0.03);
+}
+
+/* ─── Light: Text Gradient ─────────────────────────────────────────────────── */
+
+html.light .text-gradient-brand {
+  background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ─── Light: Selection ─────────────────────────────────────────────────────── */
+
+html.light ::selection {
+  background: rgba(249, 115, 22, 0.2);
+  color: #1a1714;
+}
+
+/* ─── Light: Generic overrides for white/[opacity] text ────────────────────── */
+/* These handle the widespread use of text-white/xx in the codebase */
+
+html.light {
+  /* Borders */
+  & [class*="border-white\\/"] { border-color: rgba(0, 0, 0, 0.08); }
+  & [class*="border-white\\/\\["] { border-color: rgba(0, 0, 0, 0.08); }
+
+  /* Invert key opaque backgrounds used in tooltips/dropdowns */
+  & [style*="background: #15131a"],
+  & [style*="background:#15131a"] {
+    background: #ffffff !important;
+    border-color: rgba(0,0,0,0.1) !important;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.1) !important;
+  }
+  & [style*="background: rgba(15, 13, 20"],
+  & [style*="background: rgba(7, 6, 11"] {
+    background: rgba(255, 255, 255, 0.95) !important;
+  }
+}

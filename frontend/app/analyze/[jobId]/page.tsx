@@ -22,6 +22,7 @@ import { generateReportPDF } from "@/lib/export-pdf";
 import { addRunToHistory } from "@/lib/run-history";
 import { useAuth } from "@/lib/auth-context";
 import { UserMenu } from "@/components/UserMenu";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import type { AnalysisResult, ProgressEvent } from "@/lib/types";
 
 import { Button } from "@/components/ui/button";
@@ -285,6 +286,7 @@ export default function AnalyzePage() {
                 </Button>
               </>
             )}
+            <ThemeToggle />
             <UserMenu />
           </div>
         </div>

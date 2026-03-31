@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Brain, Zap, BarChart3, GitCompare, Activity, Sparkles, Clock, ExternalLink, Trash2, ArrowRight } from "lucide-react";
 import { UrlInputCard } from "@/components/UrlInputCard";
 import { UserMenu } from "@/components/UserMenu";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Badge } from "@/components/ui/badge";
 import { submitAnalysis } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -92,6 +93,7 @@ export default function HomePage() {
               <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
               TRIBE v2
             </Badge>
+            <ThemeToggle />
             <UserMenu />
           </div>
         </div>
