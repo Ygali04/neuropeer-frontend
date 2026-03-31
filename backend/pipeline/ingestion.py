@@ -748,7 +748,7 @@ def _transcribe_elevenlabs(audio_path: Path) -> list[dict]:
             headers={"xi-api-key": settings.elevenlabs_api_key},
             data={"model_id": "scribe_v2", "tag_audio_events": "false", "timestamps_granularity": "word"},
             files={"file": (audio_path.name, f, "audio/wav")},
-            timeout=120,
+            timeout=30,  # Fast fail — if blocked by IP, don't wait 120s
         )
 
     if response.status_code != 200:

@@ -301,12 +301,19 @@ export HF_TOKEN="{settings.hf_token}"
 echo "=== NeuroPeer TRIBE v2 Inference ==="
 echo "Installing dependencies..."
 
-# Install tribev2 + deps in a venv (avoids PEP 668 issues)
-python3 -m venv /tmp/venv
+# Install tribev2 with optimized dependency resolution
+python3 -m venv /tmp/venv --system-site-packages
 source /tmp/venv/bin/activate
 pip install --upgrade pip -q
-pip install git+https://github.com/facebookresearch/tribev2.git 2>&1 | tail -5
-pip install boto3 2>&1 | tail -2
+
+# Install PyTorch first with CUDA (uses pre-built wheel, ~60s)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 -q 2>&1 | tail -2
+
+# Install tribev2 WITHOUT reinstalling torch (--no-deps + manual deps)
+pip install git+https://github.com/facebookresearch/tribev2.git --no-deps 2>&1 | tail -3
+pip install transformers huggingface-hub numpy pandas pyarrow scipy \
+  nilearn nibabel x-transformers einops soundfile moviepy julius \
+  exca neuralset neuraltrain boto3 polars mne spacy langdetect -q 2>&1 | tail -3
 
 echo "Dependencies installed."
 
