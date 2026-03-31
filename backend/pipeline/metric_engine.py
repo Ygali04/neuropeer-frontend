@@ -61,7 +61,7 @@ def hook_score(
     raw = float(nacc - ains)
     return MetricResult(
         name="Hook Score",
-        score=_norm(raw, -2.0, 2.0),
+        score=_norm(raw, -0.1, 0.1),
         raw_value=raw,
         description="Scroll-stop power: NAcc approach signal minus AIns avoidance at content onset (0–3s).",
         brain_region="Ventral striatum (NAcc) + Anterior insula",
@@ -79,7 +79,7 @@ def novelty_spike(predictions_full: np.ndarray) -> MetricResult:
     raw = float(combined.max())
     return MetricResult(
         name="Novelty Spike",
-        score=_norm(raw, 0.0, 3.0),
+        score=_norm(raw, 0.0, 0.3),
         raw_value=raw,
         description="Peak hippocampal novelty + TPJ reorienting response — measures strongest pattern interrupt.",
         brain_region="Medial temporal lobe + Temporoparietal junction",
@@ -96,7 +96,7 @@ def curiosity_gap_index(predictions_full: np.ndarray) -> MetricResult:
     raw = float(acc.mean())
     return MetricResult(
         name="Curiosity Gap Index",
-        score=_norm(raw, 0.0, 2.5),
+        score=_norm(raw, 0.0, 0.15),
         raw_value=raw,
         description="ACC conflict monitoring intensity — measures how strongly the content creates an unresolved information gap.",
         brain_region="Medial frontal cortex + Dorsal ACC",
@@ -132,7 +132,7 @@ def hold_rate(predictions_full: np.ndarray) -> MetricResult:
     raw = float(pfc / (abs(dmn) + 1e-6))
     return MetricResult(
         name="Hold Rate",
-        score=_norm(raw, 0.0, 5.0),
+        score=_norm(raw, 0.0, 10.0),
         raw_value=raw,
         description="PFC sustained engagement relative to DMN suppression — predicts ThruPlay and watch-through rate.",
         brain_region="Dorsolateral PFC (high) + Medial DMN (low)",
@@ -155,7 +155,7 @@ def attention_decay_rate(predictions_full: np.ndarray) -> MetricResult:
     raw = -slope
     return MetricResult(
         name="Attention Decay Rate",
-        score=_norm(raw, -0.5, 0.5),
+        score=_norm(raw, -0.02, 0.02),
         raw_value=raw,
         description="Rate of DMN re-engagement (mind wandering). Negative slope = retention; positive = drop-off risk.",
         brain_region="Default Mode Network (mPFC + PCC)",
@@ -193,7 +193,7 @@ def emotional_arousal(predictions_full: np.ndarray) -> MetricResult:
     raw = float(np.abs(limbic).mean())
     return MetricResult(
         name="Emotional Arousal",
-        score=_norm(raw, 0.0, 3.0),
+        score=_norm(raw, 0.0, 0.15),
         raw_value=raw,
         description="Mean absolute amygdala/limbic activation — measures emotional salience and affective intensity.",
         brain_region="Amygdala + Limbic system (inner temporal)",
@@ -219,7 +219,7 @@ def valence(predictions_full: np.ndarray) -> MetricResult:
     raw = float(nacc - ains)
     return MetricResult(
         name="Valence",
-        score=_norm(raw, -2.0, 2.0),
+        score=_norm(raw, -0.1, 0.1),
         raw_value=raw,
         description="NAcc vs AIns differential across full video. High = positive/rewarding. Low = aversive/avoidant.",
         brain_region="Ventral striatum (NAcc) vs. Anterior insula",
@@ -233,7 +233,7 @@ def reward_prediction(predictions_full: np.ndarray) -> MetricResult:
     raw = float(nacc)
     return MetricResult(
         name="Reward Prediction",
-        score=_norm(raw, 0.0, 2.0),
+        score=_norm(raw, 0.0, 0.1),
         raw_value=raw,
         description="Ventral striatum / NAcc reward circuit activation — neural correlate of purchase intent and CTA click likelihood.",
         brain_region="Ventral striatum (subcortical reward)",
@@ -248,7 +248,7 @@ def social_cognition(predictions_full: np.ndarray) -> MetricResult:
     raw = float(((mpfc + tpj) / 2).mean())
     return MetricResult(
         name="Social Cognition",
-        score=_norm(raw, 0.0, 2.5),
+        score=_norm(raw, 0.0, 0.1),
         raw_value=raw,
         description="mPFC + TPJ theory-of-mind network activation — predicts relatability and social sharing tendency.",
         brain_region="Medial PFC + Bilateral temporoparietal junction",
@@ -267,7 +267,7 @@ def visual_aesthetic_score(predictions_full: np.ndarray) -> MetricResult:
     raw = float(mpfc_ofc)
     return MetricResult(
         name="Visual Aesthetic Score",
-        score=_norm(raw, 0.0, 2.5),
+        score=_norm(raw, 0.0, 0.1),
         raw_value=raw,
         description="mOFC + mPFC aesthetic valuation circuit activation — neural correlate of visual beauty judgment.",
         brain_region="Medial orbitofrontal cortex + mPFC",
@@ -283,7 +283,7 @@ def sensory_richness(predictions_full: np.ndarray) -> MetricResult:
     raw = float(np.std(visual) + np.std(auditory))
     return MetricResult(
         name="Sensory Richness",
-        score=_norm(raw, 0.0, 3.0),
+        score=_norm(raw, 0.0, 0.3),
         raw_value=raw,
         description="Variability in visual + auditory cortex activation — measures production value and sensory engagement.",
         brain_region="Visual cortex (V1–V4) + Auditory cortex (A1/STS)",
@@ -297,7 +297,7 @@ def scene_composition(predictions_full: np.ndarray) -> MetricResult:
     raw = float(para)
     return MetricResult(
         name="Scene Composition",
-        score=_norm(raw, 0.0, 2.0),
+        score=_norm(raw, 0.0, 0.15),
         raw_value=raw,
         description="Parahippocampal place area activation — measures how well scene composition guides visual attention.",
         brain_region="Parahippocampal gyrus (PPA)",
@@ -316,7 +316,7 @@ def cognitive_load(predictions_full: np.ndarray) -> MetricResult:
     raw = float(dlpfc)
     return MetricResult(
         name="Cognitive Load",
-        score=_norm(raw, 0.0, 3.0),
+        score=_norm(raw, 0.0, 0.15),
         raw_value=raw,
         description="dlPFC activation — measures cognitive processing demand. High load may cause viewer fatigue and drop-off.",
         brain_region="Dorsolateral prefrontal cortex (dlPFC)",
@@ -338,7 +338,7 @@ def memory_encoding(predictions_full: np.ndarray) -> MetricResult:
     raw = float((hippo + para) / 2)
     return MetricResult(
         name="Memory Encoding",
-        score=_norm(raw, 0.0, 2.0),
+        score=_norm(raw, 0.0, 0.1),
         raw_value=raw,
         description="Hippocampal + parahippocampal activity — predicts brand recall and message retention probability.",
         brain_region="Hippocampal formation + Parahippocampal gyrus",
@@ -356,7 +356,7 @@ def mind_wandering(predictions_full: np.ndarray) -> MetricResult:
     # Invert so that high score = low mind wandering = good
     return MetricResult(
         name="Mind Wandering Risk",
-        score=_norm(-raw, -2.5, 0.0),
+        score=_norm(-raw, -0.15, 0.0),
         raw_value=raw,
         description="Inverse DMN activation — high DMN = disengagement risk. Score reflects content's ability to suppress mind wandering.",
         brain_region="Default Mode Network (mPFC + PCC + Angular gyrus)",
@@ -372,7 +372,7 @@ def message_clarity(predictions_full: np.ndarray) -> MetricResult:
     raw = float(lang)
     return MetricResult(
         name="Message Clarity",
-        score=_norm(raw, 0.0, 2.5),
+        score=_norm(raw, 0.0, 0.1),
         raw_value=raw,
         description="Broca's + Wernicke's area activation — measures how clearly the verbal/textual message is encoded.",
         brain_region="Left inferior frontal gyrus (Broca's) + Superior temporal gyrus (Wernicke's)",
@@ -421,7 +421,7 @@ def narration_impact(
     raw = float(lang_full - lang_video + (lang_text - lang_video))
     return MetricResult(
         name="Narration Impact",
-        score=_norm(raw, 0.0, 3.0),
+        score=_norm(raw, 0.0, 0.3),
         raw_value=raw,
         description="Language cortex delta: text-encoder contribution above video-only baseline — voiceover effectiveness.",
         brain_region="Broca's + Wernicke's area (language network)",

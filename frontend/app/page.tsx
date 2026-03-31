@@ -151,7 +151,7 @@ export default function HomePage() {
 
             <div className="relative flex-shrink-0">
               <div className="w-16 h-16 rounded-full flex items-center justify-center bg-gradient-to-br from-amber-500/20 to-brand-500/20 border border-amber-500/30">
-                <span className="font-[family-name:var(--font-display)] text-2xl font-bold text-amber-400">40.7</span>
+                <span className="font-[family-name:var(--font-display)] text-2xl font-bold text-amber-400">34.5</span>
               </div>
               <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center">
                 <span className="text-[8px] text-green-400 font-bold">REAL</span>
@@ -169,7 +169,7 @@ export default function HomePage() {
               </div>
               <p className="text-sm text-white/70 font-medium truncate">BlackMirror - Instagram Reel</p>
               <p className="text-[11px] text-white/30 mt-0.5">
-                64.9s · 20,484 vertices · 65 timesteps · Hook: 49.6 · Attention: 68.8 · Hold Rate: 87.7
+                64.9s · 20,484 vertices · 65 timesteps · Hook: 42.3 · Novelty: 22.8 · Re-engagement: 76.9
               </p>
             </div>
 
