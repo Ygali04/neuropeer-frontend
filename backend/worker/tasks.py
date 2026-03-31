@@ -192,8 +192,33 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
         _publish_progress(job_id, "inferring", 0.25, _inference_start_msg())
         _update_job_status(job_id, "inferring")
 
+        # Build TRIBE v2-compatible events DataFrame for DataCrunch
+        # (Video + Audio + Word events with sentence/context fields)
+        import re as _re
+        import pandas as _pd
+        full_text = " ".join(w["word"] for w in media.transcript_words)
+        sentences = [s.strip() for s in _re.split(r'[.!?]+', full_text) if s.strip()]
+        tribe_events = []
+        tribe_events.append({"type": "Video", "filepath": str(media.video_path), "start": 0,
+            "duration": media.duration_seconds, "timeline": "default", "subject": "default"})
+        tribe_events.append({"type": "Audio", "filepath": str(media.audio_path), "start": 0,
+            "duration": media.duration_seconds, "timeline": "default", "subject": "default"})
+        for w in media.transcript_words:
+            wt = w["word"].strip()
+            if not wt:
+                continue
+            sentence = full_text
+            for s in sentences:
+                if wt.lower() in s.lower():
+                    sentence = s
+                    break
+            tribe_events.append({"type": "Word", "text": wt, "start": w["start"],
+                "duration": max(w["end"] - w["start"], 0.01), "timeline": "default",
+                "subject": "default", "sentence": sentence, "context": sentence})
+        tribe_events_df = _pd.DataFrame(tribe_events)
+
         predictions, vertex_key = run_inference_backend(
-            job_id, events_df, work_dir, video_path=media.video_path
+            job_id, tribe_events_df, work_dir, video_path=media.video_path
         )
 
         _publish_progress(job_id, "inferring", 0.65, "All 4 modality passes complete.")

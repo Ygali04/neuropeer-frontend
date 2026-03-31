@@ -45,7 +45,7 @@ def run_inference_backend(
         if video_path is None:
             logger.warning("DataCrunch backend requires video_path; falling back to local")
             return _run_locally(job_id, events_df)
-        return _run_on_datacrunch(job_id, video_path)
+        return _run_on_datacrunch(job_id, video_path, events_df)
     return _run_locally(job_id, events_df)
 
 
@@ -78,23 +78,33 @@ class DataCrunchError(RuntimeError):
 def _run_on_datacrunch(
     job_id: str,
     video_path: Path,
+    events_df: pd.DataFrame | None = None,
 ) -> tuple[dict[Modality, np.ndarray], str]:
-    """Spin up a DataCrunch A100 spot, run TRIBE v2, download results, delete instance."""
-    logger.info("Provisioning DataCrunch A100 instance for job %s", job_id)
+    """Spin up a DataCrunch GPU, run TRIBE v2, download results, delete instance."""
+    logger.info("Provisioning DataCrunch GPU instance for job %s", job_id)
 
-    # 1. Upload the video file to S3 so the GPU instance can download it
+    # 1. Upload video + pre-built events to S3
     video_s3_key = f"staging/{job_id}/video{video_path.suffix}"
     _s3_upload(video_path.read_bytes(), video_s3_key)
+
+    # Upload pre-built events DataFrame (avoids whisperx dependency on GPU)
+    events_s3_key = f"staging/{job_id}/events.parquet"
+    if events_df is not None:
+        buf = io.BytesIO()
+        events_df.to_parquet(buf, index=False)
+        _s3_upload(buf.getvalue(), events_s3_key)
+        logger.info("Events DataFrame uploaded to S3")
     logger.info("Video uploaded to s3://%s/%s (%.1f MB)", settings.s3_bucket, video_s3_key, video_path.stat().st_size / (1024 * 1024))
 
     vertex_key = f"predictions/{job_id}/vertices.npz"
     sentinel_done = f"staging/{job_id}/done"
     sentinel_error = f"staging/{job_id}/error"
     instance_id: str | None = None
+    script_id: str | None = None
 
     try:
-        # 2. Create spot instance
-        instance_id = _datacrunch_create_instance(job_id, video_s3_key, vertex_key, sentinel_done, sentinel_error)
+        # 2. Create instance (finds available GPU, creates startup script)
+        instance_id, script_id = _datacrunch_create_instance(job_id, video_s3_key, vertex_key, sentinel_done, sentinel_error)
         logger.info("DataCrunch instance %s created for job %s", instance_id, job_id)
 
         # 3. Poll S3 for sentinel
@@ -107,7 +117,6 @@ def _run_on_datacrunch(
 
     except DataCrunchError as exc:
         logger.warning("DataCrunch inference failed for job %s (instance=%s): %s", job_id, instance_id, exc)
-        logger.warning("No local GPU fallback available — re-raising")
         raise
 
     finally:
@@ -116,6 +125,11 @@ def _run_on_datacrunch(
                 _datacrunch_delete(instance_id)
             except Exception:
                 logger.warning("Failed to delete DataCrunch instance %s", instance_id)
+        if script_id:
+            try:
+                _datacrunch_client().startup_scripts.delete_by_id(script_id)
+            except Exception:
+                pass
 
 
 # ── DataCrunch API client ────────────────────────────────────────────────────
@@ -140,10 +154,11 @@ def _datacrunch_create_instance(
     output_s3_key: str,
     sentinel_done: str,
     sentinel_error: str,
-) -> str:
-    """Create a DataCrunch A100 spot instance."""
+) -> tuple[str, str]:
+    """Create a DataCrunch spot instance. Returns (instance_id, script_id)."""
     client = _datacrunch_client()
 
+    # SSH keys
     ssh_key_ids = [k.strip() for k in settings.datacrunch_ssh_key_ids.split(",") if k.strip()]
     if not ssh_key_ids:
         keys = client.ssh_keys.get()
@@ -152,20 +167,60 @@ def _datacrunch_create_instance(
         ssh_key_ids = [keys[0].id]
         logger.info("Using SSH key: %s", ssh_key_ids[0])
 
-    startup_script = _build_startup_script(video_s3_key, output_s3_key, sentinel_done, sentinel_error)
+    # Create startup script as a separate resource (SDK requirement)
+    script_content = _build_startup_script(video_s3_key, output_s3_key, sentinel_done, sentinel_error)
+    script_obj = client.startup_scripts.create(name=f"neuropeer-{job_id[:8]}", script=script_content)
+    logger.info("Created startup script: %s", script_obj.id)
 
+    # Find available instance type + location
+    avail = client.instances.get_availabilities()
+    inst_type = settings.datacrunch_instance_type
+    location = None
+    gpu_keywords = ["A100", "H100", "H200", "L40"]
+
+    # Try preferred type first
+    for entry in avail:
+        loc = entry["location_code"] if isinstance(entry, dict) else entry.location_code
+        types = entry["availabilities"] if isinstance(entry, dict) else entry.availabilities
+        if inst_type in types:
+            location = loc
+            break
+
+    # Fallback: any GPU
+    if not location:
+        for entry in avail:
+            loc = entry["location_code"] if isinstance(entry, dict) else entry.location_code
+            types = entry["availabilities"] if isinstance(entry, dict) else entry.availabilities
+            for t in types:
+                if any(kw in t for kw in gpu_keywords):
+                    inst_type = t
+                    location = loc
+                    break
+            if location:
+                break
+
+    if not location:
+        client.startup_scripts.delete_by_id(script_obj.id)
+        raise DataCrunchError(f"No GPU instances available. Checked: {avail}")
+
+    logger.info("Using %s in %s", inst_type, location)
+
+    # Create instance with startup_script_id (not startup_script)
     try:
         instance = client.instances.create(
-            instance_type=settings.datacrunch_instance_type,
+            instance_type=inst_type,
             image=settings.datacrunch_image,
             ssh_key_ids=ssh_key_ids,
             hostname=f"neuropeer-{job_id[:8]}",
             description=f"NeuroPeer TRIBE v2 inference for job {job_id}",
-            is_spot=True,
-            startup_script=startup_script,
+            location=location,
+            is_spot=False,  # on-demand to avoid eviction
+            startup_script_id=script_obj.id,
+            max_wait_time=600,
         )
-        return instance.id
+        return instance.id, script_obj.id
     except Exception as exc:
+        client.startup_scripts.delete_by_id(script_obj.id)
         raise DataCrunchError(f"Failed to create DataCrunch instance: {exc}") from exc
 
 
@@ -241,25 +296,38 @@ export HF_TOKEN="{settings.hf_token}"
 echo "=== NeuroPeer TRIBE v2 Inference ==="
 echo "Installing dependencies..."
 
-# Install tribev2 from GitHub (includes torch, transformers, etc.)
+# Install tribev2 + deps in a venv (avoids PEP 668 issues)
+python3 -m venv /tmp/venv
+source /tmp/venv/bin/activate
+pip install --upgrade pip -q
 pip install git+https://github.com/facebookresearch/tribev2.git 2>&1 | tail -5
-pip install boto3 awscli 2>&1 | tail -2
+pip install boto3 2>&1 | tail -2
 
 echo "Dependencies installed."
 
-# Download video from S3
-echo "Downloading video from S3..."
-if [ -n "$S3_ENDPOINT_URL" ]; then
-    aws s3 cp "s3://$S3_BUCKET/{video_s3_key}" /tmp/video.mp4 --endpoint-url "$S3_ENDPOINT_URL"
-else
-    aws s3 cp "s3://$S3_BUCKET/{video_s3_key}" /tmp/video.mp4
-fi
-echo "Video downloaded: $(ls -lh /tmp/video.mp4)"
+# Download video + events from S3
+echo "Downloading files from S3..."
+python3 -c "
+import boto3, os
+s3 = boto3.client('s3',
+    endpoint_url=os.environ.get('S3_ENDPOINT_URL') or None,
+    aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+    aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
+    region_name=os.environ.get('AWS_DEFAULT_REGION', 'us-east-1'))
+s3.download_file(os.environ['S3_BUCKET'], '{video_s3_key}', '/tmp/video.mp4')
+try:
+    s3.download_file(os.environ['S3_BUCKET'], '{events_s3_key}', '/tmp/events.parquet')
+    print('Events downloaded')
+except:
+    print('No pre-built events, will generate from video')
+"
+echo "Files downloaded."
 
 # Write the inference script
 cat > /tmp/inference.py << 'PYEOF'
 import io, os, sys, logging, json
 import numpy as np
+import pandas as pd
 import boto3
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -268,6 +336,7 @@ log = logging.getLogger("tribe_inference")
 S3_BUCKET = os.environ["S3_BUCKET"]
 S3_ENDPOINT = os.environ.get("S3_ENDPOINT_URL") or None
 VIDEO_PATH = "/tmp/video.mp4"
+EVENTS_PATH = "/tmp/events.parquet"
 OUTPUT_KEY = "{output_s3_key}"
 SENTINEL_DONE = "{sentinel_done}"
 SENTINEL_ERROR = "{sentinel_error}"
@@ -281,16 +350,23 @@ def s3():
     )
 
 try:
+    from tribev2 import TribeModel
+    from neuralset.events.utils import standardize_events
+
     # Load TRIBE v2 model
     log.info("Loading TRIBE v2 model...")
-    from tribev2 import TribeModel
     model = TribeModel.from_pretrained("facebook/tribev2", cache_folder="/tmp/tribe_cache")
     log.info("Model loaded successfully")
 
-    # Get events DataFrame from video (handles audio extraction + transcription internally)
-    log.info("Generating events DataFrame from video...")
-    df = model.get_events_dataframe(video_path=VIDEO_PATH)
-    log.info("Events generated: %d rows", len(df))
+    # Use pre-built events if available (avoids whisperx dependency)
+    if os.path.exists(EVENTS_PATH):
+        log.info("Loading pre-built events from %s", EVENTS_PATH)
+        df = pd.read_parquet(EVENTS_PATH)
+        df = standardize_events(df)
+    else:
+        log.info("Generating events from video...")
+        df = model.get_events_dataframe(video_path=VIDEO_PATH)
+    log.info("Events: %d rows", len(df))
 
     # Run full multimodal prediction
     log.info("Running TRIBE v2 full multimodal inference...")

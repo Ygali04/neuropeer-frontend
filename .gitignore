@@ -37,3 +37,4 @@ frontend/.next/
 # Design docs (large binary)
 *.docx
 *.pdf
+.vercel
