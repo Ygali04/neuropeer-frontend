@@ -669,14 +669,36 @@ export default function AnalyzePage() {
               </Card>
             )}
 
-            {/* A/B link */}
+            {/* Bottom CTA — changes based on auth state */}
             {result && (
-              <Card className="text-center !py-8 animate-fade-up delay-600">
-                <p className="text-white/35 text-sm mb-4">Compare this content against another variant</p>
-                <Link href={`/compare?jobs=${jobId}`}>
-                  <Button variant="primary" size="md"><GitCompare className="w-4 h-4" /> Start A/B Comparison</Button>
-                </Link>
-              </Card>
+              session ? (
+                <Card className="text-center !py-8 animate-fade-up delay-600">
+                  <p className="text-white/35 text-sm mb-4">Compare this content against another variant</p>
+                  <Link href={`/compare?jobs=${jobId}`}>
+                    <Button variant="primary" size="md"><GitCompare className="w-4 h-4" /> Start A/B Comparison</Button>
+                  </Link>
+                </Card>
+              ) : (
+                <Card className="text-center !py-8 sm:!py-10 animate-fade-up delay-600 !border-brand-500/15">
+                  <Brain className="w-8 h-8 text-brand-400 mx-auto mb-3" />
+                  <h3 className="font-[family-name:var(--font-display)] text-lg sm:text-xl font-bold text-white/80 mb-2">
+                    See what your content does to a brain
+                  </h3>
+                  <p className="text-white/35 text-sm max-w-md mx-auto mb-5 leading-relaxed">
+                    NeuroPeer predicts fMRI-level neural responses to any video — hook strength, emotional resonance, memory encoding, and 15 more metrics. No lab. No participants. Just paste a URL.
+                  </p>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <Link href="/login">
+                      <Button variant="primary" size="md">
+                        <Brain className="w-4 h-4" /> Join NeuroPeer — It&apos;s Free
+                      </Button>
+                    </Link>
+                    <Link href="/methodology" className="text-xs text-white/30 hover:text-brand-400 transition-colors">
+                      How it works →
+                    </Link>
+                  </div>
+                </Card>
+              )
             )}
           </div>
         )}
