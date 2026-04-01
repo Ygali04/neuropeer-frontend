@@ -307,7 +307,9 @@ function ComparePageInner() {
                   <Card key={result.job_ids[i]} className={cn("!p-5", isWinner && "!border-brand-500/30 glow-brand")}>
                     {/* Header */}
                     <div className="flex items-center justify-between mb-5">
-                      <span className="text-sm font-medium text-white/50">Video {i + 1}</span>
+                      <span className="text-sm font-medium text-white/60 truncate max-w-[200px]">
+                        {result.labels[i]?.replace(/https?:\/\/(www\.)?/, "").split("/")[0] || `Video ${i + 1}`}
+                      </span>
                       {isWinner && <Badge variant="brand"><Trophy className="w-3 h-3" /> Winner</Badge>}
                     </div>
 
@@ -419,7 +421,9 @@ function ComparePageInner() {
                     <tr className="text-white/30 text-xs border-b border-white/[0.06]">
                       <th className="text-left pb-3 pr-4 font-medium uppercase tracking-wider">Metric</th>
                       {result.labels.map((_label, i) => (
-                        <th key={i} className="text-right pb-3 px-2 sm:px-3 min-w-[60px] font-medium uppercase tracking-wider">V{i + 1}</th>
+                        <th key={i} className="text-right pb-3 px-2 sm:px-3 min-w-[60px] font-medium tracking-wider text-[10px]" title={result.labels[i]}>
+                          {result.labels[i]?.replace(/https?:\/\/(www\.)?/, "").split("/")[0].slice(0, 15) || `V${i + 1}`}
+                        </th>
                       ))}
                       {result.neural_scores.length === 2 && (
                         <th className="text-right pb-3 pl-2 min-w-[50px] font-medium uppercase tracking-wider">Delta</th>
