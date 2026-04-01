@@ -257,16 +257,31 @@ async def get_run_history(job_id: UUID) -> dict:
 
     await engine.dispose()
 
+    # Try to get full-precision scores from Redis (DB may have rounded values)
+    r = aioredis.from_url(settings.redis_url, decode_responses=True)
+
     runs = []
-    for row_job, score in rows:
+    for row_job, db_score in rows:
+        # Prefer Redis score (full precision) over DB score (may be rounded)
+        score = float(db_score) if db_score else 0.0
+        try:
+            raw = await r.get(f"neuropeer:result:{row_job.id}")
+            if raw:
+                cached = json.loads(raw)
+                score = cached.get("neural_score", {}).get("total", score)
+        except Exception:
+            pass
+
         runs.append({
             "job_id": str(row_job.id),
             "url": row_job.url,
-            "neural_score": round(float(score), 1) if score else 0.0,
+            "neural_score": round(float(score), 1),
             "created_at": row_job.created_at.isoformat() if row_job.created_at else "",
             "parent_job_id": str(row_job.parent_job_id) if row_job.parent_job_id else None,
             "is_current": str(row_job.id) == str(job_id),
         })
+
+    await r.aclose()
 
     return {
         "content_group_id": str(group_id),
