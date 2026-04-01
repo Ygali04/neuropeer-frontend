@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Brain,
@@ -11,6 +11,7 @@ import {
   Loader2,
   Plus,
   X,
+  Share2,
 } from "lucide-react";
 
 import { submitAnalysis, compareVideos } from "@/lib/api";
@@ -24,18 +25,18 @@ import { UserMenu } from "@/components/UserMenu";
 import { cn } from "@/lib/utils";
 
 function ComparePageInner() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const initialJobId = searchParams.get("jobs") ?? "";
+  const initialJobs = (searchParams.get("jobs") ?? "").split(",").filter(Boolean);
 
-  const [jobIds, setJobIds] = useState<string[]>(
-    initialJobId ? [initialJobId] : []
-  );
+  const [jobIds, setJobIds] = useState<string[]>(initialJobs);
   const [pendingJobs, setPendingJobs] = useState<string[]>([]);
   const [result, setResult] = useState<ComparisonResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [aiRecommendation, setAiRecommendation] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [autoRan, setAutoRan] = useState(false);
 
   const handleAddVideo = async (url: string, contentType: ContentType) => {
     setLoading(true);
@@ -59,17 +60,25 @@ function ComparePageInner() {
     setPendingJobs((prev) => prev.filter((j) => j !== id));
   };
 
-  const handleCompare = async () => {
-    const allIds = [...jobIds, ...pendingJobs];
-    if (allIds.length < 2) {
+  const runComparison = async (ids: string[]) => {
+    if (ids.length < 2) {
       setError("Add at least 2 videos to compare.");
       return;
     }
     setLoading(true);
     setError("");
     try {
-      const data = await compareVideos(allIds);
+      const data = await compareVideos(ids);
       setResult(data);
+
+      // Update URL to make comparison shareable (without triggering navigation)
+      const newUrl = `/compare?jobs=${ids.join(",")}`;
+      window.history.replaceState({}, "", newUrl);
+
+      // Update browser tab title
+      const scores = data.neural_scores.map((ns) => Math.round(ns.total));
+      document.title = `Compare: ${scores.join(" vs ")} — NeuroPeer`;
+
       // Fetch AI recommendation in background
       setAiLoading(true);
       fetch("/api/generate-feedback", {
@@ -90,6 +99,15 @@ function ComparePageInner() {
       setLoading(false);
     }
   };
+
+  const handleCompare = () => runComparison([...jobIds, ...pendingJobs]);
+
+  // Auto-run comparison when URL has 2+ job IDs (shareable link)
+  useEffect(() => {
+    if (autoRan || initialJobs.length < 2) return;
+    setAutoRan(true);
+    runComparison(initialJobs);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const allIds = [...jobIds, ...pendingJobs];
 
@@ -229,6 +247,28 @@ function ComparePageInner() {
         {/* Results */}
         {result && (
           <div className="flex flex-col gap-6">
+            {/* Comparison header with share */}
+            <div className="flex items-center justify-between animate-fade-up">
+              <div>
+                <h2 className="font-[family-name:var(--font-display)] text-lg sm:text-xl font-bold text-white/80">
+                  {result.neural_scores.length}-Way Comparison
+                </h2>
+                <p className="text-xs text-white/30 mt-0.5">
+                  {result.labels.map((l, i) => l.replace(/https?:\/\/(www\.)?/, "").slice(0, 25)).join(" vs ")}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.href);
+                  alert("Comparison link copied!");
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-white/40 hover:text-brand-400 hover:bg-brand-500/10 transition-colors border border-white/[0.06]"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                Share
+              </button>
+            </div>
+
             <Card className="!border-brand-500/20 animate-fade-up">
               <div className="flex items-center gap-2 mb-3">
                 <Trophy className="w-4 h-4 text-brand-400" />
