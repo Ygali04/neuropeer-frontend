@@ -16,19 +16,22 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://neuropeer-api-produ
 
 export function ReportTitle({ title, url, contentType, isOwner, jobId }: Props) {
   const fallback = formatUrl(url, contentType);
-  const [displayTitle, setDisplayTitle] = useState(title || fallback);
+  const resolvedTitle = title || fallback;
+  const [displayTitle, setDisplayTitle] = useState(resolvedTitle);
   const [editing, setEditing] = useState(false);
-  const [editValue, setEditValue] = useState(title || fallback);
+  const [editValue, setEditValue] = useState(resolvedTitle);
   const [saving, setSaving] = useState(false);
+  const [userEdited, setUserEdited] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Sync when the title prop changes (e.g., result loads with saved title)
+  // Sync when the title prop changes (e.g., result loads with saved title from API)
+  // Only override if user hasn't manually edited in this session
   useEffect(() => {
-    if (title && title !== displayTitle && !editing) {
+    if (!userEdited && title) {
       setDisplayTitle(title);
       setEditValue(title);
     }
-  }, [title]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [title, userEdited]);
 
   useEffect(() => {
     if (editing && inputRef.current) {
@@ -49,14 +52,20 @@ export function ReportTitle({ title, url, contentType, isOwner, jobId }: Props) 
     }
     setSaving(true);
     try {
-      await fetch(`${API_BASE}/api/v1/results/${jobId}/title`, {
+      const res = await fetch(`${API_BASE}/api/v1/results/${jobId}/title`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: editValue.trim() }),
       });
-      setDisplayTitle(editValue.trim());
-    } catch {
-      // revert on failure
+      if (res.ok) {
+        setDisplayTitle(editValue.trim());
+        setUserEdited(true);
+      } else {
+        console.error("Failed to save title:", res.status);
+        setEditValue(displayTitle);
+      }
+    } catch (err) {
+      console.error("Title save error:", err);
       setEditValue(displayTitle);
     } finally {
       setSaving(false);
