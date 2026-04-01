@@ -192,7 +192,7 @@ export function ImprovementStrategies({ metrics, overarchingSummary, aiPrioritie
                           : "var(--color-score-red)",
                     }}
                   >
-                    {Math.round(metric.score)}
+                    {metric.score.toFixed(1)}
                     <span className="text-white/20 font-normal">/100</span>
                   </span>
                 </div>
@@ -213,9 +213,8 @@ export function ImprovementStrategies({ metrics, overarchingSummary, aiPrioritie
             const catConfig = CATEGORY_CONFIG[category as ImprovementStrategy["category"]];
             const CatIcon = catConfig.icon;
             const isExpanded = expandedCategory === category;
-            const avgScore = Math.round(
-              items.reduce((s, x) => s + x.metric.score, 0) / items.length
-            );
+            const avgScoreRaw = items.reduce((s, x) => s + x.metric.score, 0) / items.length;
+            const avgScore = avgScoreRaw;
 
             return (
               <div key={category} className="glass-card !p-0 overflow-hidden">
@@ -240,7 +239,7 @@ export function ImprovementStrategies({ metrics, overarchingSummary, aiPrioritie
                     </div>
                     <div className="text-xs text-white/25">
                       {items.length} metric{items.length > 1 ? "s" : ""} to
-                      improve · avg score {avgScore}
+                      improve · avg score {avgScore.toFixed(1)}
                     </div>
                   </div>
                   <span
@@ -254,7 +253,7 @@ export function ImprovementStrategies({ metrics, overarchingSummary, aiPrioritie
                           : "var(--color-score-red)",
                     }}
                   >
-                    {avgScore}
+                    {avgScore.toFixed(1)}
                   </span>
                   <ChevronRight
                     className={cn(
@@ -283,7 +282,7 @@ export function ImprovementStrategies({ metrics, overarchingSummary, aiPrioritie
                                   : "var(--color-score-red)",
                             }}
                           >
-                            {Math.round(metric.score)}/100
+                            {metric.score.toFixed(1)}/100
                           </span>
                         </div>
                         <p className="text-xs text-white/35 mb-2.5">

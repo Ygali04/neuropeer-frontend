@@ -111,6 +111,7 @@ export interface CampaignSummary {
   content_type: string;
   created_at: string;
   latest_at: string;
+  latest_job_id: string | null;
 }
 
 export interface MarketerProfile {

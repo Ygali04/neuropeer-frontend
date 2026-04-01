@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Pencil, Check, X } from "lucide-react";
+import { CountUp } from "@/components/ui/count-up";
 import type { CampaignSummary } from "@/lib/types";
 import { renameCampaign } from "@/lib/api";
 
@@ -59,16 +60,16 @@ export function CampaignCard({ campaign, onRename }: Props) {
         </div>
 
         <div className="text-right flex-shrink-0 ml-4">
-          <div className="text-2xl font-bold tabular-nums" style={{ color: scoreColor }}>{campaign.latest_score}</div>
+          <CountUp end={Number(campaign.latest_score)} decimals={1} duration={1200} className="text-2xl font-bold tabular-nums" style={{ color: scoreColor }} />
           {campaign.delta !== 0 && (
-            <div className={`text-xs font-bold tabular-nums ${deltaColor}`}>{deltaSign}{campaign.delta}</div>
+            <div className={`text-xs font-bold tabular-nums ${deltaColor}`}>{deltaSign}{Number(campaign.delta).toFixed(1)}</div>
           )}
         </div>
       </div>
 
       {campaign.media_count > 1 && (
         <div className="flex items-center gap-2 mb-3">
-          <span className="text-[10px] text-white/30 tabular-nums">{campaign.first_score}</span>
+          <span className="text-[10px] text-white/30 tabular-nums">{Number(campaign.first_score).toFixed(1)}</span>
           <div className="flex-1 h-1 bg-white/[0.04] rounded-full overflow-hidden relative">
             <div
               className="h-full rounded-full"
@@ -78,7 +79,7 @@ export function CampaignCard({ campaign, onRename }: Props) {
               }}
             />
           </div>
-          <span className="text-[10px] font-medium tabular-nums" style={{ color: scoreColor }}>{campaign.latest_score}</span>
+          <span className="text-[10px] font-medium tabular-nums" style={{ color: scoreColor }}>{Number(campaign.latest_score).toFixed(1)}</span>
         </div>
       )}
 
@@ -87,7 +88,7 @@ export function CampaignCard({ campaign, onRename }: Props) {
           {new Date(campaign.created_at).toLocaleDateString()} — {new Date(campaign.latest_at).toLocaleDateString()}
         </span>
         <Link
-          href={`/analyze/${campaign.content_group_id}`}
+          href={`/analyze/${campaign.latest_job_id ?? campaign.content_group_id}`}
           className="text-[10px] text-brand-400 hover:text-brand-300 transition-colors opacity-0 group-hover:opacity-100"
         >
           View campaign →

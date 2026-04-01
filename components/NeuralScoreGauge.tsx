@@ -3,6 +3,7 @@
 import type { NeuralScoreBreakdown } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
+import { CountUp } from "@/components/ui/count-up";
 import { DIMENSION_INFO } from "@/lib/metric-info";
 
 function scoreColor(score: number): string {
@@ -90,15 +91,16 @@ export function NeuralScoreGauge({ breakdown, size = "lg" }: Props) {
           />
         </svg>
         <div className="absolute flex flex-col items-center">
-          <span
+          <CountUp
+            end={total}
+            decimals={1}
+            duration={1400}
             className={cn(
               "font-[family-name:var(--font-display)] font-bold",
               size === "lg" ? "text-5xl" : "text-3xl"
             )}
             style={{ color }}
-          >
-            {Math.round(total)}
-          </span>
+          />
           <span className="text-white/20 text-xs mt-0.5">/ 100</span>
           <span
             className="text-xs font-medium mt-1.5 uppercase tracking-wider"
@@ -111,7 +113,7 @@ export function NeuralScoreGauge({ breakdown, size = "lg" }: Props) {
 
       {/* Dimension breakdown bars */}
       <div className="w-full grid grid-cols-2 gap-x-6 gap-y-3">
-        {dimensions.map((d) => {
+        {dimensions.map((d, i) => {
           const info = DIMENSION_INFO[d.label];
           return (
             <div key={d.label}>
@@ -128,9 +130,12 @@ export function NeuralScoreGauge({ breakdown, size = "lg" }: Props) {
                     />
                   )}
                 </span>
-                <span className="text-white/60 font-medium tabular-nums">
-                  {Math.round(d.value)}
-                </span>
+                <CountUp
+                  end={d.value}
+                  decimals={1}
+                  duration={1000 + i * 100}
+                  className="text-white/60 font-medium tabular-nums"
+                />
               </div>
               <div className="h-1 bg-white/[0.04] rounded-full overflow-hidden">
                 <div

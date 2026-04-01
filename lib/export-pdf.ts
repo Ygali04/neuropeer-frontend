@@ -80,7 +80,7 @@ export async function generateReportPDF(result: AnalysisResult): Promise<void> {
   doc.setFontSize(28);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(scoreColor[0], scoreColor[1], scoreColor[2]);
-  doc.text(`${Math.round(score.total)}`, margin, y + 2);
+  doc.text(`${score.total.toFixed(1)}`, margin, y + 2);
   doc.setFontSize(12);
   doc.setTextColor(180, 180, 180);
   doc.text("/100", margin + 18, y + 2);
@@ -110,7 +110,7 @@ export async function generateReportPDF(result: AnalysisResult): Promise<void> {
     const dimColor = d.value >= 75 ? [34, 197, 94] : d.value >= 50 ? [251, 191, 36] : [248, 113, 113];
     doc.setTextColor(dimColor[0], dimColor[1], dimColor[2]);
     doc.setFont("helvetica", "bold");
-    doc.text(`${Math.round(d.value)}`, x + 35, yy);
+    doc.text(`${d.value.toFixed(1)}`, x + 35, yy);
 
     // Score bar
     doc.setFillColor(230, 230, 230);
@@ -165,7 +165,7 @@ export async function generateReportPDF(result: AnalysisResult): Promise<void> {
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(mColor[0], mColor[1], mColor[2]);
-    doc.text(`${Math.round(m.score)}`, margin, y);
+    doc.text(`${m.score.toFixed(1)}`, margin, y);
 
     doc.setTextColor(50, 50, 50);
     doc.setFont("helvetica", "normal");

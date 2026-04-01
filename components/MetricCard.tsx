@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { ChevronDown, Brain, Gauge, Lightbulb } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
+import { CountUp } from "@/components/ui/count-up";
 import { METRIC_INFO, METRIC_STRATEGIES } from "@/lib/metric-info";
 import type { MetricScore } from "@/lib/types";
 
@@ -52,12 +53,13 @@ export function MetricCard({ metric, expanded, onToggle }: Props) {
               style={{ filter: `drop-shadow(0 0 4px ${color}30)` }}
             />
           </svg>
-          <span
+          <CountUp
+            end={metric.score}
+            decimals={1}
+            duration={800}
             className="absolute inset-0 flex items-center justify-center text-xs font-bold tabular-nums"
             style={{ color }}
-          >
-            {Math.round(metric.score)}
-          </span>
+          />
         </div>
 
         {/* Name + proxy + info tooltip */}
