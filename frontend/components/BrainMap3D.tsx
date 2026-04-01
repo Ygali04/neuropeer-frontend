@@ -103,9 +103,11 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
   const [regionScores, setRegionScores] = useState<Record<string, number>>({});
   const [hoveredRegion, setHoveredRegion] = useState<string | null>(null);
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
+  const selectedRegionRef = useRef<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("regions");
 
   useEffect(() => { playbackTimeRef.current = playbackTime; }, [playbackTime]);
+  useEffect(() => { selectedRegionRef.current = selectedRegion; }, [selectedRegion]);
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
 
   // Apply per-vertex colors based on mode
@@ -230,6 +232,22 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
         }
         colorMeshesFromVerts(interpolated);
       }
+
+      // Focus/fade: when a region is selected, fade out all other meshes
+      const sel = selectedRegionRef.current;
+      regionMeshesRef.current.forEach((mesh, rk) => {
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        if (sel) {
+          // Selected region: fully opaque. Others: nearly transparent
+          const isSelected = rk === sel;
+          mat.transparent = true;
+          mat.opacity += ((isSelected ? 1.0 : 0.12) - mat.opacity) * 0.12; // smooth lerp
+        } else {
+          // No selection: all fully opaque
+          mat.transparent = false;
+          mat.opacity += (1.0 - mat.opacity) * 0.12;
+        }
+      });
 
       renderer.render(scene, camera);
     };
@@ -491,27 +509,27 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
         onMouseDown={onMD} onMouseMove={onMM} onMouseUp={onMU} onMouseLeave={onMU} onClick={onClick}
       >
         {hoveredRegion && !mouseRef.current.isDown && (
-          <div className="absolute top-3 left-3 rounded-lg p-2.5 pointer-events-none z-10" style={{ background:"#15131a", border:"1px solid rgba(255,255,255,0.08)" }}>
+          <div className="absolute top-3 left-3 rounded-lg p-2.5 pointer-events-none z-10" style={{ background: "rgba(20, 18, 26, 0.9)", border: "1px solid rgba(255,255,255,0.1)" }}>
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full" style={{ backgroundColor: REGION_CONFIG[hoveredRegion]?.color }} />
-              <span className="text-xs font-medium text-white/80">{REGION_CONFIG[hoveredRegion]?.label}</span>
+              <span className="text-xs font-medium" style={{ color: "rgba(255,255,255,0.85)" }}>{REGION_CONFIG[hoveredRegion]?.label}</span>
               {regionScores[REGION_CONFIG[hoveredRegion]?.activationKey] !== undefined && (
-                <span className="text-xs text-white/40 tabular-nums">{Math.round(regionScores[REGION_CONFIG[hoveredRegion]?.activationKey] ?? 0)}%</span>
+                <span className="text-xs tabular-nums" style={{ color: "rgba(255,255,255,0.45)" }}>{Math.round(regionScores[REGION_CONFIG[hoveredRegion]?.activationKey] ?? 0)}%</span>
               )}
             </div>
+            <p className="text-[9px] mt-1" style={{ color: "rgba(255,255,255,0.25)" }}>Click to select region</p>
           </div>
         )}
-        {/* Legend */}
-        {/* Activity legend bar — matches TRIBE v2 */}
+        {/* Legend — hardcoded light colors since it sits on the dark 3D canvas */}
         <div className="absolute top-3 right-3 flex flex-col items-center gap-0.5 pointer-events-none z-10">
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-white/40">Low</span>
+            <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>Low</span>
             <div className="w-28 h-2 rounded-sm" style={{ background: "linear-gradient(to right, #8b0000, #cc2200, #e04500, #f07000, #f5a000, #ffc840, #ffe080, #fff4cc)" }} />
-            <span className="text-[10px] text-white/40">High</span>
+            <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>High</span>
           </div>
-          <span className="text-[9px] text-white/25">Activity</span>
+          <span className="text-[9px]" style={{ color: "rgba(255,255,255,0.25)" }}>Activity</span>
         </div>
-        <div className="absolute bottom-2 right-2 text-[10px] text-white/10 pointer-events-none">Drag to rotate · Click region</div>
+        <div className="absolute bottom-2 right-2 text-[10px] pointer-events-none" style={{ color: "rgba(255,255,255,0.12)" }}>Drag to rotate · Click region</div>
       </div>
 
       {/* Region bars */}

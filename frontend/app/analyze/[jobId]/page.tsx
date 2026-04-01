@@ -42,6 +42,7 @@ import { EmotionalPanel } from "@/components/EmotionalPanel";
 import { ModalityBreakdown } from "@/components/ModalityBreakdown";
 import { MetricCard } from "@/components/MetricCard";
 import { ImprovementStrategies } from "@/components/ImprovementStrategies";
+import { ReportTitle } from "@/components/ReportTitle";
 
 function CollapsibleSection({ title, icon, children, defaultOpen = false, className = "" }: {
   title: string; icon: ReactNode; children: ReactNode; defaultOpen?: boolean; className?: string;
@@ -273,14 +274,16 @@ export default function AnalyzePage() {
                   {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                   <span className="hidden sm:inline">{exporting ? "Generating..." : "Export PDF"}</span>
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowReanalyze(true)}
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  Re-analyze
-                </Button>
+                {session && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowReanalyze(true)}
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Re-analyze</span>
+                  </Button>
+                )}
               </>
             )}
             <ThemeToggle />
@@ -297,8 +300,8 @@ export default function AnalyzePage() {
           </div>
         )}
 
-        {/* ── Re-analyze Modal ──────────────────────────────────────────────── */}
-        {showReanalyze && (
+        {/* ── Re-analyze Modal (auth-gated) ─────────────────────────────────── */}
+        {showReanalyze && session && (
           <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowReanalyze(false)}>
             <div className="tooltip-card p-6 max-w-md w-full mx-4 space-y-4 rounded-2xl shadow-2xl border border-white/[0.1]" onClick={(e) => e.stopPropagation()}>
               <h3 className="text-lg font-semibold text-white">Re-analyze</h3>
@@ -344,6 +347,17 @@ export default function AnalyzePage() {
         {/* ── Results Dashboard (shows skeleton when loading) ─────────────── */}
         {(result || isActiveComputation || isLoadingReport) && (
           <div className="flex flex-col gap-6">
+
+            {/* Editable report title */}
+            {result && (
+              <ReportTitle
+                title={result.ai_report_title}
+                url={result.url}
+                contentType={result.content_type}
+                isOwner={!!session}
+                jobId={jobId}
+              />
+            )}
 
             {/* Delta banner */}
             {result && result.parent_job_id && runHistory.length > 0 && (() => {
@@ -669,14 +683,36 @@ export default function AnalyzePage() {
               </Card>
             )}
 
-            {/* A/B link */}
+            {/* Bottom CTA — changes based on auth state */}
             {result && (
-              <Card className="text-center !py-8 animate-fade-up delay-600">
-                <p className="text-white/35 text-sm mb-4">Compare this content against another variant</p>
-                <Link href={`/compare?jobs=${jobId}`}>
-                  <Button variant="primary" size="md"><GitCompare className="w-4 h-4" /> Start A/B Comparison</Button>
-                </Link>
-              </Card>
+              session ? (
+                <Card className="text-center !py-8 animate-fade-up delay-600">
+                  <p className="text-white/35 text-sm mb-4">Compare this content against another variant</p>
+                  <Link href={`/compare?jobs=${jobId}`}>
+                    <Button variant="primary" size="md"><GitCompare className="w-4 h-4" /> Start A/B Comparison</Button>
+                  </Link>
+                </Card>
+              ) : (
+                <Card className="text-center !py-8 sm:!py-10 animate-fade-up delay-600 !border-brand-500/15">
+                  <Brain className="w-8 h-8 text-brand-400 mx-auto mb-3" />
+                  <h3 className="font-[family-name:var(--font-display)] text-lg sm:text-xl font-bold text-white/80 mb-2">
+                    See what your content does to a brain
+                  </h3>
+                  <p className="text-white/35 text-sm max-w-md mx-auto mb-5 leading-relaxed">
+                    NeuroPeer predicts fMRI-level neural responses to any video — hook strength, emotional resonance, memory encoding, and 15 more metrics. No lab. No participants. Just paste a URL.
+                  </p>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <Link href="/login">
+                      <Button variant="primary" size="md">
+                        <Brain className="w-4 h-4" /> Join NeuroPeer — It&apos;s Free
+                      </Button>
+                    </Link>
+                    <Link href="/methodology" className="text-xs text-white/30 hover:text-brand-400 transition-colors">
+                      How it works →
+                    </Link>
+                  </div>
+                </Card>
+              )
             )}
           </div>
         )}

@@ -37,6 +37,12 @@ export default function DashboardPage() {
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [mergeName, setMergeName] = useState("");
 
+  // Set browser tab title with user name
+  useEffect(() => {
+    const name = session?.user?.name?.split(" ")[0] ?? "Dashboard";
+    document.title = `${name}'s Dashboard — NeuroPeer`;
+  }, [session]);
+
   useEffect(() => {
     const email = session?.user?.email;
     if (!email) return;

@@ -99,7 +99,8 @@ async def health_deep() -> dict:
             aws_secret_access_key=settings.aws_secret_access_key or None,
             region_name=settings.aws_region,
         )
-        s3.head_bucket(Bucket=settings.s3_bucket)
+        # Use list_objects instead of head_bucket (B2 returns 403 on HeadBucket)
+        s3.list_objects_v2(Bucket=settings.s3_bucket, MaxKeys=1)
         checks["s3"] = "ok"
     except Exception as e:
         checks["s3"] = f"error: {e}"

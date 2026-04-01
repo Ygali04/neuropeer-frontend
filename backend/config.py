@@ -21,12 +21,27 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     # S3 / Storage (supports AWS S3, Backblaze B2, MinIO)
-    # For B2: endpoint_url=https://s3.us-west-004.backblazeb2.com, region=us-west-004
     s3_bucket: str = "NeuroPeer"
-    s3_endpoint_url: str = ""  # leave empty for AWS, set for B2/MinIO
+    b2_bucket: str = ""  # alias for s3_bucket
+    s3_endpoint_url: str = ""  # e.g. https://s3.us-west-004.backblazeb2.com
     aws_access_key_id: str = ""
+    b2_key_id: str = ""  # alias for aws_access_key_id
     aws_secret_access_key: str = ""
+    b2_app_key: str = ""  # alias for aws_secret_access_key
     aws_region: str = "us-west-004"
+
+    @model_validator(mode="after")
+    def resolve_b2_aliases(self):
+        """Map B2_* env vars to AWS_* fields for S3-compatible access."""
+        if self.b2_key_id and not self.aws_access_key_id:
+            self.aws_access_key_id = self.b2_key_id
+        if self.b2_app_key and not self.aws_secret_access_key:
+            self.aws_secret_access_key = self.b2_app_key
+        if self.b2_bucket and not self.s3_bucket:
+            self.s3_bucket = self.b2_bucket
+        if self.s3_endpoint_url and not self.s3_endpoint_url.startswith("http"):
+            self.s3_endpoint_url = f"https://{self.s3_endpoint_url}"
+        return self
 
     # Server port (Railway assigns PORT dynamically)
     port: int = 8000
