@@ -228,63 +228,69 @@ async def get_brain_map(job_id: UUID, timestamp: float = 0.0) -> dict:
 @router.get("/results/{job_id}/history")
 async def get_run_history(job_id: UUID) -> dict:
     """Get all runs in the same content group as this job."""
-    from sqlalchemy import select
+    from sqlalchemy import select as _sel, text as _text
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-    from backend.models.db import Job, Result
 
     engine = create_async_engine(settings.database_url)
     Session = async_sessionmaker(engine, expire_on_commit=False)
 
-    async with Session() as session:
-        # Find the content_group_id for this job
-        stmt = select(Job).where(Job.id == job_id)
-        job = (await session.execute(stmt)).scalar_one_or_none()
-        if not job:
-            await engine.dispose()
-            raise HTTPException(status_code=404, detail="Job not found")
-
-        group_id = job.content_group_id
-
-        # Fetch all jobs in the same group
-        stmt = (
-            select(Job, Result.neural_score_total)
-            .outerjoin(Result, Result.job_id == Job.id)
-            .where(Job.content_group_id == group_id)
-            .order_by(Job.created_at.asc())
-        )
-        rows = (await session.execute(stmt)).all()
-
-        # Extract everything while session is still open
-        runs = []
-        for row_job, db_score in rows:
-            runs.append({
-                "job_id": str(row_job.id),
-                "url": row_job.url,
-                "neural_score": round(float(db_score), 1) if db_score else 0.0,
-                "created_at": row_job.created_at.isoformat() if row_job.created_at else "",
-                "parent_job_id": str(row_job.parent_job_id) if row_job.parent_job_id else None,
-                "is_current": str(row_job.id) == str(job_id),
-            })
-
-    await engine.dispose()
-
-    # Enrich with full-precision scores from Redis where available
     try:
-        r = aioredis.from_url(settings.redis_url, decode_responses=True)
-        for run in runs:
-            cached_raw = await r.get(f"neuropeer:result:{run['job_id']}")
-            if cached_raw:
-                cached = json.loads(cached_raw)
-                run["neural_score"] = round(float(cached.get("neural_score", {}).get("total", run["neural_score"])), 1)
-        await r.aclose()
-    except Exception:
-        pass  # Redis unavailable — use DB scores
+        async with Session() as session:
+            # Use raw SQL to avoid SQLAlchemy model column mismatches
+            row = (await session.execute(
+                _text("SELECT content_group_id FROM jobs WHERE id = :jid"),
+                {"jid": str(job_id)}
+            )).first()
+            if not row:
+                raise HTTPException(status_code=404, detail="Job not found")
 
-    return {
-        "content_group_id": str(group_id),
-        "runs": runs,
-    }
+            group_id = str(row[0])
+
+            # Fetch all jobs in the same group with scores
+            result = await session.execute(
+                _text("""
+                    SELECT j.id, j.url, r.neural_score_total, j.created_at, j.parent_job_id
+                    FROM jobs j
+                    LEFT JOIN results r ON r.job_id = j.id
+                    WHERE j.content_group_id = :gid AND j.status = 'complete'
+                    ORDER BY j.created_at ASC
+                """),
+                {"gid": group_id}
+            )
+            rows = result.all()
+
+            runs = []
+            for jid, url, db_score, created_at, parent_jid in rows:
+                runs.append({
+                    "job_id": str(jid),
+                    "url": url or "",
+                    "neural_score": round(float(db_score), 1) if db_score else 0.0,
+                    "created_at": created_at.isoformat() if created_at else "",
+                    "parent_job_id": str(parent_jid) if parent_jid else None,
+                    "is_current": str(jid) == str(job_id),
+                })
+
+        await engine.dispose()
+
+        # Enrich with full-precision scores from Redis
+        try:
+            r = aioredis.from_url(settings.redis_url, decode_responses=True)
+            for run in runs:
+                cached_raw = await r.get(f"neuropeer:result:{run['job_id']}")
+                if cached_raw:
+                    cached = json.loads(cached_raw)
+                    run["neural_score"] = round(float(cached.get("neural_score", {}).get("total", run["neural_score"])), 1)
+            await r.aclose()
+        except Exception:
+            pass
+
+        return {"content_group_id": group_id, "runs": runs}
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        await engine.dispose()
+        raise HTTPException(status_code=500, detail=f"History error: {str(exc)[:200]}")
 
 
 @router.get("/results/{job_id}/status")
