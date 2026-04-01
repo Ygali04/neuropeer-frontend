@@ -50,6 +50,38 @@ class RenameRequest(BaseModel):
     name: str
 
 
+@router.get("/campaigns/all-reports")
+async def all_reports(user_email: str) -> list[dict]:
+    """Return every individual report for a user, across all campaigns."""
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with Session() as session:
+        stmt = (
+            select(Job, Result.neural_score_total)
+            .outerjoin(Result, Result.job_id == Job.id)
+            .where(Job.user_email == user_email, Job.status == "complete")
+            .order_by(Job.created_at.asc())
+        )
+        rows = (await session.execute(stmt)).all()
+
+    await engine.dispose()
+
+    reports = []
+    for job, score in rows:
+        reports.append({
+            "job_id": str(job.id),
+            "url": job.url,
+            "content_type": job.content_type,
+            "score": round(score, 1) if score else 0,
+            "campaign_name": job.campaign_name,
+            "content_group_id": str(job.content_group_id),
+            "created_at": job.created_at.isoformat() if job.created_at else "",
+        })
+
+    return reports
+
+
 @router.get("/campaigns")
 async def list_campaigns(user_email: str | None = None) -> list[dict]:
     """List all campaigns for a user, with scores and deltas."""
