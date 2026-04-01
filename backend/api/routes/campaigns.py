@@ -200,6 +200,63 @@ async def bulk_delete_campaigns(body: dict) -> dict:
     return {"deleted_jobs": total_deleted, "deleted_campaigns": len(ids)}
 
 
+class MergeRequest(BaseModel):
+    content_group_ids: list[str]
+    name: str | None = None
+
+
+@router.post("/campaigns/merge")
+async def merge_campaigns(body: MergeRequest) -> dict:
+    """
+    Merge multiple campaigns into one. All jobs get the same content_group_id.
+    Jobs are automatically ordered chronologically by created_at.
+    The target group is the earliest campaign (smallest created_at).
+    """
+    if len(body.content_group_ids) < 2:
+        raise HTTPException(status_code=400, detail="Need at least 2 campaigns to merge")
+
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with Session() as session:
+        # Find the earliest campaign to use as the target group
+        all_jobs = []
+        for cg_id in body.content_group_ids:
+            stmt = select(Job).where(Job.content_group_id == UUID(cg_id))
+            jobs = (await session.execute(stmt)).scalars().all()
+            all_jobs.extend(jobs)
+
+        if not all_jobs:
+            await engine.dispose()
+            raise HTTPException(status_code=404, detail="No jobs found in the specified campaigns")
+
+        # Sort by created_at and pick the earliest group as target
+        all_jobs.sort(key=lambda j: j.created_at or j.id)
+        target_group_id = all_jobs[0].content_group_id
+
+        # Update all jobs to point to the target group
+        # Also set parent_job_id to chain them chronologically
+        merged_count = 0
+        for i, job in enumerate(all_jobs):
+            job.content_group_id = target_group_id
+            if i > 0:
+                job.parent_job_id = all_jobs[i - 1].id
+            if body.name:
+                job.campaign_name = body.name
+            merged_count += 1
+
+        await session.commit()
+
+    await engine.dispose()
+
+    return {
+        "target_group_id": str(target_group_id),
+        "merged_jobs": merged_count,
+        "source_campaigns": len(body.content_group_ids),
+        "campaign_name": body.name,
+    }
+
+
 @router.put("/campaigns/{content_group_id}/name")
 async def rename_campaign(content_group_id: UUID, body: RenameRequest) -> dict:
     """Rename a campaign (updates all jobs in the content group)."""
