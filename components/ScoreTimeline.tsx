@@ -41,8 +41,8 @@ export function ScoreTimeline({ campaigns, overallScore, reports: reportsProp }:
   const [reports, setReports] = useState<ReportPoint[]>([]);
 
   useEffect(() => {
-    // Use prop if provided (lifted state from dashboard), otherwise fetch
-    if (reportsProp) {
+    // Use prop if provided (lifted state from dashboard)
+    if (reportsProp && reportsProp.length > 0) {
       setReports(
         reportsProp.map((r) => ({
           ...r,
@@ -52,6 +52,7 @@ export function ScoreTimeline({ campaigns, overallScore, reports: reportsProp }:
       );
       return;
     }
+    // Fallback: fetch independently
     const email = session?.user?.email;
     if (!email) return;
     getAllReports(email).then((data) => {
@@ -63,7 +64,7 @@ export function ScoreTimeline({ campaigns, overallScore, reports: reportsProp }:
         }))
       );
     });
-  }, [session]);
+  }, [reportsProp, session]);
 
   const dataPoints = useMemo(() => {
     // Deduplicate by job_id (in case backend returns duplicates)
@@ -120,17 +121,20 @@ export function ScoreTimeline({ campaigns, overallScore, reports: reportsProp }:
               content={({ active, payload }) => {
                 if (!active || !payload?.length) return null;
                 const d = payload[0].payload as ReportPoint;
+                if (!d || !d.job_id) return null;
                 const scoreColor = d.score >= 75 ? "var(--color-score-green)" : d.score >= 50 ? "var(--color-score-amber)" : "var(--color-score-red)";
+                const shortUrl = d.url.replace(/https?:\/\/(www\.)?/, "").slice(0, 40);
                 return (
-                  <div className="tooltip-card p-3 rounded-xl shadow-xl border border-white/[0.1] min-w-[180px]">
+                  <div className="tooltip-card p-3 rounded-xl shadow-xl border border-white/[0.1] min-w-[200px] max-w-[280px]">
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-lg font-bold tabular-nums" style={{ color: scoreColor }}>{d.score.toFixed(1)}</span>
                       <span className="text-[10px] text-white/25">{d.dateLabel}</span>
                     </div>
-                    <p className="text-[11px] text-white/50 truncate mb-1">{d.url.replace(/https?:\/\/(www\.)?/, "").slice(0, 40)}</p>
+                    <p className="text-[11px] text-white/50 mb-1 break-all">{shortUrl}</p>
                     {d.campaign_name && (
-                      <p className="text-[10px] text-brand-400/70 mb-1.5">Campaign: {d.campaign_name}</p>
+                      <p className="text-[10px] text-brand-400/70 mb-1">Campaign: {d.campaign_name}</p>
                     )}
+                    <p className="text-[9px] text-white/15 font-mono mb-1.5">{d.job_id.slice(0, 8)}</p>
                     <p className="text-[10px] text-white/20 italic">Click dot to open report →</p>
                   </div>
                 );
