@@ -66,7 +66,11 @@ export function ScoreTimeline({ campaigns, overallScore, reports: reportsProp }:
   }, [session]);
 
   const dataPoints = useMemo(() => {
-    return [...reports].sort((a, b) => a.date - b.date);
+    // Deduplicate by job_id (in case backend returns duplicates)
+    const seen = new Set<string>();
+    return [...reports]
+      .filter((r) => { if (seen.has(r.job_id)) return false; seen.add(r.job_id); return true; })
+      .sort((a, b) => a.date - b.date);
   }, [reports]);
 
   if (dataPoints.length === 0) return null;
@@ -138,20 +142,16 @@ export function ScoreTimeline({ campaigns, overallScore, reports: reportsProp }:
               stroke="#f97316"
               strokeWidth={2}
               dot={({ cx, cy, payload }) => {
+                if (cx == null || cy == null) return <></>;
                 const d = payload as ReportPoint;
                 const color = d.score >= 75 ? "var(--color-score-green)" : d.score >= 50 ? "var(--color-score-amber)" : "var(--color-score-red)";
                 return (
-                  <circle
-                    key={d.job_id}
-                    cx={cx}
-                    cy={cy}
-                    r={5}
-                    fill={color}
-                    stroke="rgba(7,6,11,0.8)"
-                    strokeWidth={2}
-                    className="cursor-pointer hover:r-7 transition-all"
-                    onClick={() => handleDotClick(d)}
-                  />
+                  <g key={d.job_id} onClick={() => handleDotClick(d)} style={{ cursor: "pointer" }}>
+                    <circle cx={cx} cy={cy} r={5} fill={color} stroke="rgba(7,6,11,0.8)" strokeWidth={2} />
+                    <text x={cx} y={cy - 10} textAnchor="middle" fontSize={9} fontWeight="bold" fill={color}>
+                      {d.score.toFixed(1)}
+                    </text>
+                  </g>
                 );
               }}
               activeDot={({ cx, cy, payload }) => {
