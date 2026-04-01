@@ -23,24 +23,25 @@ export async function generateMetadata({ params }: { params: Promise<{ jobId: st
     };
   }
 
-  const score = Math.round(result.neural_score?.total ?? 0);
-  const label = score >= 80 ? "Exceptional" : score >= 65 ? "Strong" : score >= 50 ? "Moderate" : "Needs Work";
-  const title = result.ai_report_title || `${label} (${score}/100)`;
+  const rawScore = result.neural_score?.total ?? 0;
+  const scoreStr = rawScore.toFixed(1);
+  const label = rawScore >= 80 ? "Exceptional" : rawScore >= 65 ? "Strong" : rawScore >= 50 ? "Moderate" : "Needs Work";
+  const title = result.ai_report_title || `${label} (${scoreStr}/100)`;
   const type = (result.content_type ?? "video").replace("_", " ");
-  const desc = result.overarching_summary?.slice(0, 160) ?? `Neural score: ${score}/100 for ${type}.`;
+  const desc = result.overarching_summary?.slice(0, 160) ?? `Neural score: ${scoreStr}/100 for ${type}.`;
 
   return {
     title: `${title} — NeuroPeer`,
     description: desc,
     openGraph: {
-      title: `${title} · ${score}/100`,
+      title: `${title} · ${scoreStr}/100`,
       description: desc,
       type: "article",
       siteName: "NeuroPeer",
     },
     twitter: {
       card: "summary_large_image",
-      title: `${title} · ${score}/100`,
+      title: `${title} · ${scoreStr}/100`,
       description: desc,
     },
   };
