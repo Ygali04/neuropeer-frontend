@@ -1,6 +1,7 @@
 "use client";
 
 import { TrendingUp, TrendingDown, Minus, Brain, BarChart3, Clock, Zap, Target } from "lucide-react";
+import { CountUp } from "@/components/ui/count-up";
 import type { MarketerProfile, CampaignSummary } from "@/lib/types";
 
 interface Props {
@@ -37,7 +38,7 @@ export function MarketerProfileCard({ profile, campaigns = [] }: Props) {
           )}
         </div>
         <div className="text-right">
-          <div className={`text-4xl font-bold tabular-nums ${scoreColor}`}>{profile.overall_score.toFixed(1)}</div>
+          <CountUp end={profile.overall_score} decimals={1} duration={1600} className={`text-4xl font-bold tabular-nums ${scoreColor}`} />
           <div className="text-[10px] text-white/30 uppercase tracking-wider">Overall Score</div>
         </div>
       </div>
@@ -49,7 +50,7 @@ export function MarketerProfileCard({ profile, campaigns = [] }: Props) {
             <div key={label} className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/[0.02] border border-white/[0.04]">
               <Icon className={`w-4 h-4 ${color} flex-shrink-0`} />
               <div>
-                <div className="text-sm font-bold text-white/80 tabular-nums">{value}</div>
+                <div className="text-sm font-bold text-white/80 tabular-nums">{typeof value === "number" ? <CountUp end={value} duration={1200} /> : value}</div>
                 <div className="text-[9px] text-white/30 uppercase tracking-wider">{label}</div>
               </div>
             </div>

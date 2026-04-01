@@ -201,9 +201,10 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
         full_text = " ".join(w["word"] for w in media.transcript_words)
         sentences = [s.strip() for s in _re.split(r'[.!?]+', full_text) if s.strip()]
         tribe_events = []
-        tribe_events.append({"type": "Video", "filepath": str(media.video_path), "start": 0,
+        # Use GPU-side paths (video is downloaded to /tmp/video.mp4 on the instance)
+        tribe_events.append({"type": "Video", "filepath": "/tmp/video.mp4", "start": 0,
             "duration": media.duration_seconds, "timeline": "default", "subject": "default"})
-        tribe_events.append({"type": "Audio", "filepath": str(media.audio_path), "start": 0,
+        tribe_events.append({"type": "Audio", "filepath": "/tmp/audio.wav", "start": 0,
             "duration": media.duration_seconds, "timeline": "default", "subject": "default"})
         for w in media.transcript_words:
             wt = w["word"].strip()
@@ -220,7 +221,7 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
         tribe_events_df = _pd.DataFrame(tribe_events)
 
         predictions, vertex_key = run_inference_backend(
-            job_id, tribe_events_df, work_dir, video_path=media.video_path
+            job_id, tribe_events_df, work_dir, video_path=media.video_path, audio_path=media.audio_path
         )
 
         _publish_progress(job_id, "inferring", 0.65, "All 4 modality passes complete.")

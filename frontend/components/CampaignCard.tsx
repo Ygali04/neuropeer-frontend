@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Pencil, Check, X } from "lucide-react";
+import { CountUp } from "@/components/ui/count-up";
 import type { CampaignSummary } from "@/lib/types";
 import { renameCampaign } from "@/lib/api";
 
@@ -59,7 +60,7 @@ export function CampaignCard({ campaign, onRename }: Props) {
         </div>
 
         <div className="text-right flex-shrink-0 ml-4">
-          <div className="text-2xl font-bold tabular-nums" style={{ color: scoreColor }}>{Number(campaign.latest_score).toFixed(1)}</div>
+          <CountUp end={Number(campaign.latest_score)} decimals={1} duration={1200} className="text-2xl font-bold tabular-nums" style={{ color: scoreColor }} />
           {campaign.delta !== 0 && (
             <div className={`text-xs font-bold tabular-nums ${deltaColor}`}>{deltaSign}{Number(campaign.delta).toFixed(1)}</div>
           )}
