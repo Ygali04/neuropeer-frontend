@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Brain,
@@ -11,6 +11,7 @@ import {
   Loader2,
   Plus,
   X,
+  Share2,
 } from "lucide-react";
 
 import { submitAnalysis, compareVideos } from "@/lib/api";
@@ -21,21 +22,20 @@ import { Badge } from "@/components/ui/badge";
 import { UrlInputCard } from "@/components/UrlInputCard";
 import { ReportPicker } from "@/components/ReportPicker";
 import { UserMenu } from "@/components/UserMenu";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { cn } from "@/lib/utils";
 
 function ComparePageInner() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const initialJobId = searchParams.get("jobs") ?? "";
+  const initialJobs = (searchParams.get("jobs") ?? "").split(",").filter(Boolean);
 
-  const [jobIds, setJobIds] = useState<string[]>(
-    initialJobId ? [initialJobId] : []
-  );
+  const [jobIds, setJobIds] = useState<string[]>(initialJobs);
   const [pendingJobs, setPendingJobs] = useState<string[]>([]);
   const [result, setResult] = useState<ComparisonResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [aiRecommendation, setAiRecommendation] = useState<string | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
+  const [autoRan, setAutoRan] = useState(false);
 
   const handleAddVideo = async (url: string, contentType: ContentType) => {
     setLoading(true);
@@ -59,31 +59,36 @@ function ComparePageInner() {
     setPendingJobs((prev) => prev.filter((j) => j !== id));
   };
 
-  const handleCompare = async () => {
-    const allIds = [...jobIds, ...pendingJobs];
-    if (allIds.length < 2) {
+  const runComparison = async (ids: string[]) => {
+    if (ids.length < 2) {
       setError("Add at least 2 videos to compare.");
       return;
     }
     setLoading(true);
     setError("");
     try {
-      const data = await compareVideos(allIds);
+      const data = await compareVideos(ids);
       setResult(data);
-      // Fetch AI recommendation in background
-      setAiLoading(true);
-      fetch("/api/generate-feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "comparison",
-          data: { jobIds: data.job_ids, scores: data.neural_scores, labels: data.labels, deltaMetrics: data.delta_metrics },
-        }),
-      })
-        .then((r) => (r.ok ? r.json() : Promise.reject()))
-        .then((ai) => setAiRecommendation(ai.recommendation))
-        .catch(() => {})
-        .finally(() => setAiLoading(false));
+
+      // Update URL to make comparison shareable (without triggering navigation)
+      const newUrl = `/compare?jobs=${ids.join(",")}`;
+      window.history.replaceState({}, "", newUrl);
+
+      // Update browser tab title with scores
+      const scores = data.neural_scores.map((ns) => ns.total.toFixed(1));
+      document.title = `Compare: ${scores.join(" vs ")} — NeuroPeer`;
+
+      // Fetch report details for titles (runs in background)
+      data.job_ids.forEach(async (id: string) => {
+        if (reportLabels[id]) return;
+        try {
+          const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "https://neuropeer-api-production.up.railway.app"}/api/v1/results/${id}`);
+          if (r.ok) {
+            const d = await r.json();
+            setReportLabels((prev) => ({ ...prev, [id]: { url: d.url, score: d.neural_score?.total ?? 0, title: d.ai_report_title || null } }));
+          }
+        } catch {}
+      });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Comparison failed.");
     } finally {
@@ -91,30 +96,62 @@ function ComparePageInner() {
     }
   };
 
+  const handleCompare = () => runComparison([...jobIds, ...pendingJobs]);
+
+  // Auto-run comparison when URL has 2+ job IDs (shareable link)
+  useEffect(() => {
+    if (autoRan || initialJobs.length < 2) return;
+    setAutoRan(true);
+    runComparison(initialJobs);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const allIds = [...jobIds, ...pendingJobs];
 
-  // Resolve labels for queued items — try to show URL instead of raw ID
-  const [reportLabels, setReportLabels] = useState<Record<string, { url: string; score: number }>>({});
+  // Resolve full report info for queued items
+  const [reportLabels, setReportLabels] = useState<Record<string, { url: string; score: number; title: string | null }>>({});
 
   useEffect(() => {
-    // Fetch result data for queued job IDs to get URLs
-    allIds.forEach(async (id) => {
+    const idsToFetch = [...new Set([...allIds, ...(result?.job_ids ?? [])])];
+    idsToFetch.forEach(async (id) => {
       if (reportLabels[id]) return;
       try {
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "https://neuropeer-api-production.up.railway.app"}/api/v1/results/${id}`);
         if (res.ok) {
           const data = await res.json();
-          setReportLabels((prev) => ({ ...prev, [id]: { url: data.url, score: data.neural_score?.total ?? 0 } }));
+          setReportLabels((prev) => ({
+            ...prev,
+            [id]: {
+              url: data.url,
+              score: data.neural_score?.total ?? 0,
+              title: data.ai_report_title || null,
+            },
+          }));
         }
       } catch {}
     });
-  }, [allIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [allIds, result]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const getLabel = (id: string): string => {
+  // Refine tab title when report labels load
+  useEffect(() => {
+    if (!result || Object.keys(reportLabels).length === 0) return;
+    const ids = result.job_ids as string[];
+    const allLoaded = ids.every((id) => reportLabels[id]);
+    if (!allLoaded) return;
+    const names = ids.map((id) => {
+      const info = reportLabels[id];
+      return info?.title || info?.score?.toFixed(1) || "?";
+    });
+    document.title = `${names.join(" vs ")} — NeuroPeer`;
+  }, [reportLabels, result]);
+
+  const getReportName = (id: string): string => {
     const info = reportLabels[id];
-    if (info) return info.url.replace(/https?:\/\/(www\.)?/, "").slice(0, 35);
+    if (info?.title) return info.title;
+    if (info?.url) return info.url.replace(/https?:\/\/(www\.)?/, "").slice(0, 35);
     return id.slice(0, 12) + "…";
   };
+
+  const getLabel = (id: string): string => getReportName(id);
 
   const getScore = (id: string): number | null => {
     return reportLabels[id]?.score ?? null;
@@ -124,20 +161,24 @@ function ComparePageInner() {
     <div className="min-h-screen">
       <header className="nav-backdrop border-b border-white/[0.06] px-4 sm:px-6 py-3 sm:py-4 sticky top-0 z-10 backdrop-blur-xl bg-[#07060b]/80">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/" className="flex items-center gap-3 group">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
-                <Brain className="w-4 h-4 text-white" />
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Link href="/" className="flex items-center gap-2 sm:gap-3 group">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
+                <Brain className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
               </div>
-              <span className="font-[family-name:var(--font-display)] text-white font-semibold tracking-tight">NeuroPeer</span>
+              <span className="font-[family-name:var(--font-display)] text-white font-semibold tracking-tight text-sm sm:text-base">NeuroPeer</span>
             </Link>
             <span className="text-white/10">/</span>
-            <div className="flex items-center gap-2">
-              <GitCompare className="w-4 h-4 text-teal-400" />
-              <span className="text-white/50 text-sm font-medium">A/B Comparison</span>
-            </div>
+            <Link href="/compare" className="flex items-center gap-1.5 hover:opacity-80 transition-opacity">
+              <GitCompare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-teal-400" />
+              <span className="text-white/50 text-xs sm:text-sm font-medium">A/B Comparison</span>
+            </Link>
           </div>
-          <UserMenu />
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Link href="/methodology" className="hidden sm:block text-sm text-white/40 hover:text-white/70 transition-colors">Methodology</Link>
+            <ThemeToggle />
+            <UserMenu />
+          </div>
         </div>
       </header>
 
@@ -229,17 +270,83 @@ function ComparePageInner() {
         {/* Results */}
         {result && (
           <div className="flex flex-col gap-6">
+            {/* Comparison header with share */}
+            <div className="flex items-center justify-between animate-fade-up">
+              <div>
+                <h2 className="font-[family-name:var(--font-display)] text-lg sm:text-xl font-bold text-white/80">
+                  {result.neural_scores.length}-Way Comparison
+                </h2>
+                <p className="text-xs text-white/30 mt-0.5">
+                  {result.job_ids.map((id) => getReportName(id)).join(" vs ")}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.href);
+                  alert("Comparison link copied!");
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-white/40 hover:text-brand-400 hover:bg-brand-500/10 transition-colors border border-white/[0.06]"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                Share
+              </button>
+            </div>
+
+            {/* Summary card — built from scores, no external AI call */}
             <Card className="!border-brand-500/20 animate-fade-up">
               <div className="flex items-center gap-2 mb-3">
                 <Trophy className="w-4 h-4 text-brand-400" />
-                <CardTitle className="!mb-0 !text-brand-400">Recommendation</CardTitle>
+                <CardTitle className="!mb-0 !text-brand-400">Summary</CardTitle>
               </div>
-              <p className="text-white/60 text-sm leading-relaxed">
-                {aiRecommendation ?? result.recommendation}
-              </p>
-              {aiLoading && (
-                <p className="text-[10px] text-brand-400 animate-pulse mt-2">Generating AI recommendation...</p>
-              )}
+              {(() => {
+                const scores = result.neural_scores;
+                const ids = result.job_ids;
+                const winnerIdx = ids.indexOf(result.winner_job_id);
+                const winnerName = getReportName(ids[winnerIdx]);
+                const winnerScore = scores[winnerIdx].total;
+
+                // Find biggest advantage dimension
+                const dims = ["hook_score", "sustained_attention", "emotional_resonance", "memory_encoding", "aesthetic_quality", "cognitive_accessibility"] as const;
+                const dimLabels: Record<string, string> = { hook_score: "Hook", sustained_attention: "Attention", emotional_resonance: "Emotion", memory_encoding: "Memory", aesthetic_quality: "Aesthetic", cognitive_accessibility: "Clarity" };
+                let bestDim: string = dims[0], bestDimDelta = 0;
+                if (scores.length === 2) {
+                  for (const d of dims) {
+                    const delta = Math.abs(scores[0][d] - scores[1][d]);
+                    if (delta > bestDimDelta) { bestDimDelta = delta; bestDim = d; }
+                  }
+                }
+
+                // Per-report AI summaries from fetched data
+                const reportSummaries = ids.map((id) => reportLabels[id]).filter(Boolean);
+
+                return (
+                  <div className="space-y-3">
+                    <p className="text-sm text-white/60 leading-relaxed">
+                      <span className="text-white/80 font-medium">{winnerName}</span> leads with a neural score of{" "}
+                      <span className="font-bold" style={{ color: winnerScore >= 75 ? "var(--color-score-green)" : winnerScore >= 50 ? "var(--color-score-amber)" : "var(--color-score-red)" }}>
+                        {winnerScore.toFixed(1)}
+                      </span>/100.
+                      {scores.length === 2 && (
+                        <> The biggest difference is in <span className="text-white/70 font-medium">{dimLabels[bestDim]}</span> ({bestDimDelta.toFixed(1)} point gap).</>
+                      )}
+                    </p>
+                    {scores.length === 2 && (() => {
+                      const loserIdx = winnerIdx === 0 ? 1 : 0;
+                      const loserName = getReportName(ids[loserIdx]);
+                      const improvements = dims.filter((d) => scores[loserIdx][d] > scores[winnerIdx][d]);
+                      if (improvements.length > 0) {
+                        return (
+                          <p className="text-xs text-white/40 leading-relaxed">
+                            However, <span className="text-white/55">{loserName}</span> outperforms on{" "}
+                            {improvements.map((d) => dimLabels[d]).join(", ")} — consider combining the strengths of both.
+                          </p>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
+                );
+              })()}
             </Card>
 
             <div className={cn(
@@ -262,7 +369,9 @@ function ComparePageInner() {
                   <Card key={result.job_ids[i]} className={cn("!p-5", isWinner && "!border-brand-500/30 glow-brand")}>
                     {/* Header */}
                     <div className="flex items-center justify-between mb-5">
-                      <span className="text-sm font-medium text-white/50">Video {i + 1}</span>
+                      <span className="text-sm font-medium text-white/60 truncate max-w-[220px]" title={result.labels[i]}>
+                        {getReportName(result.job_ids[i])}
+                      </span>
                       {isWinner && <Badge variant="brand"><Trophy className="w-3 h-3" /> Winner</Badge>}
                     </div>
 
@@ -279,7 +388,7 @@ function ComparePageInner() {
                           />
                         </svg>
                         <div className="absolute inset-0 flex flex-col items-center justify-center">
-                          <span className="text-xl font-bold font-[family-name:var(--font-display)]" style={{ color: scoreColor }}>{Math.round(ns.total)}</span>
+                          <span className="text-xl font-bold font-[family-name:var(--font-display)]" style={{ color: scoreColor }}>{ns.total.toFixed(1)}</span>
                         </div>
                       </div>
                       <div>
@@ -298,7 +407,7 @@ function ComparePageInner() {
                           <div key={d.label}>
                             <div className="flex justify-between text-xs mb-1">
                               <span className="text-white/35">{d.label}</span>
-                              <span className="text-white/55 font-medium tabular-nums">{Math.round(d.value)}</span>
+                              <span className="text-white/55 font-medium tabular-nums">{d.value.toFixed(1)}</span>
                             </div>
                             <div className="h-1 bg-white/[0.04] rounded-full overflow-hidden">
                               <div className="h-full rounded-full" style={{ width: `${d.value}%`, backgroundColor: c, opacity: 0.7 }} />
@@ -339,7 +448,7 @@ function ComparePageInner() {
                     return (
                       <div key={label} className="flex items-center gap-3">
                         <span className="text-xs text-white/40 w-20 flex-shrink-0">{label}</span>
-                        <span className={cn("text-xs font-bold tabular-nums w-10 text-right", winner === 1 ? "text-emerald-400" : "text-white/40")}>{v1.toFixed(1)}</span>
+                        <span className={cn("text-xs font-bold tabular-nums w-10 text-right", winner === 1 ? "text-emerald-400" : "text-white/50")}>{v1.toFixed(1)}</span>
                         <div className="flex-1 h-1.5 rounded-full bg-white/[0.04] relative overflow-hidden">
                           <div className="absolute inset-y-0 left-1/2 w-px bg-white/[0.08]" />
                           {delta !== 0 && (
@@ -354,7 +463,7 @@ function ComparePageInner() {
                             />
                           )}
                         </div>
-                        <span className={cn("text-xs font-bold tabular-nums w-10", winner === 2 ? "text-emerald-400" : "text-white/40")}>{v2.toFixed(1)}</span>
+                        <span className={cn("text-xs font-bold tabular-nums w-10", winner === 2 ? "text-emerald-400" : "text-white/50")}>{v2.toFixed(1)}</span>
                         <span className={cn("text-[10px] font-bold tabular-nums w-12 text-right", delta > 0.5 ? "text-emerald-400" : delta < -0.5 ? "text-red-400" : "text-white/20")}>
                           {delta > 0 ? "+" : ""}{delta.toFixed(1)}
                         </span>
@@ -374,7 +483,9 @@ function ComparePageInner() {
                     <tr className="text-white/30 text-xs border-b border-white/[0.06]">
                       <th className="text-left pb-3 pr-4 font-medium uppercase tracking-wider">Metric</th>
                       {result.labels.map((_label, i) => (
-                        <th key={i} className="text-right pb-3 px-2 sm:px-3 min-w-[60px] font-medium uppercase tracking-wider">V{i + 1}</th>
+                        <th key={i} className="text-right pb-3 px-2 sm:px-3 min-w-[60px] font-medium tracking-wider text-[10px]" title={result.labels[i]}>
+                          {getReportName(result.job_ids[i]).slice(0, 18)}
+                        </th>
                       ))}
                       {result.neural_scores.length === 2 && (
                         <th className="text-right pb-3 pl-2 min-w-[50px] font-medium uppercase tracking-wider">Delta</th>
@@ -389,7 +500,7 @@ function ComparePageInner() {
                         <tr key={metric} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
                           <td className="py-2.5 pr-4 text-xs text-white/45">{metric}</td>
                           {scores.map((score, i) => (
-                            <td key={i} className="py-2.5 px-2 sm:px-3 text-right text-xs font-medium tabular-nums" style={{ color: score === maxScore ? "var(--color-score-green)" : "rgba(255,255,255,0.35)" }}>
+                            <td key={i} className={cn("py-2.5 px-2 sm:px-3 text-right text-xs font-medium tabular-nums", score === maxScore ? "" : "text-white/50")} style={score === maxScore ? { color: "var(--color-score-green)" } : undefined}>
                               {score.toFixed(1)}
                             </td>
                           ))}
