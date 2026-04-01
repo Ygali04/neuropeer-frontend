@@ -353,15 +353,16 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
         const tribeIdx = sliceStart + Math.min(sliceLen - 1, Math.floor(i / count * sliceLen));
         const raw = verts[tribeIdx];
 
-        // Wider normalization range → brighter, more visible activations
-        const activation = Math.max(0, Math.min(1, (raw + 0.1) / 0.3));
+        // Normalize: raw z-scored values. Only show color above 25th percentile.
+        // Range: raw < 0.3 = gray (inactive), raw 0.3-2.0 = 0-100% activation
+        const activation = Math.max(0, Math.min(1, (raw - 0.3) / 1.7));
 
-        // Concentrated patches: spatial seed gates which vertices show color
+        // Spatial seed gates: concentrate color into patches, not uniform spread
         const seed = seeds[i];
-        const concentrated = activation * (seed > 0.55 ? 1.0 : seed > 0.35 ? 0.5 : 0.12);
+        const concentrated = activation * (seed > 0.6 ? 1.0 : seed > 0.4 ? 0.4 : 0.08);
         const clamped = Math.min(1, Math.sqrt(Math.max(0, concentrated)));
 
-        // Higher threshold = more gray, less filled regions
+        // Gray threshold at 25% — ensures truly inactive regions stay gray
         if (clamped < 0.25) {
           colors[i*3] = bgR; colors[i*3+1] = bgG; colors[i*3+2] = bgB;
         } else if (mode === "heatmap") {

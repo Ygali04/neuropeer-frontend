@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState, useEffect } from "react";
 import { ChevronDown, Brain, Gauge, Lightbulb } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
@@ -21,10 +21,13 @@ interface Props {
 }
 
 export function MetricCard({ metric, expanded, onToggle }: Props) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setMounted(true), 150); return () => clearTimeout(t); }, []);
   const color = scoreColor(metric.score);
   const info = METRIC_INFO[metric.name];
   const strategy = METRIC_STRATEGIES[metric.name];
   const contentRef = useRef<HTMLDivElement>(null);
+  const circ = 2 * Math.PI * 18;
 
   return (
     <div
@@ -47,10 +50,10 @@ export function MetricCard({ metric, expanded, onToggle }: Props) {
               fill="none"
               stroke={color}
               strokeWidth="3.5"
-              strokeDasharray={2 * Math.PI * 18}
-              strokeDashoffset={2 * Math.PI * 18 * (1 - metric.score / 100)}
+              strokeDasharray={circ}
+              strokeDashoffset={mounted ? circ * (1 - metric.score / 100) : circ}
               strokeLinecap="round"
-              style={{ filter: `drop-shadow(0 0 4px ${color}30)` }}
+              style={{ transition: "stroke-dashoffset 1s cubic-bezier(0.16, 1, 0.3, 1)", filter: `drop-shadow(0 0 4px ${color}30)` }}
             />
           </svg>
           <CountUp
