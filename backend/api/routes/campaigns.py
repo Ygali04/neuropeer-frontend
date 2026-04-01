@@ -76,6 +76,8 @@ async def all_reports(user_email: str) -> list[dict]:
             "score": round(score, 1) if score else 0,
             "campaign_name": job.campaign_name,
             "content_group_id": str(job.content_group_id),
+            "project_id": str(job.project_id) if job.project_id else None,
+            "campaign_id": str(job.campaign_id) if job.campaign_id else None,
             "created_at": job.created_at.isoformat() if job.created_at else "",
         })
 

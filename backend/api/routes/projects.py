@@ -178,18 +178,25 @@ async def get_project_detail(project_id: str) -> dict:
 
         campaign_data = []
         for c in campaigns:
-            job_count = (await session.execute(
-                select(func.count()).where(Job.campaign_id == c.id)
-            )).scalar() or 0
-            latest = (await session.execute(
-                select(Result.neural_score_total)
-                .join(Job, Result.job_id == Job.id)
+            # Get actual reports in this campaign
+            camp_jobs = (await session.execute(
+                select(Job, Result.neural_score_total)
+                .outerjoin(Result, Result.job_id == Job.id)
                 .where(Job.campaign_id == c.id)
-                .order_by(Job.created_at.desc()).limit(1)
-            )).scalar()
+                .order_by(Job.created_at.desc())
+            )).all()
+
+            camp_reports = [{
+                "job_id": str(j.id), "url": j.url, "content_type": j.content_type,
+                "score": score, "created_at": j.created_at.isoformat() if j.created_at else "",
+            } for j, score in camp_jobs]
+
+            latest = camp_reports[0]["score"] if camp_reports else None
+
             campaign_data.append({
                 "id": str(c.id), "name": c.name, "description": c.description,
-                "report_count": job_count, "latest_score": latest,
+                "report_count": len(camp_reports), "latest_score": latest,
+                "reports": camp_reports,
                 "created_at": c.created_at.isoformat() if c.created_at else "",
             })
 

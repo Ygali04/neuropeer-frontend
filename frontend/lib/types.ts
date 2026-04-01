@@ -126,6 +126,14 @@ export interface ProjectSummary {
   updated_at: string;
 }
 
+export interface ProjectDetailReport {
+  job_id: string;
+  url: string;
+  content_type: string;
+  score: number | null;
+  created_at: string;
+}
+
 export interface ProjectDetail {
   id: string;
   name: string;
@@ -136,15 +144,10 @@ export interface ProjectDetail {
     description: string | null;
     report_count: number;
     latest_score: number | null;
+    reports: ProjectDetailReport[];
     created_at: string;
   }[];
-  loose_reports: {
-    job_id: string;
-    url: string;
-    content_type: string;
-    score: number | null;
-    created_at: string;
-  }[];
+  loose_reports: ProjectDetailReport[];
 }
 
 export interface CampaignV2 {
