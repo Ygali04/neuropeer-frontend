@@ -289,6 +289,41 @@ async def merge_campaigns(body: MergeRequest) -> dict:
     }
 
 
+class MoveReportRequest(BaseModel):
+    job_id: str
+    target_group_id: str
+
+
+@router.post("/campaigns/move-report")
+async def move_report_to_campaign(body: MoveReportRequest) -> dict:
+    """Move a report (job) into a different campaign (content_group)."""
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with Session() as session:
+        stmt = select(Job).where(Job.id == UUID(body.job_id))
+        job = (await session.execute(stmt)).scalar_one_or_none()
+        if not job:
+            await engine.dispose()
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        job.content_group_id = UUID(body.target_group_id)
+
+        # Also pick up the campaign name from an existing job in the target group
+        target_stmt = select(Job.campaign_name).where(
+            Job.content_group_id == UUID(body.target_group_id),
+            Job.campaign_name.is_not(None)
+        ).limit(1)
+        target_name = (await session.execute(target_stmt)).scalar_one_or_none()
+        if target_name:
+            job.campaign_name = target_name
+
+        await session.commit()
+
+    await engine.dispose()
+    return {"job_id": body.job_id, "target_group_id": body.target_group_id}
+
+
 @router.put("/campaigns/{content_group_id}/name")
 async def rename_campaign(content_group_id: UUID, body: RenameRequest) -> dict:
     """Rename a campaign (updates all jobs in the content group)."""
