@@ -23,6 +23,7 @@ interface ReportPoint {
   content_type: string;
   score: number;
   campaign_name: string | null;
+  project_name: string | null;
   content_group_id: string;
   created_at: string;
   date: number;
@@ -32,7 +33,7 @@ interface ReportPoint {
 interface Props {
   campaigns: CampaignSummary[];
   overallScore: number;
-  reports?: { job_id: string; url: string; content_type: string; score: number; campaign_name: string | null; content_group_id: string; created_at: string }[];
+  reports?: { job_id: string; url: string; content_type: string; score: number; campaign_name: string | null; project_name?: string | null; content_group_id: string; created_at: string }[];
 }
 
 export function ScoreTimeline({ campaigns, overallScore, reports: reportsProp }: Props) {
@@ -138,6 +139,9 @@ export function ScoreTimeline({ campaigns, overallScore, reports: reportsProp }:
                       <span className="text-[10px] text-white/25">{d.dateLabel}</span>
                     </div>
                     <p className="text-[11px] text-white/50 mb-1 break-all">{shortUrl}</p>
+                    {d.project_name && (
+                      <p className="text-[10px] text-white/30 mb-0.5">Project: {d.project_name}</p>
+                    )}
                     {d.campaign_name && (
                       <p className="text-[10px] text-brand-400/70 mb-1">Campaign: {d.campaign_name}</p>
                     )}

@@ -3,28 +3,12 @@
 import Link from "next/link";
 import { Brain, BookOpen, ArrowLeft, ExternalLink, Layers, Target, Sparkles, Cpu, GitCompare, FlaskConical } from "lucide-react";
 import { Card, CardTitle } from "@/components/ui/card";
-import { UserMenu } from "@/components/UserMenu";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { Navbar } from "@/components/Navbar";
 
 export default function MethodologyPage() {
   return (
     <div className="min-h-screen">
-      <header className="nav-backdrop border-b border-white/[0.06] px-4 sm:px-6 py-3 sm:py-4 sticky top-0 z-10 backdrop-blur-xl bg-[#07060b]/80">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
-              <Brain className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-[family-name:var(--font-display)] text-white font-semibold text-lg">NeuroPeer</span>
-          </Link>
-          <div className="flex items-center gap-2 sm:gap-4">
-            <Link href="/" className="hidden sm:block text-sm text-white/40 hover:text-white/70 transition-colors">Analyze</Link>
-            <span className="text-sm text-brand-400 font-medium">Methodology</span>
-            <ThemeToggle />
-            <UserMenu />
-          </div>
-        </div>
-      </header>
+      <Navbar breadcrumb={{ label: "Methodology" }} />
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
         {/* ── Hero ──────────────────────────────────────────────────────────── */}

@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Brain, Zap, BarChart3, GitCompare, Activity, Sparkles, Clock, ExternalLink, Trash2, ArrowRight } from "lucide-react";
 import { UrlInputCard } from "@/components/UrlInputCard";
-import { UserMenu } from "@/components/UserMenu";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { Navbar } from "@/components/Navbar";
 import { Badge } from "@/components/ui/badge";
 import { submitAnalysis } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -75,29 +74,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* ── Nav ─────────────────────────────────────────────────────────────── */}
-      <header className="nav-backdrop border-b border-white/[0.06] px-4 sm:px-6 py-3 sm:py-4 backdrop-blur-xl bg-[#07060b]/80">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
-              <Brain className="w-4 h-4 text-white" />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="font-[family-name:var(--font-display)] text-white font-semibold text-lg tracking-tight">NeuroPeer</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-4">
-            <Link href="/methodology" className="hidden sm:block text-sm text-white/40 hover:text-white/70 transition-colors">Methodology</Link>
-            <Link href="/compare" className="hidden sm:block text-sm text-white/40 hover:text-white/70 transition-colors">A/B Compare</Link>
-            <Badge variant="default" className="hidden sm:inline-flex">
-              <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
-              TRIBE v2
-            </Badge>
-            <ThemeToggle />
-            <UserMenu />
-          </div>
-        </div>
-      </header>
+      <Navbar />
 
       {/* ── Hero ────────────────────────────────────────────────────────────── */}
       <main className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 py-12 sm:py-20">
@@ -257,7 +234,7 @@ export default function HomePage() {
                       />
                     </svg>
                     <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold tabular-nums" style={{ color: scoreColor(run.neuralScore) }}>
-                      {Math.round(run.neuralScore)}
+                      {run.neuralScore.toFixed(1)}
                     </span>
                   </div>
 

@@ -22,8 +22,7 @@ import { connectJobWebSocket, getResult, exportReport, getRunHistory, submitAnal
 import { generateReportPDF } from "@/lib/export-pdf";
 import { addRunToHistory } from "@/lib/run-history";
 import { useAuth } from "@/lib/auth-context";
-import { UserMenu } from "@/components/UserMenu";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { Navbar } from "@/components/Navbar";
 import type { AnalysisResult, ProgressEvent } from "@/lib/types";
 
 import { Button } from "@/components/ui/button";
@@ -252,45 +251,26 @@ export default function AnalyzePage() {
 
   return (
     <div className="min-h-screen">
-      {/* ── Nav ─────────────────────────────────────────────────────────────── */}
-      <header className="nav-backdrop border-b border-white/[0.06] px-4 sm:px-6 py-3 sm:py-4 sticky top-0 z-10 backdrop-blur-xl bg-[#07060b]/80">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 sm:gap-3 group">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
-              <Brain className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
-            </div>
-            <span className="font-[family-name:var(--font-display)] text-white font-semibold tracking-tight text-sm sm:text-base">
-              NeuroPeer
-            </span>
-          </Link>
-          <div className="flex items-center gap-1 sm:gap-2">
-            {result && (
-              <>
-                <Button variant="ghost" size="sm" onClick={handleShare} className="!px-2 sm:!px-3">
-                  {shareCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
-                  <span className="hidden sm:inline">{shareCopied ? "Copied!" : "Share"}</span>
-                </Button>
-                <Button variant="secondary" size="sm" onClick={handleExport} disabled={exporting} className="!px-2 sm:!px-3">
-                  {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                  <span className="hidden sm:inline">{exporting ? "Generating..." : "Export PDF"}</span>
-                </Button>
-                {session && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowReanalyze(true)}
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Re-analyze</span>
-                  </Button>
-                )}
-              </>
+      <Navbar
+        actions={result ? (
+          <>
+            <Button variant="ghost" size="sm" onClick={handleShare} className="!px-2 sm:!px-3">
+              {shareCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline">{shareCopied ? "Copied!" : "Share"}</span>
+            </Button>
+            <Button variant="secondary" size="sm" onClick={handleExport} disabled={exporting} className="!px-2 sm:!px-3">
+              {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline">{exporting ? "Generating..." : "Export PDF"}</span>
+            </Button>
+            {session && (
+              <Button variant="outline" size="sm" onClick={() => setShowReanalyze(true)}>
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Re-analyze</span>
+              </Button>
             )}
-            <ThemeToggle />
-            <UserMenu />
-          </div>
-        </div>
-      </header>
+          </>
+        ) : undefined}
+      />
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
         {error && (
@@ -443,7 +423,7 @@ export default function AnalyzePage() {
                           <span className="text-white/40">{m.name}</span>
                           <span className="font-semibold tabular-nums" style={{
                             color: m.score >= 70 ? "var(--color-score-green)" : m.score >= 45 ? "var(--color-score-amber)" : "var(--color-score-red)",
-                          }}>{m.score.toFixed(0)}/100</span>
+                          }}>{m.score.toFixed(1)}/100</span>
                         </div>
                       ))
                   ) : (
