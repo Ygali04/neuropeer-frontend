@@ -255,17 +255,27 @@ async def get_run_history(job_id: UUID) -> dict:
         )
         rows = (await session.execute(stmt)).all()
 
+    # Extract data while session is still open
+    raw_runs = []
+    for row_job, db_score in rows:
+        raw_runs.append({
+            "job_id": str(row_job.id),
+            "url": row_job.url,
+            "db_score": float(db_score) if db_score else 0.0,
+            "created_at": row_job.created_at.isoformat() if row_job.created_at else "",
+            "parent_job_id": str(row_job.parent_job_id) if row_job.parent_job_id else None,
+            "is_current": str(row_job.id) == str(job_id),
+        })
+
     await engine.dispose()
 
-    # Try to get full-precision scores from Redis (DB may have rounded values)
+    # Enrich with full-precision scores from Redis (DB may store rounded values)
     r = aioredis.from_url(settings.redis_url, decode_responses=True)
-
     runs = []
-    for row_job, db_score in rows:
-        # Prefer Redis score (full precision) over DB score (may be rounded)
-        score = float(db_score) if db_score else 0.0
+    for run in raw_runs:
+        score = run["db_score"]
         try:
-            raw = await r.get(f"neuropeer:result:{row_job.id}")
+            raw = await r.get(f"neuropeer:result:{run['job_id']}")
             if raw:
                 cached = json.loads(raw)
                 score = cached.get("neural_score", {}).get("total", score)
@@ -273,12 +283,12 @@ async def get_run_history(job_id: UUID) -> dict:
             pass
 
         runs.append({
-            "job_id": str(row_job.id),
-            "url": row_job.url,
+            "job_id": run["job_id"],
+            "url": run["url"],
             "neural_score": round(float(score), 1),
-            "created_at": row_job.created_at.isoformat() if row_job.created_at else "",
-            "parent_job_id": str(row_job.parent_job_id) if row_job.parent_job_id else None,
-            "is_current": str(row_job.id) == str(job_id),
+            "created_at": run["created_at"],
+            "parent_job_id": run["parent_job_id"],
+            "is_current": run["is_current"],
         })
 
     await r.aclose()
