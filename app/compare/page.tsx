@@ -74,17 +74,9 @@ function ComparePageInner() {
       const newUrl = `/compare?jobs=${ids.join(",")}`;
       window.history.replaceState({}, "", newUrl);
 
-      // Update browser tab title (will refine with report names once they load)
-      const scores = data.neural_scores.map((ns) => Math.round(ns.total));
+      // Update browser tab title with scores
+      const scores = data.neural_scores.map((ns) => ns.total.toFixed(1));
       document.title = `Compare: ${scores.join(" vs ")} — NeuroPeer`;
-      // Refine with report names after they resolve
-      setTimeout(() => {
-        const names = ids.map((id) => {
-          const info = reportLabels[id];
-          return info?.title || `${Math.round(info?.score ?? 0)}/100`;
-        });
-        document.title = `${names.join(" vs ")} — NeuroPeer`;
-      }, 2000);
 
       // Fetch report details for titles (runs in background)
       data.job_ids.forEach(async (id: string) => {
@@ -138,6 +130,19 @@ function ComparePageInner() {
       } catch {}
     });
   }, [allIds, result]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Refine tab title when report labels load
+  useEffect(() => {
+    if (!result || Object.keys(reportLabels).length === 0) return;
+    const ids = result.job_ids as string[];
+    const allLoaded = ids.every((id) => reportLabels[id]);
+    if (!allLoaded) return;
+    const names = ids.map((id) => {
+      const info = reportLabels[id];
+      return info?.title || info?.score?.toFixed(1) || "?";
+    });
+    document.title = `${names.join(" vs ")} — NeuroPeer`;
+  }, [reportLabels, result]);
 
   const getReportName = (id: string): string => {
     const info = reportLabels[id];

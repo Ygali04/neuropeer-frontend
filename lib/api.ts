@@ -186,3 +186,65 @@ export function connectJobWebSocket(
 
   return () => ws.close();
 }
+
+// ── Projects API ────────────────────────────────────────────────────────────
+
+export async function getProjects(
+  userEmail: string
+): Promise<import("./types").ProjectSummary[]> {
+  const res = await fetch(`${API_BASE}/api/v1/projects?user_email=${encodeURIComponent(userEmail)}`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function getProjectDetail(
+  projectId: string
+): Promise<import("./types").ProjectDetail | null> {
+  const res = await fetch(`${API_BASE}/api/v1/projects/${projectId}`);
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function createProject(
+  name: string,
+  userEmail: string,
+  description?: string
+): Promise<{ id: string; name: string }> {
+  const res = await fetch(`${API_BASE}/api/v1/projects`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, user_email: userEmail, description }),
+  });
+  if (!res.ok) throw new Error("Failed to create project");
+  return res.json();
+}
+
+export async function deleteProject(projectId: string): Promise<void> {
+  await fetch(`${API_BASE}/api/v1/projects/${projectId}`, { method: "DELETE" });
+}
+
+export async function createCampaignV2(
+  name: string,
+  userEmail: string,
+  projectId?: string
+): Promise<{ id: string; name: string }> {
+  const res = await fetch(`${API_BASE}/api/v1/campaigns/create`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, user_email: userEmail, project_id: projectId }),
+  });
+  if (!res.ok) throw new Error("Failed to create campaign");
+  return res.json();
+}
+
+export async function moveReport(
+  jobId: string,
+  projectId?: string,
+  campaignId?: string
+): Promise<void> {
+  await fetch(`${API_BASE}/api/v1/reports/move`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ job_id: jobId, project_id: projectId, campaign_id: campaignId }),
+  });
+}

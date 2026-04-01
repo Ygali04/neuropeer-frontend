@@ -114,6 +114,50 @@ export interface CampaignSummary {
   latest_job_id: string | null;
 }
 
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  user_email: string;
+  campaign_count: number;
+  report_count: number;
+  latest_score: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectDetail {
+  id: string;
+  name: string;
+  description: string | null;
+  campaigns: {
+    id: string;
+    name: string;
+    description: string | null;
+    report_count: number;
+    latest_score: number | null;
+    created_at: string;
+  }[];
+  loose_reports: {
+    job_id: string;
+    url: string;
+    content_type: string;
+    score: number | null;
+    created_at: string;
+  }[];
+}
+
+export interface CampaignV2 {
+  id: string;
+  name: string;
+  description: string | null;
+  project_id: string | null;
+  user_email: string;
+  report_count: number;
+  latest_score: number | null;
+  created_at: string;
+}
+
 export interface MarketerProfile {
   user_email: string;
   overall_score: number;
