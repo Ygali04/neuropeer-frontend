@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { UrlInputCard } from "@/components/UrlInputCard";
 import { ReportPicker } from "@/components/ReportPicker";
 import { UserMenu } from "@/components/UserMenu";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { cn } from "@/lib/utils";
 
 function ComparePageInner() {
@@ -142,20 +143,24 @@ function ComparePageInner() {
     <div className="min-h-screen">
       <header className="nav-backdrop border-b border-white/[0.06] px-4 sm:px-6 py-3 sm:py-4 sticky top-0 z-10 backdrop-blur-xl bg-[#07060b]/80">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/" className="flex items-center gap-3 group">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
-                <Brain className="w-4 h-4 text-white" />
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Link href="/" className="flex items-center gap-2 sm:gap-3 group">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
+                <Brain className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
               </div>
-              <span className="font-[family-name:var(--font-display)] text-white font-semibold tracking-tight">NeuroPeer</span>
+              <span className="font-[family-name:var(--font-display)] text-white font-semibold tracking-tight text-sm sm:text-base">NeuroPeer</span>
             </Link>
             <span className="text-white/10">/</span>
-            <div className="flex items-center gap-2">
-              <GitCompare className="w-4 h-4 text-teal-400" />
-              <span className="text-white/50 text-sm font-medium">A/B Comparison</span>
-            </div>
+            <Link href="/compare" className="flex items-center gap-1.5 hover:opacity-80 transition-opacity">
+              <GitCompare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-teal-400" />
+              <span className="text-white/50 text-xs sm:text-sm font-medium">A/B Comparison</span>
+            </Link>
           </div>
-          <UserMenu />
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Link href="/methodology" className="hidden sm:block text-sm text-white/40 hover:text-white/70 transition-colors">Methodology</Link>
+            <ThemeToggle />
+            <UserMenu />
+          </div>
         </div>
       </header>
 
