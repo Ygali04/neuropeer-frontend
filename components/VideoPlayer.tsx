@@ -85,7 +85,7 @@ function YouTubePlayer({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YT.Player | null>(null);
-  const [muted, setMuted] = useState(true);
+  const [muted, setMuted] = useState(false);
   const [ready, setReady] = useState(false);
   const suppressEventRef = useRef(false);
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
@@ -238,7 +238,7 @@ function InstagramEmbed({
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const [muted, setMuted] = useState(true);
+  const [muted, setMuted] = useState(false);
   const isPlayingRef = useRef(isPlaying);
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
@@ -390,7 +390,7 @@ export function VideoPlayer({
   onCycleSpeed,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [muted, setMuted] = useState(true);
+  const [muted, setMuted] = useState(false);
   const [canPlay, setCanPlay] = useState(false);
 
   const mediaType = detectMediaType(url);
