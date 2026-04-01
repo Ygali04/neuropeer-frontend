@@ -76,9 +76,17 @@ function ComparePageInner() {
       const newUrl = `/compare?jobs=${ids.join(",")}`;
       window.history.replaceState({}, "", newUrl);
 
-      // Update browser tab title
+      // Update browser tab title (will refine with report names once they load)
       const scores = data.neural_scores.map((ns) => Math.round(ns.total));
       document.title = `Compare: ${scores.join(" vs ")} — NeuroPeer`;
+      // Refine with report names after they resolve
+      setTimeout(() => {
+        const names = ids.map((id) => {
+          const info = reportLabels[id];
+          return info?.title || `${Math.round(info?.score ?? 0)}/100`;
+        });
+        document.title = `${names.join(" vs ")} — NeuroPeer`;
+      }, 2000);
 
       // Fetch AI recommendation in background
       setAiLoading(true);
@@ -112,28 +120,38 @@ function ComparePageInner() {
 
   const allIds = [...jobIds, ...pendingJobs];
 
-  // Resolve labels for queued items — try to show URL instead of raw ID
-  const [reportLabels, setReportLabels] = useState<Record<string, { url: string; score: number }>>({});
+  // Resolve full report info for queued items
+  const [reportLabels, setReportLabels] = useState<Record<string, { url: string; score: number; title: string | null }>>({});
 
   useEffect(() => {
-    // Fetch result data for queued job IDs to get URLs
-    allIds.forEach(async (id) => {
+    const idsToFetch = [...new Set([...allIds, ...(result?.job_ids ?? [])])];
+    idsToFetch.forEach(async (id) => {
       if (reportLabels[id]) return;
       try {
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "https://neuropeer-api-production.up.railway.app"}/api/v1/results/${id}`);
         if (res.ok) {
           const data = await res.json();
-          setReportLabels((prev) => ({ ...prev, [id]: { url: data.url, score: data.neural_score?.total ?? 0 } }));
+          setReportLabels((prev) => ({
+            ...prev,
+            [id]: {
+              url: data.url,
+              score: data.neural_score?.total ?? 0,
+              title: data.ai_report_title || null,
+            },
+          }));
         }
       } catch {}
     });
-  }, [allIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [allIds, result]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const getLabel = (id: string): string => {
+  const getReportName = (id: string): string => {
     const info = reportLabels[id];
-    if (info) return info.url.replace(/https?:\/\/(www\.)?/, "").slice(0, 35);
+    if (info?.title) return info.title;
+    if (info?.url) return info.url.replace(/https?:\/\/(www\.)?/, "").slice(0, 35);
     return id.slice(0, 12) + "…";
   };
+
+  const getLabel = (id: string): string => getReportName(id);
 
   const getScore = (id: string): number | null => {
     return reportLabels[id]?.score ?? null;
@@ -259,7 +277,7 @@ function ComparePageInner() {
                   {result.neural_scores.length}-Way Comparison
                 </h2>
                 <p className="text-xs text-white/30 mt-0.5">
-                  {result.labels.map((l, i) => l.replace(/https?:\/\/(www\.)?/, "").slice(0, 25)).join(" vs ")}
+                  {result.job_ids.map((id) => getReportName(id)).join(" vs ")}
                 </p>
               </div>
               <button
@@ -307,8 +325,8 @@ function ComparePageInner() {
                   <Card key={result.job_ids[i]} className={cn("!p-5", isWinner && "!border-brand-500/30 glow-brand")}>
                     {/* Header */}
                     <div className="flex items-center justify-between mb-5">
-                      <span className="text-sm font-medium text-white/60 truncate max-w-[200px]">
-                        {result.labels[i]?.replace(/https?:\/\/(www\.)?/, "").split("/")[0] || `Video ${i + 1}`}
+                      <span className="text-sm font-medium text-white/60 truncate max-w-[220px]" title={result.labels[i]}>
+                        {getReportName(result.job_ids[i])}
                       </span>
                       {isWinner && <Badge variant="brand"><Trophy className="w-3 h-3" /> Winner</Badge>}
                     </div>
@@ -422,7 +440,7 @@ function ComparePageInner() {
                       <th className="text-left pb-3 pr-4 font-medium uppercase tracking-wider">Metric</th>
                       {result.labels.map((_label, i) => (
                         <th key={i} className="text-right pb-3 px-2 sm:px-3 min-w-[60px] font-medium tracking-wider text-[10px]" title={result.labels[i]}>
-                          {result.labels[i]?.replace(/https?:\/\/(www\.)?/, "").split("/")[0].slice(0, 15) || `V${i + 1}`}
+                          {getReportName(result.job_ids[i]).slice(0, 18)}
                         </th>
                       ))}
                       {result.neural_scores.length === 2 && (
