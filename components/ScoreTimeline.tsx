@@ -32,14 +32,26 @@ interface ReportPoint {
 interface Props {
   campaigns: CampaignSummary[];
   overallScore: number;
+  reports?: { job_id: string; url: string; content_type: string; score: number; campaign_name: string | null; content_group_id: string; created_at: string }[];
 }
 
-export function ScoreTimeline({ campaigns, overallScore }: Props) {
+export function ScoreTimeline({ campaigns, overallScore, reports: reportsProp }: Props) {
   const router = useRouter();
   const { session } = useAuth();
   const [reports, setReports] = useState<ReportPoint[]>([]);
 
   useEffect(() => {
+    // Use prop if provided (lifted state from dashboard), otherwise fetch
+    if (reportsProp) {
+      setReports(
+        reportsProp.map((r) => ({
+          ...r,
+          date: new Date(r.created_at).getTime(),
+          dateLabel: new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        }))
+      );
+      return;
+    }
     const email = session?.user?.email;
     if (!email) return;
     getAllReports(email).then((data) => {
