@@ -45,8 +45,8 @@ export default async function Image({ params }: { params: Promise<{ jobId: strin
           position: "relative",
         }}
       >
-        {/* Subtle gradient accent */}
-        <div style={{ position: "absolute", top: -100, right: -100, width: 400, height: 400, borderRadius: "50%", background: `radial-gradient(circle, ${scoreBg} 0%, transparent 70%)` }} />
+        {/* Subtle bottom accent line */}
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 4, background: scoreColor }} />
 
         {/* Logo */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 32 }}>
