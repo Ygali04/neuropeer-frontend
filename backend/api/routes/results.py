@@ -137,6 +137,46 @@ async def get_result(job_id: UUID) -> dict:
     return AnalysisResult.model_validate(data).model_dump()
 
 
+@router.put("/results/{job_id}/title")
+async def set_report_title(job_id: UUID, body: dict) -> dict:
+    """Set a custom title for a report."""
+    from sqlalchemy import select as _select
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from backend.models.db import Job, Result
+
+    title = body.get("title", "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Title cannot be empty")
+
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with Session() as session:
+        job = (await session.execute(_select(Job).where(Job.id == job_id))).scalar_one_or_none()
+        if not job:
+            await engine.dispose()
+            raise HTTPException(status_code=404, detail="Job not found")
+        job.label = title
+
+        # Also update ai_report_title in Result
+        result = (await session.execute(_select(Result).where(Result.job_id == job_id))).scalar_one_or_none()
+        if result:
+            result.ai_report_title = title
+
+        await session.commit()
+
+    # Update Redis cache if it exists
+    r = await _get_redis()
+    raw = await r.get(f"neuropeer:result:{str(job_id)}")
+    if raw:
+        data = json.loads(raw)
+        data["ai_report_title"] = title
+        await r.set(f"neuropeer:result:{str(job_id)}", json.dumps(data), ex=60 * 60 * 24 * 7)
+
+    await engine.dispose()
+    return {"job_id": str(job_id), "title": title}
+
+
 @router.get("/results/{job_id}/timeseries")
 async def get_timeseries(job_id: UUID) -> dict:
     """Retrieve per-second attention, arousal, and cognitive load curves."""
