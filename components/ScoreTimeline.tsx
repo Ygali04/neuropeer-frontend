@@ -33,7 +33,7 @@ interface ReportPoint {
 interface Props {
   campaigns: CampaignSummary[];
   overallScore: number;
-  reports?: { job_id: string; url: string; content_type: string; score: number; campaign_name: string | null; project_name?: string | null; content_group_id: string; created_at: string }[];
+  reports?: { job_id: string; url: string; content_type: string; score: number; campaign_name: string | null; content_group_id: string; created_at: string; [key: string]: unknown }[];
 }
 
 export function ScoreTimeline({ campaigns, overallScore, reports: reportsProp }: Props) {
@@ -47,6 +47,7 @@ export function ScoreTimeline({ campaigns, overallScore, reports: reportsProp }:
       setReports(
         reportsProp.map((r) => ({
           ...r,
+          project_name: (r as Record<string, unknown>).project_name as string | null ?? null,
           date: new Date(r.created_at).getTime(),
           dateLabel: new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
         }))
@@ -60,6 +61,7 @@ export function ScoreTimeline({ campaigns, overallScore, reports: reportsProp }:
       setReports(
         data.map((r) => ({
           ...r,
+          project_name: (r as Record<string, unknown>).project_name as string | null ?? null,
           date: new Date(r.created_at).getTime(),
           dateLabel: new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
         }))

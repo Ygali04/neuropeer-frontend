@@ -25,7 +25,8 @@ import { cn } from "@/lib/utils";
 interface LooseReport {
   job_id: string; url: string; content_type: string;
   score: number | null; created_at: string;
-  campaign_name?: string | null; content_group_id?: string;
+  campaign_name?: string | null; project_name?: string | null;
+  content_group_id?: string;
   project_id?: string | null; campaign_id?: string | null;
 }
 
@@ -341,7 +342,7 @@ export default function DashboardPage() {
         {activeTab === "stats" && profile && (
           <div className="space-y-6 animate-fade-up">
             <MarketerProfileCard profile={profile} campaigns={campaigns} />
-            <ScoreTimeline campaigns={campaigns} overallScore={profile.overall_score} reports={allReports.map(r => ({ job_id: r.job_id, url: r.url, content_type: r.content_type, score: r.score ?? 0, campaign_name: r.campaign_name ?? null, content_group_id: r.content_group_id ?? "", created_at: r.created_at }))} />
+            <ScoreTimeline campaigns={campaigns} overallScore={profile.overall_score} reports={allReports.map(r => ({ job_id: r.job_id, url: r.url, content_type: r.content_type, score: r.score ?? 0, campaign_name: r.campaign_name ?? null, project_name: r.project_name ?? null, content_group_id: r.content_group_id ?? "", created_at: r.created_at }))} />
           </div>
         )}
 
