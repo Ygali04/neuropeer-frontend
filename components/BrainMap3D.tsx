@@ -233,20 +233,15 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
         colorMeshesFromVerts(interpolated);
       }
 
-      // Focus/fade: when a region is selected, fade out all other meshes
+      // Focus/fade: when a region is selected, others become very transparent
       const sel = selectedRegionRef.current;
       regionMeshesRef.current.forEach((mesh, rk) => {
         const mat = mesh.material as THREE.MeshStandardMaterial;
-        if (sel) {
-          // Selected region: fully opaque. Others: nearly transparent
-          const isSelected = rk === sel;
-          mat.transparent = true;
-          mat.opacity += ((isSelected ? 1.0 : 0.12) - mat.opacity) * 0.12; // smooth lerp
-        } else {
-          // No selection: all fully opaque
-          mat.transparent = false;
-          mat.opacity += (1.0 - mat.opacity) * 0.12;
-        }
+        const targetOpacity = sel ? (rk === sel ? 1.0 : 0.07) : 1.0;
+        const targetDepth = sel ? (rk === sel) : true;
+        // Fast lerp — converges in ~8 frames
+        mat.opacity += (targetOpacity - mat.opacity) * 0.25;
+        mat.depthWrite = targetDepth;
       });
 
       renderer.render(scene, camera);
@@ -268,7 +263,7 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
           for (let i = 0; i < count; i++) { cols[i*3]=0.60; cols[i*3+1]=0.60; cols[i*3+2]=0.58; }
           geom.setAttribute("color", new THREE.BufferAttribute(cols, 3));
 
-          const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.0, side: THREE.FrontSide, flatShading: true });
+          const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.0, side: THREE.FrontSide, flatShading: true, transparent: true, opacity: 1.0, depthWrite: true });
           const mesh = new THREE.Mesh(geom, mat);
           mesh.userData = { regionKey };
           group.add(mesh);
