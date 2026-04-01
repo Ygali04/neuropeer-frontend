@@ -255,17 +255,17 @@ async def get_run_history(job_id: UUID) -> dict:
         )
         rows = (await session.execute(stmt)).all()
 
-    # Extract data while session is still open, then dispose
-    runs = []
-    for row_job, db_score in rows:
-        runs.append({
-            "job_id": str(row_job.id),
-            "url": row_job.url,
-            "neural_score": round(float(db_score), 1) if db_score else 0.0,
-            "created_at": row_job.created_at.isoformat() if row_job.created_at else "",
-            "parent_job_id": str(row_job.parent_job_id) if row_job.parent_job_id else None,
-            "is_current": str(row_job.id) == str(job_id),
-        })
+        # Extract everything while session is still open
+        runs = []
+        for row_job, db_score in rows:
+            runs.append({
+                "job_id": str(row_job.id),
+                "url": row_job.url,
+                "neural_score": round(float(db_score), 1) if db_score else 0.0,
+                "created_at": row_job.created_at.isoformat() if row_job.created_at else "",
+                "parent_job_id": str(row_job.parent_job_id) if row_job.parent_job_id else None,
+                "is_current": str(row_job.id) == str(job_id),
+            })
 
     await engine.dispose()
 
