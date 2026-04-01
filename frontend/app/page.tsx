@@ -257,7 +257,7 @@ export default function HomePage() {
                       />
                     </svg>
                     <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold tabular-nums" style={{ color: scoreColor(run.neuralScore) }}>
-                      {Math.round(run.neuralScore)}
+                      {run.neuralScore.toFixed(1)}
                     </span>
                   </div>
 

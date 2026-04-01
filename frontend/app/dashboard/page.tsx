@@ -275,7 +275,7 @@ export default function DashboardPage() {
                   <span className="text-[10px] text-white/20 tabular-nums">{project.campaign_count}c · {project.report_count}r</span>
                   {project.latest_score && (
                     <span className={cn("text-xs font-semibold tabular-nums", scoreColor(project.latest_score))}>
-                      {project.latest_score.toFixed(0)}
+                      {project.latest_score.toFixed(1)}
                     </span>
                   )}
                   <button
@@ -315,7 +315,7 @@ export default function DashboardPage() {
                             <span className="text-[10px] text-white/20">{campaign.report_count}r</span>
                             {campaign.latest_score && (
                               <span className={cn("text-[11px] font-semibold tabular-nums", scoreColor(campaign.latest_score))}>
-                                {campaign.latest_score.toFixed(0)}
+                                {campaign.latest_score.toFixed(1)}
                               </span>
                             )}
                           </div>
@@ -345,7 +345,7 @@ export default function DashboardPage() {
                         <span className="text-sm text-white/50 truncate flex-1">{shortUrl(report.url)}</span>
                         {report.score && (
                           <span className={cn("text-[11px] font-semibold tabular-nums", scoreColor(report.score))}>
-                            {report.score.toFixed(0)}
+                            {report.score.toFixed(1)}
                           </span>
                         )}
                         <ExternalLink className="w-3 h-3 text-white/10 group-hover:text-white/30" />
@@ -404,7 +404,7 @@ export default function DashboardPage() {
                     <span className="text-[10px] text-white/15">{report.content_type?.replace("_", " ")}</span>
                     {report.score && (
                       <span className={cn("text-[11px] font-semibold tabular-nums", scoreColor(report.score))}>
-                        {report.score.toFixed(0)}
+                        {report.score.toFixed(1)}
                       </span>
                     )}
                     <span className="text-[10px] text-white/10">{timeAgo(report.created_at)}</span>

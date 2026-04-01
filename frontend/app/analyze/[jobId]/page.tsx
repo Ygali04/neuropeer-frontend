@@ -443,7 +443,7 @@ export default function AnalyzePage() {
                           <span className="text-white/40">{m.name}</span>
                           <span className="font-semibold tabular-nums" style={{
                             color: m.score >= 70 ? "var(--color-score-green)" : m.score >= 45 ? "var(--color-score-amber)" : "var(--color-score-red)",
-                          }}>{m.score.toFixed(0)}/100</span>
+                          }}>{m.score.toFixed(1)}/100</span>
                         </div>
                       ))
                   ) : (
