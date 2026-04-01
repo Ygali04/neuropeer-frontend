@@ -42,6 +42,7 @@ import { EmotionalPanel } from "@/components/EmotionalPanel";
 import { ModalityBreakdown } from "@/components/ModalityBreakdown";
 import { MetricCard } from "@/components/MetricCard";
 import { ImprovementStrategies } from "@/components/ImprovementStrategies";
+import { ReportTitle } from "@/components/ReportTitle";
 
 function CollapsibleSection({ title, icon, children, defaultOpen = false, className = "" }: {
   title: string; icon: ReactNode; children: ReactNode; defaultOpen?: boolean; className?: string;
@@ -346,6 +347,17 @@ export default function AnalyzePage() {
         {/* ── Results Dashboard (shows skeleton when loading) ─────────────── */}
         {(result || isActiveComputation || isLoadingReport) && (
           <div className="flex flex-col gap-6">
+
+            {/* Editable report title */}
+            {result && (
+              <ReportTitle
+                title={result.ai_report_title}
+                url={result.url}
+                contentType={result.content_type}
+                isOwner={!!session}
+                jobId={jobId}
+              />
+            )}
 
             {/* Delta banner */}
             {result && result.parent_job_id && runHistory.length > 0 && (() => {
