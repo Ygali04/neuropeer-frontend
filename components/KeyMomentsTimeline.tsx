@@ -1,6 +1,7 @@
 "use client";
 
-import { Clock, Zap, TrendingUp, Heart, AlertTriangle, ArrowUpRight } from "lucide-react";
+import { useState } from "react";
+import { Clock, Zap, TrendingUp, Heart, AlertTriangle, ArrowUpRight, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { MOMENT_INFO } from "@/lib/metric-info";
@@ -46,9 +47,19 @@ export function KeyMomentsTimeline({
   onCycleSpeed,
 }: Props) {
   const displayTime = playbackTime !== undefined ? playbackTime : (currentSecond ?? 0);
+  const [momentsExpanded, setMomentsExpanded] = useState(true);
 
   return (
-    <div className="w-full flex flex-col gap-4">
+    <div className="w-full flex flex-col gap-3">
+      {/* Title — above everything */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Clock className="w-4 h-4 text-teal-400" />
+          <h3 className="text-sm font-medium text-white/60">Key Moments</h3>
+          <span className="text-[10px] text-white/20">{moments.length} events</span>
+        </div>
+      </div>
+
       {/* Video player */}
       {videoUrl && (
         <VideoPlayer
@@ -64,13 +75,8 @@ export function KeyMomentsTimeline({
         />
       )}
 
-      <div className="flex items-center gap-2 mb-1">
-        <Clock className="w-4 h-4 text-teal-400" />
-        <h3 className="text-sm font-medium text-white/60">Key Moments</h3>
-      </div>
-
       {/* Timeline bar */}
-      <div className="relative h-1.5 bg-white/[0.04] rounded-full mb-3">
+      <div className="relative h-1.5 bg-white/[0.04] rounded-full">
         {moments.map((m, i) => {
           const pct = (m.timestamp / duration) * 100;
           const cfg = MOMENT_CONFIG[m.type];
@@ -99,8 +105,21 @@ export function KeyMomentsTimeline({
         />
       </div>
 
-      {/* Moment cards */}
-      <div className="flex flex-col gap-1.5 max-h-[50vh] sm:max-h-none overflow-y-auto">
+      {/* Collapsible moment cards */}
+      <button
+        onClick={() => setMomentsExpanded((p) => !p)}
+        className="flex items-center justify-between py-1 text-xs text-white/30 hover:text-white/50 transition-colors"
+      >
+        <span>{momentsExpanded ? "Hide" : "Show"} event details</span>
+        <ChevronDown className={cn("w-3.5 h-3.5 transition-transform duration-200", momentsExpanded && "rotate-180")} />
+      </button>
+
+      <div
+        className={cn(
+          "flex flex-col gap-1.5 overflow-hidden transition-all duration-300 ease-out",
+          momentsExpanded ? "max-h-[50vh] sm:max-h-[500px] overflow-y-auto" : "max-h-0"
+        )}
+      >
         {moments.map((m, i) => {
           const cfg = MOMENT_CONFIG[m.type];
           const Icon = cfg.icon;

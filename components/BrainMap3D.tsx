@@ -103,9 +103,11 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
   const [regionScores, setRegionScores] = useState<Record<string, number>>({});
   const [hoveredRegion, setHoveredRegion] = useState<string | null>(null);
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
+  const selectedRegionRef = useRef<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("regions");
 
   useEffect(() => { playbackTimeRef.current = playbackTime; }, [playbackTime]);
+  useEffect(() => { selectedRegionRef.current = selectedRegion; }, [selectedRegion]);
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
 
   // Apply per-vertex colors based on mode
@@ -230,6 +232,22 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
         }
         colorMeshesFromVerts(interpolated);
       }
+
+      // Focus/fade: when a region is selected, fade out all other meshes
+      const sel = selectedRegionRef.current;
+      regionMeshesRef.current.forEach((mesh, rk) => {
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        if (sel) {
+          // Selected region: fully opaque. Others: nearly transparent
+          const isSelected = rk === sel;
+          mat.transparent = true;
+          mat.opacity += ((isSelected ? 1.0 : 0.12) - mat.opacity) * 0.12; // smooth lerp
+        } else {
+          // No selection: all fully opaque
+          mat.transparent = false;
+          mat.opacity += (1.0 - mat.opacity) * 0.12;
+        }
+      });
 
       renderer.render(scene, camera);
     };
