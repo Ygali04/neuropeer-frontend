@@ -137,6 +137,19 @@ export async function bulkDeleteCampaigns(contentGroupIds: string[]): Promise<vo
   });
 }
 
+export async function mergeCampaigns(contentGroupIds: string[], name?: string): Promise<{ target_group_id: string; merged_jobs: number }> {
+  const res = await fetch(`${API_BASE}/api/v1/campaigns/merge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content_group_ids: contentGroupIds, name: name || null }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Merge failed" }));
+    throw new Error(err.detail ?? `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 // ── WebSocket ────────────────────────────────────────────────────────────────
 
 export function connectJobWebSocket(
