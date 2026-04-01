@@ -145,76 +145,109 @@ export function ImprovementStrategies({ metrics, overarchingSummary, aiPrioritie
         </div>
       )}
 
-      {/* ── Priority Actions (Top 3) ─────────────────────────────────────── */}
+      {/* ── Priority Actions — AI-generated when available ──────────────── */}
       <div>
         <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-3 flex items-center gap-2">
           <Lightbulb className="w-3.5 h-3.5 text-brand-400" />
           Priority Actions
+          {aiPriorities && aiPriorities.length > 0 && (
+            <span className="text-[8px] text-brand-400/50 font-normal normal-case tracking-normal ml-1">AI-generated</span>
+          )}
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {topActions.map(({ metric, strategy, topAction }, i) => {
-            const catConfig = CATEGORY_CONFIG[strategy.category];
-            return (
-              <div
-                key={metric.name}
-                className="glass-card !p-4 glass-card-hover flex flex-col"
-              >
-                {/* Header: number + category */}
-                <div className="flex items-center gap-2 mb-3">
-                  <div
-                    className="w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold"
-                    style={{ backgroundColor: catConfig.bg, color: catConfig.color }}
-                  >
-                    {i + 1}
+          {(aiPriorities && aiPriorities.length > 0
+            ? aiPriorities.slice(0, 3).map((priority, i) => (
+                <div key={i} className="glass-card !p-4 glass-card-hover flex flex-col">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold bg-brand-500/15 text-brand-400">
+                      {i + 1}
+                    </div>
+                    <span className="text-[10px] font-medium text-brand-400/60 uppercase tracking-wider">
+                      {priority.split(":")[0]?.replace(/^(TOP|HIGHEST IMPACT|SECOND|THIRD|SECOND PRIORITY|THIRD PRIORITY)\s*/i, "").trim().slice(0, 20) || `Priority ${i + 1}`}
+                    </span>
                   </div>
-                  <span className="text-xs font-medium text-white/50 uppercase tracking-wider">
-                    {catConfig.label}
-                  </span>
+                  <p className="text-sm text-white/55 leading-relaxed flex-1">{priority.includes(":") ? priority.split(":").slice(1).join(":").trim() : priority}</p>
                 </div>
-
-                {/* Strategy title */}
-                <p className="text-sm font-medium text-white/70 mb-2">{strategy.title}</p>
-
-                {/* Top action */}
-                <p className="text-xs text-white/35 leading-relaxed flex-1">{topAction}</p>
-
-                {/* Bottom: metric name + score, horizontally aligned */}
-                <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/[0.04]">
-                  <span className="text-[10px] text-white/25 truncate mr-2">{metric.name}</span>
-                  <span
-                    className="text-sm font-bold tabular-nums whitespace-nowrap"
-                    style={{
-                      color:
-                        metric.score >= 70
-                          ? "var(--color-score-green)"
-                          : metric.score >= 45
-                          ? "var(--color-score-amber)"
-                          : "var(--color-score-red)",
-                    }}
-                  >
-                    {metric.score.toFixed(1)}
-                    <span className="text-white/20 font-normal">/100</span>
-                  </span>
-                </div>
-              </div>
-            );
-          })}
+              ))
+            : topActions.map(({ metric, strategy, topAction }, i) => {
+                const catConfig = CATEGORY_CONFIG[strategy.category];
+                return (
+                  <div key={metric.name} className="glass-card !p-4 glass-card-hover flex flex-col">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold" style={{ backgroundColor: catConfig.bg, color: catConfig.color }}>
+                        {i + 1}
+                      </div>
+                      <span className="text-xs font-medium text-white/50 uppercase tracking-wider">{catConfig.label}</span>
+                    </div>
+                    <p className="text-sm font-medium text-white/70 mb-2">{strategy.title}</p>
+                    <p className="text-xs text-white/35 leading-relaxed flex-1">{topAction}</p>
+                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/[0.04]">
+                      <span className="text-[10px] text-white/25 truncate mr-2">{metric.name}</span>
+                      <span className="text-sm font-bold tabular-nums whitespace-nowrap" style={{ color: metric.score >= 70 ? "var(--color-score-green)" : metric.score >= 45 ? "var(--color-score-amber)" : "var(--color-score-red)" }}>
+                        {metric.score.toFixed(1)}<span className="text-white/20 font-normal">/100</span>
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+          )}
         </div>
       </div>
 
-      {/* ── Category Breakdown ────────────────────────────────────────────── */}
+      {/* ── Category Breakdown — AI when available, static fallback ─────── */}
       <div>
         <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-3 flex items-center gap-2">
           <ArrowRight className="w-3.5 h-3.5 text-teal-400" />
           Detailed Strategies by Category
+          {aiCategoryStrategies && Object.keys(aiCategoryStrategies).length > 0 && (
+            <span className="text-[8px] text-brand-400/50 font-normal normal-case tracking-normal ml-1">AI-generated</span>
+          )}
         </h3>
-        <div className="flex flex-col gap-2">
-          {sortedCategories.map(([category, items]) => {
-            const catConfig = CATEGORY_CONFIG[category as ImprovementStrategy["category"]];
-            const CatIcon = catConfig.icon;
-            const isExpanded = expandedCategory === category;
-            const avgScoreRaw = items.reduce((s, x) => s + x.metric.score, 0) / items.length;
-            const avgScore = avgScoreRaw;
+
+        {/* AI category strategies (preferred) */}
+        {aiCategoryStrategies && Object.keys(aiCategoryStrategies).length > 0 ? (
+          <div className="flex flex-col gap-2">
+            {Object.entries(aiCategoryStrategies).map(([category, data]) => {
+              const isExpanded = expandedCategory === category;
+              return (
+                <div key={category} className="glass-card !p-0 overflow-hidden">
+                  <button
+                    onClick={() => setExpandedCategory(isExpanded ? null : category)}
+                    className="w-full flex items-center gap-3 px-5 py-4 hover:bg-white/[0.02] transition-colors"
+                  >
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-brand-500/10">
+                      <Sparkles className="w-4 h-4 text-brand-400" />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <span className="text-sm font-medium text-white/70">{category}</span>
+                      <p className="text-[10px] text-white/30 mt-0.5">{data.score_context}</p>
+                    </div>
+                    <ChevronRight className={cn("w-4 h-4 text-white/20 transition-transform duration-200", isExpanded && "rotate-90")} />
+                  </button>
+                  {isExpanded && (
+                    <div className="border-t border-white/[0.04] px-5 py-4 space-y-3">
+                      {data.strategies.map((strategy, j) => (
+                        <div key={j} className="flex items-start gap-2.5">
+                          <div className="w-5 h-5 rounded-md bg-brand-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <span className="text-[10px] font-bold text-brand-400">{j + 1}</span>
+                          </div>
+                          <p className="text-sm text-white/50 leading-relaxed">{strategy}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* Static fallback categories */
+          <div className="flex flex-col gap-2">
+            {sortedCategories.map(([category, items]) => {
+              const catConfig = CATEGORY_CONFIG[category as ImprovementStrategy["category"]];
+              const CatIcon = catConfig.icon;
+              const isExpanded = expandedCategory === category;
+              const avgScore = items.reduce((s, x) => s + x.metric.score, 0) / items.length;
 
             return (
               <div key={category} className="glass-card !p-0 overflow-hidden">
@@ -315,38 +348,8 @@ export function ImprovementStrategies({ metrics, overarchingSummary, aiPrioritie
             );
           })}
         </div>
+        )}
       </div>
-
-      {/* ── AI-Generated Category Strategies ──────────────────────────────── */}
-      {aiCategoryStrategies && Object.keys(aiCategoryStrategies).length > 0 && (
-        <div>
-          <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Sparkles className="w-3.5 h-3.5 text-brand-400" />
-            AI Deep-Dive Strategies
-          </h3>
-          <div className="flex flex-col gap-3">
-            {Object.entries(aiCategoryStrategies).map(([category, data]) => (
-              <div key={category} className="glass-card !p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-2 h-2 rounded-full bg-brand-400" />
-                  <h4 className="text-sm font-medium text-white/70">{category}</h4>
-                </div>
-                <p className="text-xs text-white/30 mb-3 italic">{data.score_context}</p>
-                <div className="space-y-2">
-                  {data.strategies.map((strategy, i) => (
-                    <div key={i} className="flex items-start gap-2">
-                      <div className="w-4 h-4 rounded bg-brand-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <span className="text-[9px] font-bold text-brand-400">{i + 1}</span>
-                      </div>
-                      <p className="text-xs text-white/45 leading-relaxed">{strategy}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* ── AI Metric-Specific Tips ────────────────────────────────────────── */}
       {aiMetricTips && Object.keys(aiMetricTips).length > 0 && (

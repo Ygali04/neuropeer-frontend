@@ -2,9 +2,9 @@
 
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { Brain, Trash2, CheckSquare, Square, X } from "lucide-react";
+import { Brain, Trash2, CheckSquare, Square, X, Merge, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { getProfile, getCampaigns, bulkDeleteCampaigns } from "@/lib/api";
+import { getProfile, getCampaigns, bulkDeleteCampaigns, mergeCampaigns } from "@/lib/api";
 import { MarketerProfileCard } from "@/components/MarketerProfileCard";
 import { ScoreTimeline } from "@/components/ScoreTimeline";
 import { CampaignCard } from "@/components/CampaignCard";
@@ -33,6 +33,9 @@ export default function DashboardPage() {
   const [sortBy, setSortBy] = useState<SortKey>("date");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [merging, setMerging] = useState(false);
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [mergeName, setMergeName] = useState("");
 
   useEffect(() => {
     const email = session?.user?.email;
@@ -83,6 +86,27 @@ export default function DashboardPage() {
       // silent
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleMerge = async () => {
+    if (selected.size < 2) return;
+    setMerging(true);
+    try {
+      await mergeCampaigns([...selected], mergeName || undefined);
+      // Refresh campaigns
+      const email = session?.user?.email;
+      if (email) {
+        const updated = await getCampaigns(email);
+        setCampaigns(updated);
+      }
+      setSelected(new Set());
+      setShowMergeModal(false);
+      setMergeName("");
+    } catch {
+      // silent
+    } finally {
+      setMerging(false);
     }
   };
 
@@ -141,6 +165,16 @@ export default function DashboardPage() {
               {isSelecting && (
                 <>
                   <span className="text-[10px] text-white/30">{selected.size} selected</span>
+                  {selected.size >= 2 && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => { setMergeName(""); setShowMergeModal(true); }}
+                    >
+                      <Merge className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Combine</span>
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
@@ -149,7 +183,7 @@ export default function DashboardPage() {
                     className="!border-red-500/30 !text-red-400 hover:!bg-red-500/10"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    Delete
+                    <span className="hidden sm:inline">Delete</span>
                   </Button>
                   <button onClick={() => setSelected(new Set())} className="p-1 text-white/30 hover:text-white/50">
                     <X className="w-3.5 h-3.5" />
@@ -207,6 +241,63 @@ export default function DashboardPage() {
           )}
         </section>
       </main>
+
+      {/* ── Merge Modal ──────────────────────────────────────────────────── */}
+      {showMergeModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowMergeModal(false)}>
+          <div className="tooltip-card p-5 sm:p-6 max-w-md w-full mx-4 rounded-2xl shadow-2xl border border-white/[0.1] animate-fade-up" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-1">
+              <Merge className="w-4 h-4 text-brand-400" />
+              <h3 className="text-base font-semibold text-white/90">Combine Campaigns</h3>
+            </div>
+            <p className="text-xs text-white/40 mb-4">
+              Merge {selected.size} campaigns into one. Reports will be linked chronologically by creation date.
+            </p>
+
+            {/* Preview: selected campaigns sorted by date */}
+            <div className="space-y-1.5 mb-4 max-h-40 overflow-y-auto">
+              {sortedCampaigns
+                .filter((c) => selected.has(c.content_group_id))
+                .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+                .map((c, i) => (
+                  <div key={c.content_group_id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.05]">
+                    <span className="w-5 h-5 rounded-full bg-brand-500/15 flex items-center justify-center text-[10px] font-bold text-brand-400 flex-shrink-0">
+                      {i + 1}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-white/60 font-medium truncate">{c.campaign_name || `Campaign`}</p>
+                      <p className="text-[10px] text-white/25">{c.media_count} report{c.media_count !== 1 ? "s" : ""} · score {c.latest_score}</p>
+                    </div>
+                  </div>
+                ))}
+            </div>
+
+            {/* Optional name */}
+            <div className="mb-4">
+              <label className="text-[10px] text-white/30 uppercase tracking-wider font-medium mb-1.5 block">
+                Combined campaign name (optional)
+              </label>
+              <input
+                type="text"
+                value={mergeName}
+                onChange={(e) => setMergeName(e.target.value)}
+                placeholder="e.g., Q1 Instagram Series"
+                className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-sm text-white/80 placeholder:text-white/20 focus:outline-none focus:border-brand-500/40"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <Button className="flex-1" onClick={handleMerge} disabled={merging}>
+                {merging ? <Loader2 className="w-4 h-4 animate-spin" /> : <Merge className="w-4 h-4" />}
+                {merging ? "Combining..." : "Combine Campaigns"}
+              </Button>
+              <Button variant="ghost" onClick={() => setShowMergeModal(false)} disabled={merging}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
