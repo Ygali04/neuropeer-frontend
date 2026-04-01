@@ -273,14 +273,16 @@ export default function AnalyzePage() {
                   {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                   <span className="hidden sm:inline">{exporting ? "Generating..." : "Export PDF"}</span>
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowReanalyze(true)}
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  Re-analyze
-                </Button>
+                {session && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowReanalyze(true)}
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Re-analyze</span>
+                  </Button>
+                )}
               </>
             )}
             <ThemeToggle />
@@ -297,8 +299,8 @@ export default function AnalyzePage() {
           </div>
         )}
 
-        {/* ── Re-analyze Modal ──────────────────────────────────────────────── */}
-        {showReanalyze && (
+        {/* ── Re-analyze Modal (auth-gated) ─────────────────────────────────── */}
+        {showReanalyze && session && (
           <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowReanalyze(false)}>
             <div className="tooltip-card p-6 max-w-md w-full mx-4 space-y-4 rounded-2xl shadow-2xl border border-white/[0.1]" onClick={(e) => e.stopPropagation()}>
               <h3 className="text-lg font-semibold text-white">Re-analyze</h3>
