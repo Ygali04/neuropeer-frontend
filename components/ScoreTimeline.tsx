@@ -67,11 +67,18 @@ export function ScoreTimeline({ campaigns, overallScore, reports: reportsProp }:
   }, [reportsProp, session]);
 
   const dataPoints = useMemo(() => {
-    // Deduplicate by job_id (in case backend returns duplicates)
+    // Deduplicate by job_id
     const seen = new Set<string>();
-    return [...reports]
+    const sorted = [...reports]
       .filter((r) => { if (seen.has(r.job_id)) return false; seen.add(r.job_id); return true; })
       .sort((a, b) => a.date - b.date);
+    // Make each dateLabel unique (recharts merges points with same X key)
+    const labelCounts = new Map<string, number>();
+    return sorted.map((r) => {
+      const count = (labelCounts.get(r.dateLabel) ?? 0) + 1;
+      labelCounts.set(r.dateLabel, count);
+      return { ...r, xKey: count > 1 ? `${r.dateLabel} #${count}` : r.dateLabel };
+    });
   }, [reports]);
 
   if (dataPoints.length === 0) return null;
@@ -105,7 +112,7 @@ export function ScoreTimeline({ campaigns, overallScore, reports: reportsProp }:
           <LineChart data={dataPoints} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
             <XAxis
-              dataKey="dateLabel"
+              dataKey="xKey"
               tick={{ fontSize: 10, fill: "rgba(255,255,255,0.25)" }}
               axisLine={{ stroke: "rgba(255,255,255,0.06)" }}
               tickLine={false}
