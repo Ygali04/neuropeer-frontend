@@ -233,20 +233,15 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
         colorMeshesFromVerts(interpolated);
       }
 
-      // Focus/fade: when a region is selected, fade out all other meshes
+      // Focus/fade: when a region is selected, others become very transparent
       const sel = selectedRegionRef.current;
       regionMeshesRef.current.forEach((mesh, rk) => {
         const mat = mesh.material as THREE.MeshStandardMaterial;
-        if (sel) {
-          // Selected region: fully opaque. Others: nearly transparent
-          const isSelected = rk === sel;
-          mat.transparent = true;
-          mat.opacity += ((isSelected ? 1.0 : 0.12) - mat.opacity) * 0.12; // smooth lerp
-        } else {
-          // No selection: all fully opaque
-          mat.transparent = false;
-          mat.opacity += (1.0 - mat.opacity) * 0.12;
-        }
+        const targetOpacity = sel ? (rk === sel ? 1.0 : 0.07) : 1.0;
+        const targetDepth = sel ? (rk === sel) : true;
+        // Fast lerp — converges in ~8 frames
+        mat.opacity += (targetOpacity - mat.opacity) * 0.25;
+        mat.depthWrite = targetDepth;
       });
 
       renderer.render(scene, camera);
@@ -268,7 +263,7 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
           for (let i = 0; i < count; i++) { cols[i*3]=0.60; cols[i*3+1]=0.60; cols[i*3+2]=0.58; }
           geom.setAttribute("color", new THREE.BufferAttribute(cols, 3));
 
-          const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.0, side: THREE.FrontSide, flatShading: true });
+          const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.0, side: THREE.FrontSide, flatShading: true, transparent: true, opacity: 1.0, depthWrite: true });
           const mesh = new THREE.Mesh(geom, mat);
           mesh.userData = { regionKey };
           group.add(mesh);
@@ -353,15 +348,16 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
         const tribeIdx = sliceStart + Math.min(sliceLen - 1, Math.floor(i / count * sliceLen));
         const raw = verts[tribeIdx];
 
-        // Wider normalization range → brighter, more visible activations
-        const activation = Math.max(0, Math.min(1, (raw + 0.1) / 0.3));
+        // Normalize: raw z-scored values. Only show color above 10th percentile.
+        // Range: raw < 0.0 = gray (inactive), raw 0.0-1.2 = 0-100% activation
+        const activation = Math.max(0, Math.min(1, raw / 1.2));
 
-        // Concentrated patches: spatial seed gates which vertices show color
+        // Spatial seed gates: concentrate color into patches, not uniform spread
         const seed = seeds[i];
-        const concentrated = activation * (seed > 0.55 ? 1.0 : seed > 0.35 ? 0.5 : 0.12);
+        const concentrated = activation * (seed > 0.6 ? 1.0 : seed > 0.4 ? 0.4 : 0.08);
         const clamped = Math.min(1, Math.sqrt(Math.max(0, concentrated)));
 
-        // Higher threshold = more gray, less filled regions
+        // Gray threshold at 25% — ensures truly inactive regions stay gray
         if (clamped < 0.25) {
           colors[i*3] = bgR; colors[i*3+1] = bgG; colors[i*3+2] = bgB;
         } else if (mode === "heatmap") {

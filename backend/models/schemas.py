@@ -32,9 +32,11 @@ class JobStatus(str, Enum):
 class AnalyzeRequest(BaseModel):
     url: str
     content_type: ContentType = ContentType.custom
-    label: str | None = None  # user-provided name for A/B labeling
-    parent_job_id: UUID | None = None  # link to previous run for delta-aware feedback
+    label: str | None = None
+    parent_job_id: UUID | None = None
     user_email: str | None = None
+    project_id: UUID | None = None  # assign to project at submission
+    campaign_id: UUID | None = None  # assign to campaign at submission
 
     @field_validator("url")
     @classmethod

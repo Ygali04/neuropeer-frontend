@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import type { NeuralScoreBreakdown } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
@@ -32,11 +33,15 @@ interface Props {
 }
 
 export function NeuralScoreGauge({ breakdown, size = "lg" }: Props) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setMounted(true), 100); return () => clearTimeout(t); }, []);
+
   const { total } = breakdown;
   const radius = size === "lg" ? 80 : 50;
   const stroke = size === "lg" ? 8 : 6;
   const circumference = 2 * Math.PI * radius;
-  const dashOffset = circumference * (1 - total / 100);
+  // Start from fully hidden (circumference), animate to target on mount
+  const dashOffset = mounted ? circumference * (1 - total / 100) : circumference;
   const color = scoreColor(total);
   const svgSize = (radius + stroke) * 2 + 4;
 
@@ -139,8 +144,8 @@ export function NeuralScoreGauge({ breakdown, size = "lg" }: Props) {
               </div>
               <div className="h-1 bg-white/[0.04] rounded-full overflow-hidden">
                 <div
-                  className={cn("h-full rounded-full transition-all duration-1000", scoreBgClass(d.value))}
-                  style={{ width: `${d.value}%`, opacity: 0.8 }}
+                  className={cn("h-full rounded-full transition-all duration-1000 ease-out", scoreBgClass(d.value))}
+                  style={{ width: mounted ? `${d.value}%` : "0%", opacity: 0.8 }}
                 />
               </div>
             </div>

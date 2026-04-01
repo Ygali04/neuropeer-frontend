@@ -343,3 +343,106 @@ async def rename_campaign(content_group_id: UUID, body: RenameRequest) -> dict:
 
     await engine.dispose()
     return {"content_group_id": str(content_group_id), "campaign_name": body.name}
+
+
+# ── New hierarchy endpoints (Project → Campaign → Report) ────────────────────
+
+
+class CreateCampaignRequest(BaseModel):
+    name: str
+    project_id: str | None = None
+    user_email: str
+    description: str | None = None
+
+
+class MoveReportV2Request(BaseModel):
+    job_id: str
+    project_id: str | None = None
+    campaign_id: str | None = None
+
+
+@router.post("/campaigns/create")
+async def create_campaign(body: CreateCampaignRequest) -> dict:
+    """Create an explicit Campaign (optionally within a Project)."""
+    from backend.models.db import Campaign as CampaignModel
+    import uuid as _uuid
+
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    async with Session() as session:
+        campaign = CampaignModel(
+            id=_uuid.uuid4(),
+            project_id=_uuid.UUID(body.project_id) if body.project_id else None,
+            user_email=body.user_email,
+            name=body.name,
+            description=body.description,
+        )
+        session.add(campaign)
+        await session.commit()
+    await engine.dispose()
+    return {"id": str(campaign.id), "name": campaign.name, "project_id": body.project_id}
+
+
+@router.get("/campaigns/v2")
+async def list_campaigns_v2(user_email: str | None = None, project_id: str | None = None) -> list[dict]:
+    """List campaigns with the new hierarchy model. Supports filtering by project."""
+    from backend.models.db import Campaign as CampaignModel
+    import uuid as _uuid
+
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    async with Session() as session:
+        stmt = select(CampaignModel)
+        if user_email:
+            stmt = stmt.where(CampaignModel.user_email == user_email)
+        if project_id:
+            stmt = stmt.where(CampaignModel.project_id == _uuid.UUID(project_id))
+        stmt = stmt.order_by(CampaignModel.updated_at.desc())
+        campaigns = (await session.execute(stmt)).scalars().all()
+
+        results = []
+        for c in campaigns:
+            job_count = (await session.execute(
+                select(func.count()).where(Job.campaign_id == c.id)
+            )).scalar() or 0
+            latest = (await session.execute(
+                select(Result.neural_score_total)
+                .join(Job, Result.job_id == Job.id)
+                .where(Job.campaign_id == c.id)
+                .order_by(Job.created_at.desc()).limit(1)
+            )).scalar()
+            results.append({
+                "id": str(c.id), "name": c.name, "description": c.description,
+                "project_id": str(c.project_id) if c.project_id else None,
+                "user_email": c.user_email,
+                "report_count": job_count, "latest_score": latest,
+                "created_at": c.created_at.isoformat() if c.created_at else "",
+            })
+
+    await engine.dispose()
+    return results
+
+
+@router.post("/reports/move")
+async def move_report_v2(body: MoveReportV2Request) -> dict:
+    """Move a report (Job) to a project and/or campaign."""
+    import uuid as _uuid
+
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    async with Session() as session:
+        job = (await session.execute(
+            select(Job).where(Job.id == _uuid.UUID(body.job_id))
+        )).scalar_one_or_none()
+        if not job:
+            await engine.dispose()
+            raise HTTPException(404, "Report not found")
+
+        if body.project_id is not None:
+            job.project_id = _uuid.UUID(body.project_id) if body.project_id else None
+        if body.campaign_id is not None:
+            job.campaign_id = _uuid.UUID(body.campaign_id) if body.campaign_id else None
+        await session.commit()
+
+    await engine.dispose()
+    return {"job_id": body.job_id, "project_id": body.project_id, "campaign_id": body.campaign_id}

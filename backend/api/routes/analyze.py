@@ -22,6 +22,8 @@ async def submit_analysis(request: AnalyzeRequest) -> JobCreatedResponse:
         kwargs={
             "parent_job_id": str(request.parent_job_id) if request.parent_job_id else None,
             "user_email": request.user_email,
+            "project_id": str(request.project_id) if request.project_id else None,
+            "campaign_id": str(request.campaign_id) if request.campaign_id else None,
         },
         task_id=job_id,
     )
