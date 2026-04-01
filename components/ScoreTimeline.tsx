@@ -33,7 +33,7 @@ export function ScoreTimeline({ campaigns, overallScore }: Props) {
       .sort((a, b) => a.date - b.date);
   }, [campaigns]);
 
-  if (dataPoints.length < 2) return null;
+  if (dataPoints.length === 0) return null;
 
   return (
     <div className="glass-card p-5">
@@ -42,7 +42,7 @@ export function ScoreTimeline({ campaigns, overallScore }: Props) {
           <TrendingUp className="w-4 h-4 text-brand-400" />
           <h2 className="text-sm font-medium text-white/50 uppercase tracking-wider">Score Timeline</h2>
         </div>
-        <span className="text-xs text-white/25">{dataPoints.length} campaigns</span>
+        <span className="text-xs text-white/25">{dataPoints.length} {dataPoints.length === 1 ? "analysis" : "analyses"}</span>
       </div>
 
       <div className="h-[200px]">
