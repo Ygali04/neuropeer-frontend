@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -93,9 +93,31 @@ function ComparePageInner() {
 
   const allIds = [...jobIds, ...pendingJobs];
 
-  // Resolve labels for queued items
+  // Resolve labels for queued items — try to show URL instead of raw ID
+  const [reportLabels, setReportLabels] = useState<Record<string, { url: string; score: number }>>({});
+
+  useEffect(() => {
+    // Fetch result data for queued job IDs to get URLs
+    allIds.forEach(async (id) => {
+      if (reportLabels[id]) return;
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "https://neuropeer-api-production.up.railway.app"}/api/v1/results/${id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setReportLabels((prev) => ({ ...prev, [id]: { url: data.url, score: data.neural_score?.total ?? 0 } }));
+        }
+      } catch {}
+    });
+  }, [allIds]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const getLabel = (id: string): string => {
+    const info = reportLabels[id];
+    if (info) return info.url.replace(/https?:\/\/(www\.)?/, "").slice(0, 35);
     return id.slice(0, 12) + "…";
+  };
+
+  const getScore = (id: string): number | null => {
+    return reportLabels[id]?.score ?? null;
   };
 
   return (
@@ -133,16 +155,17 @@ function ComparePageInner() {
         {allIds.length > 0 && !result && (
           <div className="mb-6 flex flex-wrap gap-2 animate-fade-up delay-100">
             {allIds.map((id, i) => {
-              const score: number | undefined = undefined;
+              const score = getScore(id);
+              const scoreColor = score !== null ? (score >= 75 ? "var(--color-score-green)" : score >= 50 ? "var(--color-score-amber)" : "var(--color-score-red)") : undefined;
               return (
                 <div key={id} className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
                   <span className="w-5 h-5 rounded-full bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center text-white text-[10px] font-bold">
                     {i + 1}
                   </span>
-                  <span className="text-xs text-white/50 max-w-[200px] truncate">{getLabel(id)}</span>
-                  {score && (
-                    <span className="text-[10px] font-bold tabular-nums" style={{ color: score >= 75 ? "var(--color-score-green)" : score >= 50 ? "var(--color-score-amber)" : "var(--color-score-red)" }}>
-                      {score}
+                  <span className="text-xs text-white/50 max-w-[250px] truncate">{getLabel(id)}</span>
+                  {score !== null && (
+                    <span className="text-[10px] font-bold tabular-nums" style={{ color: scoreColor }}>
+                      {score.toFixed(1)}
                     </span>
                   )}
                   <button onClick={() => handleRemove(id)} className="p-0.5 rounded hover:bg-white/[0.08] text-white/20 hover:text-white/50 transition-colors">
@@ -297,29 +320,84 @@ function ComparePageInner() {
               })}
             </div>
 
+            {/* Dimension-level delta comparison */}
+            {result.neural_scores.length === 2 && (
+              <Card className="animate-fade-up delay-150">
+                <CardTitle>Score Delta</CardTitle>
+                <div className="mt-4 space-y-3">
+                  {[
+                    { label: "Overall", v1: result.neural_scores[0].total, v2: result.neural_scores[1].total },
+                    { label: "Hook", v1: result.neural_scores[0].hook_score, v2: result.neural_scores[1].hook_score },
+                    { label: "Attention", v1: result.neural_scores[0].sustained_attention, v2: result.neural_scores[1].sustained_attention },
+                    { label: "Emotion", v1: result.neural_scores[0].emotional_resonance, v2: result.neural_scores[1].emotional_resonance },
+                    { label: "Memory", v1: result.neural_scores[0].memory_encoding, v2: result.neural_scores[1].memory_encoding },
+                    { label: "Aesthetic", v1: result.neural_scores[0].aesthetic_quality, v2: result.neural_scores[1].aesthetic_quality },
+                    { label: "Clarity", v1: result.neural_scores[0].cognitive_accessibility, v2: result.neural_scores[1].cognitive_accessibility },
+                  ].map(({ label, v1, v2 }) => {
+                    const delta = v2 - v1;
+                    const winner = delta > 0.5 ? 2 : delta < -0.5 ? 1 : 0;
+                    return (
+                      <div key={label} className="flex items-center gap-3">
+                        <span className="text-xs text-white/40 w-20 flex-shrink-0">{label}</span>
+                        <span className={cn("text-xs font-bold tabular-nums w-10 text-right", winner === 1 ? "text-emerald-400" : "text-white/40")}>{v1.toFixed(1)}</span>
+                        <div className="flex-1 h-1.5 rounded-full bg-white/[0.04] relative overflow-hidden">
+                          <div className="absolute inset-y-0 left-1/2 w-px bg-white/[0.08]" />
+                          {delta !== 0 && (
+                            <div
+                              className="absolute inset-y-0 rounded-full"
+                              style={{
+                                left: delta > 0 ? "50%" : `${50 + (delta / 100) * 50}%`,
+                                width: `${Math.abs(delta / 100) * 50}%`,
+                                backgroundColor: delta > 0 ? "var(--color-score-green)" : "var(--color-score-red)",
+                                opacity: 0.6,
+                              }}
+                            />
+                          )}
+                        </div>
+                        <span className={cn("text-xs font-bold tabular-nums w-10", winner === 2 ? "text-emerald-400" : "text-white/40")}>{v2.toFixed(1)}</span>
+                        <span className={cn("text-[10px] font-bold tabular-nums w-12 text-right", delta > 0.5 ? "text-emerald-400" : delta < -0.5 ? "text-red-400" : "text-white/20")}>
+                          {delta > 0 ? "+" : ""}{delta.toFixed(1)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            )}
+
+            {/* Full metric table */}
             <Card className="animate-fade-up delay-200">
-              <CardTitle>Metric Comparison</CardTitle>
-              <div className="overflow-x-auto">
+              <CardTitle>All Metrics</CardTitle>
+              <div className="overflow-x-auto mt-3">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-white/30 text-xs border-b border-white/[0.06]">
                       <th className="text-left pb-3 pr-4 font-medium uppercase tracking-wider">Metric</th>
-                      {result.labels.map((label, i) => (
-                        <th key={i} className="text-right pb-3 px-3 min-w-[80px] font-medium uppercase tracking-wider">V{i + 1}</th>
+                      {result.labels.map((_label, i) => (
+                        <th key={i} className="text-right pb-3 px-2 sm:px-3 min-w-[60px] font-medium uppercase tracking-wider">V{i + 1}</th>
                       ))}
+                      {result.neural_scores.length === 2 && (
+                        <th className="text-right pb-3 pl-2 min-w-[50px] font-medium uppercase tracking-wider">Delta</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
                     {Object.entries(result.delta_metrics).map(([metric, scores]) => {
                       const maxScore = Math.max(...scores);
+                      const delta = scores.length === 2 ? scores[1] - scores[0] : null;
                       return (
                         <tr key={metric} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
-                          <td className="py-3 pr-4 text-white/45">{metric}</td>
+                          <td className="py-2.5 pr-4 text-xs text-white/45">{metric}</td>
                           {scores.map((score, i) => (
-                            <td key={i} className="py-3 px-3 text-right font-medium tabular-nums" style={{ color: score === maxScore ? "var(--color-score-green)" : "rgba(255,255,255,0.35)" }}>
-                              {score.toFixed(0)}
+                            <td key={i} className="py-2.5 px-2 sm:px-3 text-right text-xs font-medium tabular-nums" style={{ color: score === maxScore ? "var(--color-score-green)" : "rgba(255,255,255,0.35)" }}>
+                              {score.toFixed(1)}
                             </td>
                           ))}
+                          {delta !== null && (
+                            <td className={cn("py-2.5 pl-2 text-right text-[11px] font-bold tabular-nums", delta > 0.5 ? "text-emerald-400" : delta < -0.5 ? "text-red-400" : "text-white/20")}>
+                              {delta > 0 ? "+" : ""}{delta.toFixed(1)}
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
