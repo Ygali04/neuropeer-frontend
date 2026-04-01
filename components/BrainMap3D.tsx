@@ -353,9 +353,9 @@ export function BrainMap3D({ jobId, currentSecond, isPlaying = false, playbackTi
         const tribeIdx = sliceStart + Math.min(sliceLen - 1, Math.floor(i / count * sliceLen));
         const raw = verts[tribeIdx];
 
-        // Normalize: raw z-scored values. Only show color above 25th percentile.
-        // Range: raw < 0.3 = gray (inactive), raw 0.3-2.0 = 0-100% activation
-        const activation = Math.max(0, Math.min(1, (raw - 0.3) / 1.7));
+        // Normalize: raw z-scored values. Only show color above 15th percentile.
+        // Range: raw < 0.1 = gray (inactive), raw 0.1-1.5 = 0-100% activation
+        const activation = Math.max(0, Math.min(1, (raw - 0.1) / 1.4));
 
         // Spatial seed gates: concentrate color into patches, not uniform spread
         const seed = seeds[i];
