@@ -15,12 +15,20 @@ interface Props {
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://neuropeer-api-production.up.railway.app";
 
 export function ReportTitle({ title, url, contentType, isOwner, jobId }: Props) {
-  const defaultTitle = title || formatUrl(url, contentType);
-  const [displayTitle, setDisplayTitle] = useState(defaultTitle);
+  const fallback = formatUrl(url, contentType);
+  const [displayTitle, setDisplayTitle] = useState(title || fallback);
   const [editing, setEditing] = useState(false);
-  const [editValue, setEditValue] = useState(defaultTitle);
+  const [editValue, setEditValue] = useState(title || fallback);
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Sync when the title prop changes (e.g., result loads with saved title)
+  useEffect(() => {
+    if (title && title !== displayTitle && !editing) {
+      setDisplayTitle(title);
+      setEditValue(title);
+    }
+  }, [title]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (editing && inputRef.current) {
