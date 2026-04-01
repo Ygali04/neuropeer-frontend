@@ -137,6 +137,15 @@ export async function bulkDeleteCampaigns(contentGroupIds: string[]): Promise<vo
   });
 }
 
+export async function getAllReports(userEmail: string): Promise<{
+  job_id: string; url: string; content_type: string; score: number;
+  campaign_name: string | null; content_group_id: string; created_at: string;
+}[]> {
+  const res = await fetch(`${API_BASE}/api/v1/campaigns/all-reports?user_email=${encodeURIComponent(userEmail)}`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
 export async function mergeCampaigns(contentGroupIds: string[], name?: string): Promise<{ target_group_id: string; merged_jobs: number }> {
   const res = await fetch(`${API_BASE}/api/v1/campaigns/merge`, {
     method: "POST",
