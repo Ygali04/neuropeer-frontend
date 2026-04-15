@@ -41,7 +41,12 @@ def _normalize_db_url(url: str) -> str:
     return url
 
 
-async def _mint(label: str, user_email: str, db_url: str) -> str:
+async def _mint(
+    label: str,
+    user_email: str,
+    db_url: str,
+    raw_override: str | None = None,
+) -> str:
     # Import inside the function so module import doesn't touch a missing DB.
     from backend.models.db import ApiKeyRow, Base
 
@@ -50,7 +55,7 @@ async def _mint(label: str, user_email: str, db_url: str) -> str:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    raw = _generate_raw_key()
+    raw = raw_override or _generate_raw_key()
     key_hash = hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
     Session = async_sessionmaker(engine, expire_on_commit=False)
@@ -78,9 +83,21 @@ def main(argv: list[str] | None = None) -> int:
         default=os.environ.get("DATABASE_URL", "sqlite+aiosqlite:///./neuropeer.db"),
         help="Override DATABASE_URL",
     )
+    parser.add_argument(
+        "--key",
+        default=None,
+        help=(
+            "Use this exact raw key instead of generating a new one. Useful "
+            "when seeding a prod DB with a key that's already in a caller's "
+            "env file. Provide the same URL-safe base64 form the mint CLI "
+            "normally prints."
+        ),
+    )
     args = parser.parse_args(argv)
 
-    raw = asyncio.run(_mint(args.label, args.user_email, args.database_url))
+    raw = asyncio.run(
+        _mint(args.label, args.user_email, args.database_url, args.key)
+    )
 
     print("=" * 72)
     print("NeuroPeer API key minted.")
