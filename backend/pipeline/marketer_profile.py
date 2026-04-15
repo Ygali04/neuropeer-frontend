@@ -190,7 +190,7 @@ async def _run_profile_update(user_email: str) -> None:
             total = profile.total_analyses
             threshold = profile.refresh_threshold or 0
 
-            # ── 2. Always recompute overall_score ────────────────────────
+            # ── 2. Always recompute overall_score from ALL completed reports ──
             jobs_stmt = (
                 select(Job)
                 .where(Job.user_email == user_email)
@@ -202,23 +202,19 @@ async def _run_profile_update(user_email: str) -> None:
                 await session.commit()
                 return
 
-            # Group by content_group_id → pick latest job per group
-            groups: dict[str, Job] = {}
-            for job in jobs:
-                key = str(job.content_group_id)
-                if key not in groups or job.created_at > groups[key].created_at:
-                    groups[key] = job
+            # Correct total_analyses to actual count of completed jobs
+            profile.total_analyses = len(jobs)
 
-            # Fetch the Result for each latest job
-            latest_job_ids = [j.id for j in groups.values()]
-            results_stmt = select(Result).where(Result.job_id.in_(latest_job_ids))
+            # Fetch Results for ALL completed jobs
+            all_job_ids = [j.id for j in jobs]
+            results_stmt = select(Result).where(Result.job_id.in_(all_job_ids))
             results = (await session.execute(results_stmt)).scalars().all()
 
             if not results:
                 await session.commit()
                 return
 
-            # Compute overall_score (mean of neural_score_total across latest campaigns)
+            # Compute overall_score as simple average of ALL report scores
             overall_score = mean(r.neural_score_total for r in results)
             profile.overall_score = overall_score
             profile.updated_at = now
@@ -262,8 +258,8 @@ async def _run_profile_update(user_email: str) -> None:
             await session.commit()
 
             logger.info(
-                "MarketerProfile refreshed for %s (total_analyses=%d, overall_score=%.1f, campaigns=%d)",
-                user_email, total, overall_score, num_campaigns,
+                "MarketerProfile refreshed for %s (total_analyses=%d, overall_score=%.1f, reports=%d)",
+                user_email, total, overall_score, len(results),
             )
 
     finally:

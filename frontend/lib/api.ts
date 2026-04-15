@@ -13,9 +13,14 @@ export async function submitAnalysis(
   url: string,
   contentType: ContentType,
   parentJobId?: string,
-  userEmail?: string
+  userEmail?: string,
+  contentTypes?: ContentType[],
 ): Promise<{ job_id: string; websocket_url: string }> {
-  const body: Record<string, unknown> = { url, content_type: contentType };
+  const body: Record<string, unknown> = {
+    url,
+    content_type: contentType,
+    content_types: contentTypes ?? [contentType],
+  };
   if (parentJobId) body.parent_job_id = parentJobId;
   if (userEmail) body.user_email = userEmail;
 
@@ -31,11 +36,27 @@ export async function submitAnalysis(
   return res.json();
 }
 
+export class RetryRedirectError extends Error {
+  newJobId: string;
+  constructor(newJobId: string, reason: string) {
+    super(reason);
+    this.newJobId = newJobId;
+  }
+}
+
 export async function getResult(jobId: string): Promise<AnalysisResult> {
-  const res = await fetch(`${API_BASE}/api/v1/results/${jobId}`);
+  const res = await fetch(`${API_BASE}/api/v1/results/${jobId}`, { redirect: "manual" });
+  if (res.status === 301) {
+    const data = await res.json().catch(() => ({ detail: {} }));
+    const detail = data.detail ?? data;
+    throw new RetryRedirectError(detail.new_job_id, detail.reason ?? "Auto-retrying");
+  }
+  if (res.status === 202) {
+    throw new Error("Analysis in progress");
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Unknown error" }));
-    throw new Error(err.detail ?? `HTTP ${res.status}`);
+    throw new Error(typeof err.detail === "string" ? err.detail : JSON.stringify(err.detail) ?? `HTTP ${res.status}`);
   }
   return res.json();
 }
@@ -138,8 +159,8 @@ export async function bulkDeleteCampaigns(contentGroupIds: string[]): Promise<vo
 }
 
 export async function getAllReports(userEmail: string): Promise<{
-  job_id: string; url: string; content_type: string; score: number;
-  campaign_name: string | null; content_group_id: string; created_at: string;
+  job_id: string; url: string; content_type: string; score: number | null;
+  status?: string; campaign_name: string | null; content_group_id: string; created_at: string;
 }[]> {
   const res = await fetch(`${API_BASE}/api/v1/campaigns/all-reports?user_email=${encodeURIComponent(userEmail)}`);
   if (!res.ok) return [];
@@ -154,6 +175,32 @@ export async function mergeCampaigns(contentGroupIds: string[], name?: string): 
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Merge failed" }));
+    throw new Error(err.detail ?? `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function renameReport(
+  jobId: string,
+  title: string
+): Promise<void> {
+  await fetch(`${API_BASE}/api/v1/reports/${jobId}/rename`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+}
+
+export async function deleteReport(jobId: string): Promise<void> {
+  await fetch(`${API_BASE}/api/v1/results/${jobId}`, { method: "DELETE" });
+}
+
+export async function regenerateFeedback(
+  jobId: string
+): Promise<{ regenerations_used: number; regenerations_remaining: number; summary: string; report_title: string }> {
+  const res = await fetch(`${API_BASE}/api/v1/results/${jobId}/regenerate-feedback`, { method: "POST" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Regeneration failed" }));
     throw new Error(err.detail ?? `HTTP ${res.status}`);
   }
   return res.json();
@@ -239,12 +286,16 @@ export async function createCampaignV2(
 
 export async function moveReport(
   jobId: string,
-  projectId?: string,
-  campaignId?: string
+  projectId?: string | null,
+  campaignId?: string | null
 ): Promise<void> {
   await fetch(`${API_BASE}/api/v1/reports/move`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ job_id: jobId, project_id: projectId, campaign_id: campaignId }),
+    body: JSON.stringify({
+      job_id: jobId,
+      project_id: projectId ?? null,
+      campaign_id: campaignId ?? null,
+    }),
   });
 }

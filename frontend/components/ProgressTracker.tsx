@@ -71,7 +71,9 @@ interface Props {
 }
 
 export function ProgressTracker({ event }: Props) {
-  const currentOrder = event ? STATUS_ORDER[event.status] : -1;
+  // Don't let error/complete status mark all stages as done visually
+  const rawOrder = event ? STATUS_ORDER[event.status] : -1;
+  const currentOrder = rawOrder >= 6 ? -1 : rawOrder; // error(7) and complete(6) → show nothing active
   const progress = event?.progress ?? 0;
 
   return (

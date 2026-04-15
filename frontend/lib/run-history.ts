@@ -5,6 +5,7 @@ export interface RunHistoryEntry {
   neuralScore: number;
   timestamp: number; // epoch ms
   durationSeconds: number;
+  status?: "pending" | "processing" | "complete";
 }
 
 const BASE_KEY = "neuropeer_run_history";

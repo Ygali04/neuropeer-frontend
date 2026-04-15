@@ -14,7 +14,7 @@ import json
 import redis.asyncio as aioredis
 
 from backend.config import settings
-from backend.models.db import Job, Result
+from backend.models.db import Campaign as CampaignModel, Job, Project, Result
 
 router = APIRouter(tags=["Campaigns"])
 
@@ -58,9 +58,11 @@ async def all_reports(user_email: str) -> list[dict]:
 
     async with Session() as session:
         stmt = (
-            select(Job, Result.neural_score_total)
+            select(Job, Result.neural_score_total, CampaignModel.name, Project.name, Result.ai_report_title)
             .outerjoin(Result, Result.job_id == Job.id)
-            .where(Job.user_email == user_email, Job.status == "complete")
+            .outerjoin(CampaignModel, CampaignModel.id == Job.campaign_id)
+            .outerjoin(Project, Project.id == Job.project_id)
+            .where(Job.user_email == user_email)
             .order_by(Job.created_at.asc())
         )
         rows = (await session.execute(stmt)).all()
@@ -68,13 +70,18 @@ async def all_reports(user_email: str) -> list[dict]:
     await engine.dispose()
 
     reports = []
-    for job, score in rows:
+    for job, score, campaign_name, project_name, report_title in rows:
+        # Prefer the real Campaign table name, fall back to legacy field
+        resolved_name = campaign_name or job.campaign_name
         reports.append({
             "job_id": str(job.id),
             "url": job.url,
             "content_type": job.content_type,
-            "score": round(score, 1) if score else 0,
-            "campaign_name": job.campaign_name,
+            "score": round(score, 1) if score else None,
+            "status": job.status,
+            "campaign_name": resolved_name,
+            "project_name": project_name,
+            "title": report_title,
             "content_group_id": str(job.content_group_id),
             "project_id": str(job.project_id) if job.project_id else None,
             "campaign_id": str(job.campaign_id) if job.campaign_id else None,
@@ -440,11 +447,34 @@ async def move_report_v2(body: MoveReportV2Request) -> dict:
             await engine.dispose()
             raise HTTPException(404, "Report not found")
 
-        if body.project_id is not None:
-            job.project_id = _uuid.UUID(body.project_id) if body.project_id else None
-        if body.campaign_id is not None:
-            job.campaign_id = _uuid.UUID(body.campaign_id) if body.campaign_id else None
+        # Always set both — a "move" specifies the full destination
+        job.project_id = _uuid.UUID(body.project_id) if body.project_id else None
+        job.campaign_id = _uuid.UUID(body.campaign_id) if body.campaign_id else None
         await session.commit()
 
     await engine.dispose()
     return {"job_id": body.job_id, "project_id": body.project_id, "campaign_id": body.campaign_id}
+
+
+class RenameReportRequest(BaseModel):
+    title: str
+
+
+@router.put("/reports/{job_id}/rename")
+async def rename_report(job_id: str, body: RenameReportRequest) -> dict:
+    """Rename a report (update ai_report_title on Result)."""
+    import uuid as _uuid
+
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    async with Session() as session:
+        result = (await session.execute(
+            select(Result).where(Result.job_id == _uuid.UUID(job_id))
+        )).scalar_one_or_none()
+        if not result:
+            await engine.dispose()
+            raise HTTPException(404, "Report not found")
+        result.ai_report_title = body.title.strip()
+        await session.commit()
+    await engine.dispose()
+    return {"job_id": job_id, "title": body.title.strip()}

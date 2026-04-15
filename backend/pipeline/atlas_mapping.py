@@ -108,14 +108,28 @@ def aggregate_roi_timeseries(
     Aggregate vertex predictions over an ROI to produce a 1D timeseries.
 
     Args:
-        predictions: (n_timesteps, 20484) float32 array from TRIBE v2
+        predictions: (n_timesteps, >=20484) float32 array from TRIBE v2
         roi_name: name from _PARCEL_PATTERNS
 
     Returns:
         (n_timesteps,) float32 array — mean activation across ROI vertices
     """
     indices = get_roi_vertex_indices(roi_name)
-    return predictions[:, indices].mean(axis=1)
+    # Only index into cortical columns (first 20484)
+    cortical = predictions[:, :20484]
+    return cortical[:, indices].mean(axis=1)
+
+
+def has_subcortical(predictions: np.ndarray) -> bool:
+    """Check if predictions include subcortical voxels (>20484 columns)."""
+    return predictions.ndim == 2 and predictions.shape[1] > 20484
+
+
+def get_subcortical(predictions: np.ndarray) -> np.ndarray | None:
+    """Extract subcortical voxels from predictions, if present."""
+    if not has_subcortical(predictions):
+        return None
+    return predictions[:, 20484:]
 
 
 def aggregate_all_rois(predictions: np.ndarray) -> dict[str, np.ndarray]:

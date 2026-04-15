@@ -35,6 +35,17 @@ async def migrate():
         "ALTER TABLE results ADD COLUMN IF NOT EXISTS ai_metric_tips JSONB",
         "ALTER TABLE results ADD COLUMN IF NOT EXISTS overarching_summary TEXT",
 
+        # Full scoring columns on results (targeted vs full)
+        "ALTER TABLE results ADD COLUMN IF NOT EXISTS full_neural_score_total FLOAT",
+        "ALTER TABLE results ADD COLUMN IF NOT EXISTS full_hook_score FLOAT",
+        "ALTER TABLE results ADD COLUMN IF NOT EXISTS full_sustained_attention FLOAT",
+        "ALTER TABLE results ADD COLUMN IF NOT EXISTS full_emotional_resonance FLOAT",
+        "ALTER TABLE results ADD COLUMN IF NOT EXISTS full_memory_encoding FLOAT",
+        "ALTER TABLE results ADD COLUMN IF NOT EXISTS full_aesthetic_quality FLOAT",
+        "ALTER TABLE results ADD COLUMN IF NOT EXISTS full_cognitive_accessibility FLOAT",
+        "ALTER TABLE results ADD COLUMN IF NOT EXISTS content_types_json JSONB",
+        "ALTER TABLE results ADD COLUMN IF NOT EXISTS metric_relevance_json JSONB",
+
         # Marketer profiles table
         """CREATE TABLE IF NOT EXISTS marketer_profiles (
             user_email TEXT PRIMARY KEY,

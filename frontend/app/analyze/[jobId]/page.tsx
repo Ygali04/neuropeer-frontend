@@ -18,19 +18,18 @@ import {
   RotateCcw,
 } from "lucide-react";
 
-import { connectJobWebSocket, getResult, exportReport, getRunHistory, submitAnalysis } from "@/lib/api";
+import { connectJobWebSocket, getResult, RetryRedirectError, exportReport, getRunHistory, submitAnalysis, regenerateFeedback } from "@/lib/api";
 import { generateReportPDF } from "@/lib/export-pdf";
 import { addRunToHistory } from "@/lib/run-history";
 import { useAuth } from "@/lib/auth-context";
-import { UserMenu } from "@/components/UserMenu";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { Navbar } from "@/components/Navbar";
 import type { AnalysisResult, ProgressEvent } from "@/lib/types";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ProgressTracker } from "@/components/ProgressTracker";
-import { NeuralScoreGauge } from "@/components/NeuralScoreGauge";
+import { NeuralScoreGauge, ScoringModeToggle } from "@/components/NeuralScoreGauge";
 import { AttentionCurve } from "@/components/AttentionCurve";
 import dynamic from "next/dynamic";
 const BrainMap3D = dynamic(
@@ -79,12 +78,14 @@ export default function AnalyzePage() {
   const [metricsExpandAll, setMetricsExpandAll] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [shareCopied, setShareCopied] = useState(false);
+  const [scoringMode, setScoringMode] = useState<"targeted" | "full">("targeted");
   const { session } = useAuth();
   const [loadingExisting, setLoadingExisting] = useState(true);
 
   const [showReanalyze, setShowReanalyze] = useState(false);
   const [reanalyzeUrl, setReanalyzeUrl] = useState("");
   const [reanalyzeLoading, setReanalyzeLoading] = useState(false);
+  const [regenLoading, setRegenLoading] = useState(false);
   const [runHistory, setRunHistory] = useState<import("@/lib/types").RunHistoryEntry[]>([]);
 
   // ── Playback state ─────────────────────────────────────────────────────
@@ -178,6 +179,11 @@ export default function AnalyzePage() {
       setLoadingExisting(false);
       saveToHistory(data);
     } catch (e: unknown) {
+      if (e instanceof RetryRedirectError) {
+        // GPU failed, auto-retrying as new job — redirect
+        window.location.href = `/analyze/${e.newJobId}`;
+        return;
+      }
       setError(e instanceof Error ? e.message : "Failed to load results");
       setLoadingExisting(false);
     }
@@ -190,13 +196,60 @@ export default function AnalyzePage() {
         setLoadingExisting(false); // we're in active computation mode
         setProgress(event);
         if (event.status === "complete") handleDone();
-        if (event.status === "error") setError(event.message);
+        if (event.status === "error") {
+          // Check if auto-retry is happening
+          try {
+            const parsed = JSON.parse(event.message);
+            if (parsed.auto_retry) {
+              setError(`GPU provisioning failed — auto-retrying with a new job…`);
+              // Poll for the redirect
+              const poll = setInterval(async () => {
+                try { await getResult(jobId); } catch (err) {
+                  if (err instanceof RetryRedirectError) {
+                    clearInterval(poll);
+                    window.location.href = `/analyze/${err.newJobId}`;
+                  }
+                }
+              }, 2000);
+              return;
+            }
+          } catch { /* not JSON, regular error */ }
+          setError(event.message);
+        }
       },
       handleDone,
       (msg) => {
         // WebSocket error = likely an existing report, try direct fetch
+        // If still in progress, silently ignore — the job is still running
         setError(null);
-        handleDone();
+        handleDone().catch((e: Error) => {
+          if (e.message === "Analysis in progress") {
+            // Job exists but isn't done yet — show progress tracker on inferring stage
+            setLoadingExisting(false);
+            setProgress({ job_id: jobId, status: "inferring", progress: 0.45, message: "Running TRIBE v2 neural simulation..." });
+            // Slowly increment progress while polling
+            let progVal = 0.45;
+            const poll = setInterval(async () => {
+              try {
+                const data = await getResult(jobId);
+                clearInterval(poll);
+                // Speed through remaining stages before showing result
+                setProgress({ job_id: jobId, status: "aggregating", progress: 0.85, message: "Mapping brain regions..." });
+                await new Promise(r => setTimeout(r, 600));
+                setProgress({ job_id: jobId, status: "scoring", progress: 0.95, message: "Computing neural metrics..." });
+                await new Promise(r => setTimeout(r, 600));
+                setResult(data);
+                setProgress(null);
+                saveToHistory(data);
+              } catch {
+                // Still in progress — slowly creep the progress bar
+                progVal = Math.min(progVal + 0.01, 0.75);
+                setProgress({ job_id: jobId, status: "inferring", progress: progVal, message: "Running TRIBE v2 neural simulation..." });
+              }
+            }, 3000);
+            return () => clearInterval(poll);
+          }
+        });
       }
     );
     return disconnect;
@@ -246,51 +299,27 @@ export default function AnalyzePage() {
     }
   };
 
+  const handleRegenFeedback = async () => {
+    setRegenLoading(true);
+    try {
+      await regenerateFeedback(jobId);
+      // Reload the full result to get updated feedback
+      const data = await getResult(jobId);
+      setResult(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Feedback regeneration failed");
+    } finally {
+      setRegenLoading(false);
+    }
+  };
+
   // Determine loading state
-  const isActiveComputation = progress !== null && progress.status !== "complete";
+  const isActiveComputation = progress !== null && progress.status !== "complete" && progress.status !== "error";
   const isLoadingReport = !result && !error && loadingExisting && !isActiveComputation;
 
   return (
     <div className="min-h-screen">
-      {/* ── Nav ─────────────────────────────────────────────────────────────── */}
-      <header className="nav-backdrop border-b border-white/[0.06] px-4 sm:px-6 py-3 sm:py-4 sticky top-0 z-10 backdrop-blur-xl bg-[#07060b]/80">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 sm:gap-3 group">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
-              <Brain className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
-            </div>
-            <span className="font-[family-name:var(--font-display)] text-white font-semibold tracking-tight text-sm sm:text-base">
-              NeuroPeer
-            </span>
-          </Link>
-          <div className="flex items-center gap-1 sm:gap-2">
-            {result && (
-              <>
-                <Button variant="ghost" size="sm" onClick={handleShare} className="!px-2 sm:!px-3">
-                  {shareCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
-                  <span className="hidden sm:inline">{shareCopied ? "Copied!" : "Share"}</span>
-                </Button>
-                <Button variant="secondary" size="sm" onClick={handleExport} disabled={exporting} className="!px-2 sm:!px-3">
-                  {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                  <span className="hidden sm:inline">{exporting ? "Generating..." : "Export PDF"}</span>
-                </Button>
-                {session && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowReanalyze(true)}
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Re-analyze</span>
-                  </Button>
-                )}
-              </>
-            )}
-            <ThemeToggle />
-            <UserMenu />
-          </div>
-        </div>
-      </header>
+      <Navbar />
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
         {error && (
@@ -348,15 +377,39 @@ export default function AnalyzePage() {
         {(result || isActiveComputation || isLoadingReport) && (
           <div className="flex flex-col gap-6">
 
-            {/* Editable report title */}
+            {/* Report title + action buttons */}
             {result && (
-              <ReportTitle
-                title={result.ai_report_title}
-                url={result.url}
-                contentType={result.content_type}
-                isOwner={!!session}
-                jobId={jobId}
-              />
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <ReportTitle
+                  title={result.ai_report_title}
+                  url={result.url}
+                  contentType={result.content_type}
+                  isOwner={!!session}
+                  jobId={jobId}
+                />
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Button variant="ghost" size="sm" onClick={handleShare} className="!px-2 sm:!px-3">
+                    {shareCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
+                    <span className="hidden sm:inline">{shareCopied ? "Copied!" : "Share"}</span>
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={handleExport} disabled={exporting} className="!px-2 sm:!px-3">
+                    {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                    <span className="hidden sm:inline">{exporting ? "Generating..." : "Export PDF"}</span>
+                  </Button>
+                  {session && (
+                    <>
+                      <Button variant="outline" size="sm" onClick={handleRegenFeedback} disabled={regenLoading}>
+                        {regenLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                        <span className="hidden sm:inline">{regenLoading ? "Refreshing..." : "Refresh AI"}</span>
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => setShowReanalyze(true)}>
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Re-analyze</span>
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
             )}
 
             {/* Delta banner */}
@@ -381,9 +434,26 @@ export default function AnalyzePage() {
             {/* Row 1: Neural Score + Video info */}
             <div className={`grid grid-cols-1 lg:grid-cols-3 gap-6 transition-all duration-700 ${result ? "animate-fade-up" : "opacity-60"}`}>
               <Card className="lg:col-span-1">
-                <CardTitle>Neural Score</CardTitle>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Neural Score</CardTitle>
+                    {result && scoringMode === "targeted" && result.neural_score.content_types && (
+                      <p className="text-[10px] text-white/20 mt-0.5">{result.neural_score.content_types.map(t => t.replace(/_/g, " ")).join(" + ")}</p>
+                    )}
+                    {result && scoringMode === "full" && (
+                      <p className="text-[10px] text-white/20 mt-0.5">All metrics equally weighted</p>
+                    )}
+                  </div>
+                  {result && (
+                    <ScoringModeToggle
+                      mode={scoringMode}
+                      onChange={setScoringMode}
+                      hasFull={result.neural_score.full_total != null}
+                    />
+                  )}
+                </div>
                 {result ? (
-                  <NeuralScoreGauge breakdown={result.neural_score} />
+                  <NeuralScoreGauge breakdown={result.neural_score} mode={scoringMode} onModeChange={setScoringMode} />
                 ) : (
                   <div className="flex items-center justify-center py-12">
                     <div className="w-28 h-28 rounded-full border-4 border-white/[0.06] animate-pulse flex items-center justify-center">

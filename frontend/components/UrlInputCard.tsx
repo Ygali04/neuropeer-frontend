@@ -8,12 +8,18 @@ import { cn } from "@/lib/utils";
 import type { ContentType } from "@/lib/types";
 
 const CONTENT_TYPES: { value: ContentType; label: string; desc: string; icon: string }[] = [
-  { value: "instagram_reel", label: "Instagram Reel", desc: "15–60s · Hook 35%", icon: "📱" },
-  { value: "youtube_preroll", label: "YouTube Pre-roll", desc: "6–30s · Hook 40%", icon: "▶" },
-  { value: "product_demo", label: "Product Demo", desc: "2–5 min · Memory", icon: "🎯" },
-  { value: "conference_talk", label: "Conference Talk", desc: "3–10 min · Clarity", icon: "🎤" },
+  { value: "instagram_reel", label: "Instagram Reel", desc: "15–60s · Hook focus", icon: "📱" },
+  { value: "youtube_preroll", label: "YouTube Pre-roll", desc: "6–30s · Hook critical", icon: "▶" },
+  { value: "product_demo", label: "Product Demo", desc: "2–5 min · Clarity focus", icon: "🎯" },
+  { value: "conference_talk", label: "Conference Talk", desc: "3–10 min · Retention", icon: "🎤" },
   { value: "podcast_audio", label: "Podcast Clip", desc: "1–5 min · Narration", icon: "🎧" },
-  { value: "custom", label: "Custom", desc: "Configure weights", icon: "⚙" },
+  { value: "music_video", label: "Music Video", desc: "Emotion + aesthetics", icon: "🎵" },
+  { value: "brand_commercial", label: "Brand Commercial", desc: "Hook + recall", icon: "📺" },
+  { value: "tutorial_screencast", label: "Tutorial", desc: "Clarity + memory", icon: "💻" },
+  { value: "testimonial", label: "Testimonial", desc: "Social + emotion", icon: "💬" },
+  { value: "educational_lecture", label: "Edu Lecture", desc: "Comprehension", icon: "🎓" },
+  { value: "live_stream_clip", label: "Live Stream", desc: "Re-engagement", icon: "🔴" },
+  { value: "custom", label: "Custom", desc: "Equal weights", icon: "⚙" },
 ];
 
 interface CustomWeights {
@@ -44,7 +50,7 @@ const WEIGHT_CONFIG: { key: keyof CustomWeights; label: string; lowLabel: string
 ];
 
 interface Props {
-  onSubmit: (url: string, contentType: ContentType) => Promise<void>;
+  onSubmit: (url: string, contentType: ContentType, contentTypes?: ContentType[]) => Promise<void>;
   loading?: boolean;
   showCompareOption?: boolean;
   onCompare?: () => void;
@@ -52,10 +58,34 @@ interface Props {
 
 export function UrlInputCard({ onSubmit, loading = false, showCompareOption = false, onCompare }: Props) {
   const [url, setUrl] = useState("");
-  const [contentType, setContentType] = useState<ContentType>("custom");
+  const [selectedTypes, setSelectedTypes] = useState<Set<ContentType>>(new Set(["custom"]));
   const [error, setError] = useState("");
   const [customWeights, setCustomWeights] = useState<CustomWeights>(DEFAULT_WEIGHTS);
   const [showSliders, setShowSliders] = useState(false);
+
+  const toggleContentType = (value: ContentType) => {
+    setSelectedTypes(prev => {
+      const next = new Set(prev);
+      if (value === "custom") {
+        // Custom is exclusive — clear everything else
+        return new Set(["custom"]);
+      }
+      // Remove custom when selecting a specific type
+      next.delete("custom");
+      if (next.has(value)) {
+        next.delete(value);
+        // If nothing selected, default back to custom
+        if (next.size === 0) return new Set(["custom"]);
+      } else {
+        next.add(value);
+      }
+      return next;
+    });
+    setShowSliders(value === "custom");
+  };
+
+  const primaryType = [...selectedTypes][0] ?? "custom";
+  const contentTypesArray = [...selectedTypes] as ContentType[];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,7 +95,7 @@ export function UrlInputCard({ onSubmit, loading = false, showCompareOption = fa
       return;
     }
     try {
-      await onSubmit(url.trim(), contentType);
+      await onSubmit(url.trim(), primaryType, contentTypesArray);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Submission failed.");
     }
@@ -101,42 +131,46 @@ export function UrlInputCard({ onSubmit, loading = false, showCompareOption = fa
           </div>
         </div>
 
-        {/* Content type selector */}
+        {/* Content type selector (multi-select) */}
         <div>
-          <label className="block text-xs font-medium text-white/40 uppercase tracking-wider mb-2.5">
-            Content Type
-          </label>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {CONTENT_TYPES.map((ct) => (
-              <button
-                key={ct.value}
-                type="button"
-                onClick={() => {
-                  setContentType(ct.value);
-                  if (ct.value === "custom") setShowSliders(true);
-                  else setShowSliders(false);
-                }}
-                className={cn(
-                  "flex items-start gap-2.5 px-3 py-2.5 rounded-xl border text-left transition-all duration-200",
-                  contentType === ct.value
-                    ? "border-brand-500/40 bg-brand-500/[0.08] shadow-sm shadow-brand-500/10"
-                    : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12] hover:bg-white/[0.04]"
-                )}
-              >
-                <span className="text-sm mt-0.5">{ct.icon}</span>
-                <div>
-                  <span className={cn("font-medium text-sm block", contentType === ct.value ? "text-brand-300" : "text-white/60")}>
-                    {ct.label}
-                  </span>
-                  <span className="text-[10px] text-white/25 leading-tight">{ct.desc}</span>
-                </div>
-              </button>
-            ))}
+          <div className="flex items-center justify-between mb-2.5">
+            <label className="block text-xs font-medium text-white/40 uppercase tracking-wider">
+              Content Type
+            </label>
+            {selectedTypes.size > 1 && (
+              <span className="text-[10px] text-brand-400/60">{selectedTypes.size} selected — scores blended</span>
+            )}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+            {CONTENT_TYPES.map((ct) => {
+              const isSelected = selectedTypes.has(ct.value);
+              return (
+                <button
+                  key={ct.value}
+                  type="button"
+                  onClick={() => toggleContentType(ct.value)}
+                  className={cn(
+                    "flex items-start gap-2.5 px-3 py-2.5 rounded-xl border text-left transition-all duration-200",
+                    isSelected
+                      ? "border-brand-500/40 bg-brand-500/[0.08] shadow-sm shadow-brand-500/10"
+                      : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12] hover:bg-white/[0.04]"
+                  )}
+                >
+                  <span className="text-sm mt-0.5">{ct.icon}</span>
+                  <div>
+                    <span className={cn("font-medium text-sm block", isSelected ? "text-brand-300" : "text-white/60")}>
+                      {ct.label}
+                    </span>
+                    <span className="text-[10px] text-white/25 leading-tight">{ct.desc}</span>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 
         {/* Custom weight sliders — only when "Custom" is selected */}
-        {contentType === "custom" && showSliders && (
+        {selectedTypes.has("custom") && showSliders && (
           <div className="border-t border-white/[0.06] pt-5">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">

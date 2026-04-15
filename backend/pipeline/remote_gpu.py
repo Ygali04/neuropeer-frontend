@@ -40,13 +40,14 @@ def run_inference_backend(
     work_dir: Path,
     video_path: Path | None = None,
     audio_path: Path | None = None,
+    progress_cb: callable | None = None,
 ) -> tuple[dict[Modality, np.ndarray], str]:
     """Run TRIBE v2 inference via the configured backend."""
     if settings.inference_backend == "datacrunch":
         if video_path is None:
             logger.warning("DataCrunch backend requires video_path; falling back to local")
             return _run_locally(job_id, events_df)
-        return _run_on_datacrunch(job_id, video_path, events_df, audio_path)
+        return _run_on_datacrunch(job_id, video_path, events_df, audio_path, progress_cb=progress_cb)
     return _run_locally(job_id, events_df)
 
 
@@ -81,6 +82,7 @@ def _run_on_datacrunch(
     video_path: Path,
     events_df: pd.DataFrame | None = None,
     audio_path: Path | None = None,
+    progress_cb: callable | None = None,
 ) -> tuple[dict[Modality, np.ndarray], str]:
     """Spin up a DataCrunch GPU, run TRIBE v2, download results, delete instance."""
     logger.info("Provisioning DataCrunch GPU instance for job %s", job_id)
@@ -110,7 +112,7 @@ def _run_on_datacrunch(
 
     try:
         # 2. Create instance (finds available GPU, creates startup script)
-        instance_id, script_id = _datacrunch_create_instance(job_id, video_s3_key, audio_s3_key, events_s3_key, vertex_key, sentinel_done, sentinel_error)
+        instance_id, script_id = _datacrunch_create_instance(job_id, video_s3_key, audio_s3_key, events_s3_key, vertex_key, sentinel_done, sentinel_error, progress_cb=progress_cb)
         logger.info("DataCrunch instance %s created for job %s", instance_id, job_id)
 
         # 3. Poll S3 for sentinel
@@ -162,6 +164,7 @@ def _datacrunch_create_instance(
     output_s3_key: str,
     sentinel_done: str,
     sentinel_error: str,
+    progress_cb: callable | None = None,
 ) -> tuple[str, str]:
     """Create a DataCrunch spot instance. Returns (instance_id, script_id)."""
     client = _datacrunch_client()
@@ -216,23 +219,42 @@ def _datacrunch_create_instance(
 
     logger.info("Using %s in %s", inst_type, location)
 
-    # Create instance with startup_script_id (not startup_script)
-    try:
-        instance = client.instances.create(
-            instance_type=inst_type,
-            image=settings.datacrunch_image,
-            ssh_key_ids=ssh_key_ids,
-            hostname=f"neuropeer-{job_id[:8]}",
-            description=f"NeuroPeer-{job_id[:8]}",
-            location=location,
-            is_spot=False,  # on-demand to avoid eviction
-            startup_script_id=script_obj.id,
-            max_wait_time=600,
-        )
-        return instance.id, script_obj.id
-    except Exception as exc:
-        client.startup_scripts.delete_by_id(script_obj.id)
-        raise DataCrunchError(f"Failed to create DataCrunch instance: {exc}") from exc
+    # Create instance — try multiple OS images in case the preferred one
+    # isn't compatible with the selected GPU type
+    OS_IMAGES = [
+        settings.datacrunch_image,  # preferred
+        "ubuntu-22.04-cuda-12.4-open-docker",
+        "ubuntu-22.04-cuda-12.0-open-docker",
+        "ubuntu-22.04-cuda-11.8-open-docker",
+    ]
+    last_err = None
+    for i, image in enumerate(OS_IMAGES):
+        try:
+            logger.info("Trying image %s on %s in %s (%d/%d)", image, inst_type, location, i + 1, len(OS_IMAGES))
+            if progress_cb:
+                progress_cb(f"Provisioning GPU ({i + 1}/{len(OS_IMAGES)}): {inst_type} + {image.split('-cuda-')[1].split('-')[0] if 'cuda' in image else image}")
+            instance = client.instances.create(
+                instance_type=inst_type,
+                image=image,
+                ssh_key_ids=ssh_key_ids,
+                hostname=f"neuropeer-{job_id[:8]}",
+                description=f"NeuroPeer-{job_id[:8]}",
+                location=location,
+                is_spot=False,
+                startup_script_id=script_obj.id,
+                max_wait_time=600,
+            )
+            return instance.id, script_obj.id
+        except Exception as exc:
+            last_err = exc
+            logger.warning("Image %s failed for %s: %s", image, inst_type, exc)
+            if progress_cb:
+                progress_cb(f"GPU image {image.split('-cuda-')[1].split('-')[0] if 'cuda' in image else image} incompatible, trying next…")
+            if "not valid" not in str(exc).lower():
+                break  # non-OS error, don't try other images
+
+    client.startup_scripts.delete_by_id(script_obj.id)
+    raise DataCrunchError(f"Failed to create DataCrunch instance after {len(OS_IMAGES)} image attempts: {last_err}") from last_err
 
 
 def _poll_for_sentinel(instance_id: str, job_id: str, sentinel_done: str, sentinel_error: str) -> None:

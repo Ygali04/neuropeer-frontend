@@ -30,7 +30,7 @@ export function ReportPicker({ selectedIds, onSelect }: Props) {
   useEffect(() => {
     const email = session?.user?.email;
     if (!email) return;
-    getAllReports(email).then(setReports);
+    getAllReports(email).then(data => setReports(data.filter(r => r.score != null) as ReportEntry[]));
   }, [session]);
 
   // Group by campaign

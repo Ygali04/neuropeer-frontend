@@ -38,7 +38,7 @@ def _get_redis() -> redis_sync.Redis:
 
 
 def _publish_progress(job_id: str, status: str, progress: float, message: str) -> None:
-    """Publish a progress event to the Redis channel for this job."""
+    """Publish a progress event to the Redis channel and update Job row status."""
     payload = json.dumps(
         {
             "job_id": job_id,
@@ -49,9 +49,38 @@ def _publish_progress(job_id: str, status: str, progress: float, message: str) -
     )
     _get_redis().publish(f"neuropeer:job:{job_id}", payload)
 
+    # Update Job row status in DB (so dashboard always reflects current state)
+    _update_job_status_db(job_id, status)
+
+
+def _update_job_status_db(job_id: str, status: str) -> None:
+    """Update the Job row status in PostgreSQL."""
+    import asyncio
+    from uuid import UUID
+
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy import select, update
+
+    from backend.models.db import Job
+
+    async def _update():
+        engine = create_async_engine(settings.database_url)
+        Session = async_sessionmaker(engine, expire_on_commit=False)
+        async with Session() as session:
+            await session.execute(
+                update(Job).where(Job.id == UUID(job_id)).values(status=status)
+            )
+            await session.commit()
+        await engine.dispose()
+
+    try:
+        asyncio.run(_update())
+    except Exception:
+        pass  # non-fatal — Redis pubsub is the primary progress channel
+
 
 def _update_job_status(job_id: str, status: str, error: str | None = None) -> None:
-    """Update the job status in Redis (fast cache — DB update happens via API)."""
+    """Update the job status in Redis (fast cache)."""
     data = {"status": status}
     if error:
         data["error"] = error
@@ -112,6 +141,7 @@ def _persist_to_db(job_id, url, content_type, duration, neural_score, metrics_da
             # Create Result row
             session.add(Result(
                 job_id=UUID(job_id), duration_seconds=duration,
+                # Targeted scores
                 neural_score_total=neural_score.total,
                 hook_score=neural_score.hook_score,
                 sustained_attention=neural_score.sustained_attention,
@@ -119,6 +149,18 @@ def _persist_to_db(job_id, url, content_type, duration, neural_score, metrics_da
                 memory_encoding=neural_score.memory_encoding,
                 aesthetic_quality=neural_score.aesthetic_quality,
                 cognitive_accessibility=neural_score.cognitive_accessibility,
+                # Full scores
+                full_neural_score_total=neural_score.full_total,
+                full_hook_score=neural_score.full_hook_score,
+                full_sustained_attention=neural_score.full_sustained_attention,
+                full_emotional_resonance=neural_score.full_emotional_resonance,
+                full_memory_encoding=neural_score.full_memory_encoding,
+                full_aesthetic_quality=neural_score.full_aesthetic_quality,
+                full_cognitive_accessibility=neural_score.full_cognitive_accessibility,
+                # Scoring metadata
+                content_types_json=neural_score.content_types,
+                metric_relevance_json=neural_score.metric_relevance,
+                # Artifacts
                 timeseries_s3_key=timeseries_key,
                 vertex_data_s3_key=vertex_key,
                 metrics_json=metrics_data,
@@ -143,7 +185,7 @@ def _persist_to_db(job_id, url, content_type, duration, neural_score, metrics_da
 
 
 @celery_app.task(name="neuropeer.analyze", bind=True, max_retries=1)
-def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: str | None = None, user_email: str | None = None, project_id: str | None = None, campaign_id: str | None = None) -> dict:
+def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: str | None = None, user_email: str | None = None, project_id: str | None = None, campaign_id: str | None = None, content_types: list[str] | None = None) -> dict:
     """
     Full NeuroPeer analysis pipeline for a single video URL.
     Streams progress events at each stage.
@@ -222,8 +264,12 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
                 "subject": "default", "sentence": sentence, "context": sentence})
         tribe_events_df = _pd.DataFrame(tribe_events)
 
+        def _gpu_progress(msg: str) -> None:
+            _publish_progress(job_id, "inferring", 0.30, msg)
+
         predictions, vertex_key = run_inference_backend(
-            job_id, tribe_events_df, work_dir, video_path=media.video_path, audio_path=media.audio_path
+            job_id, tribe_events_df, work_dir, video_path=media.video_path, audio_path=media.audio_path,
+            progress_cb=_gpu_progress,
         )
 
         _publish_progress(job_id, "inferring", 0.65, "All 4 modality passes complete.")
@@ -233,6 +279,8 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
         _update_job_status(job_id, "aggregating")
 
         content_type_enum = ContentType(content_type)
+        # Resolve content_types list (multi-select support)
+        content_types_enums = [ContentType(ct) for ct in content_types] if content_types else [content_type_enum]
         metrics, attn_curve, arousal_curve, cog_curve, modality_breakdown = compute_all_metrics(predictions)
 
         # ── Stage 4: Neural Score + key moments ───────────────────────────────
@@ -241,7 +289,7 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
 
         from backend.pipeline.tribe_inference import Modality
 
-        neural_score = compute_neural_score(metrics, content_type_enum)
+        neural_score = compute_neural_score(metrics, content_types=content_types_enums)
         key_moments = detect_key_moments(attn_curve, arousal_curve, cog_curve, predictions[Modality.FULL])
 
         # ── Stage 5: AI Feedback generation ───────────────────────────────
@@ -347,8 +395,65 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
         raise  # already handled above with friendly message
 
     except Exception as exc:
+        from backend.pipeline.remote_gpu import DataCrunchError
         error_msg = str(exc)
         logger.exception("Pipeline error for job %s", job_id)
+
+        # Auto-retry GPU provisioning failures as a new job
+        if isinstance(exc, DataCrunchError) and not getattr(self, '_is_gpu_retry', False):
+            logger.info("GPU provisioning failed for %s, auto-retrying as new job", job_id)
+            _update_job_status(job_id, "error", error=f"GPU error (auto-retrying): {error_msg}")
+            _publish_progress(job_id, "error", 0.0, json.dumps({
+                "message": f"GPU provisioning failed: {error_msg[:200]}",
+                "auto_retry": True,
+            }))
+
+            # Submit a new job for the same URL
+            import uuid as _uuid
+            new_job_id = str(_uuid.uuid4())
+            run_analysis.apply_async(
+                args=[new_job_id, url, content_type],
+                kwargs={
+                    "parent_job_id": parent_job_id,
+                    "user_email": user_email,
+                    "project_id": project_id,
+                    "campaign_id": campaign_id,
+                    "content_types": content_types,
+                },
+                task_id=new_job_id,
+            )
+
+            # Create the new Job row in DB
+            try:
+                import asyncio as _aio
+                from datetime import UTC, datetime
+                from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+                from backend.models.db import Job as JobModel
+                async def _create():
+                    eng = create_async_engine(settings.database_url)
+                    Sess = async_sessionmaker(eng, expire_on_commit=False)
+                    async with Sess() as sess:
+                        sess.add(JobModel(
+                            id=_uuid.UUID(new_job_id), url=url, content_type=content_type,
+                            status="queued", created_at=datetime.now(UTC).replace(tzinfo=None),
+                            user_email=user_email,
+                            project_id=_uuid.UUID(project_id) if project_id else None,
+                            campaign_id=_uuid.UUID(campaign_id) if campaign_id else None,
+                        ))
+                        await sess.commit()
+                    await eng.dispose()
+                _aio.run(_create())
+            except Exception:
+                pass
+
+            # Store the redirect so the frontend can pick it up
+            _get_redis().set(
+                f"neuropeer:retry:{job_id}",
+                json.dumps({"new_job_id": new_job_id, "reason": error_msg[:300]}),
+                ex=60 * 60,  # 1 hour TTL
+            )
+            return {"status": "retrying", "new_job_id": new_job_id}
+
         _update_job_status(job_id, "error", error=error_msg)
         _publish_progress(job_id, "error", 0.0, f"Pipeline error: {error_msg}")
         raise

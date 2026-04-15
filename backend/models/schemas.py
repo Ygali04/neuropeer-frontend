@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from uuid import UUID
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 
 class ContentType(str, Enum):
@@ -12,6 +12,12 @@ class ContentType(str, Enum):
     youtube_preroll = "youtube_preroll"
     conference_talk = "conference_talk"
     podcast_audio = "podcast_audio"
+    music_video = "music_video"
+    brand_commercial = "brand_commercial"
+    tutorial_screencast = "tutorial_screencast"
+    testimonial = "testimonial"
+    educational_lecture = "educational_lecture"
+    live_stream_clip = "live_stream_clip"
     custom = "custom"
 
 
@@ -31,20 +37,29 @@ class JobStatus(str, Enum):
 
 class AnalyzeRequest(BaseModel):
     url: str
-    content_type: ContentType = ContentType.custom
+    content_type: ContentType = ContentType.custom  # legacy single-select
+    content_types: list[ContentType] | None = None  # multi-select (overrides content_type)
     label: str | None = None
     parent_job_id: UUID | None = None
     user_email: str | None = None
-    project_id: UUID | None = None  # assign to project at submission
-    campaign_id: UUID | None = None  # assign to campaign at submission
+    project_id: UUID | None = None
+    campaign_id: UUID | None = None
 
     @field_validator("url")
     @classmethod
     def validate_url(cls, v: str) -> str:
-        # Accept http/https URLs and direct video links
         if not (v.startswith("http://") or v.startswith("https://")):
             raise ValueError("URL must start with http:// or https://")
         return v
+
+    @model_validator(mode="after")
+    def resolve_content_types(self):
+        """Ensure content_types is always populated (backward compat with single content_type)."""
+        if not self.content_types:
+            self.content_types = [self.content_type]
+        # Keep content_type as the primary type (first in list)
+        self.content_type = self.content_types[0]
+        return self
 
 
 class CompareRequest(BaseModel):
@@ -102,6 +117,7 @@ class ModalityContribution(BaseModel):
 
 
 class NeuralScoreBreakdown(BaseModel):
+    # Targeted scores (content-type-aware, default view)
     total: float  # 0–100, weighted composite
     hook_score: float
     sustained_attention: float
@@ -109,6 +125,18 @@ class NeuralScoreBreakdown(BaseModel):
     memory_encoding: float
     aesthetic_quality: float
     cognitive_accessibility: float
+    # Full scores (all metrics equally weighted, no content-type adjustments)
+    full_total: float | None = None
+    full_hook_score: float | None = None
+    full_sustained_attention: float | None = None
+    full_emotional_resonance: float | None = None
+    full_memory_encoding: float | None = None
+    full_aesthetic_quality: float | None = None
+    full_cognitive_accessibility: float | None = None
+    # Metadata
+    content_types: list[str] | None = None
+    targeted_dimensions: list[str] | None = None
+    metric_relevance: dict[str, float] | None = None
 
 
 class AnalysisResult(BaseModel):

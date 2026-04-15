@@ -104,7 +104,7 @@ class Result(Base):
     job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("jobs.id"), primary_key=True)
     duration_seconds: Mapped[float] = mapped_column(Float)
 
-    # Neural Score components
+    # Neural Score components (targeted — content-type-aware)
     neural_score_total: Mapped[float] = mapped_column(Float)
     hook_score: Mapped[float] = mapped_column(Float)
     sustained_attention: Mapped[float] = mapped_column(Float)
@@ -112,6 +112,22 @@ class Result(Base):
     memory_encoding: Mapped[float] = mapped_column(Float)
     aesthetic_quality: Mapped[float] = mapped_column(Float)
     cognitive_accessibility: Mapped[float] = mapped_column(Float)
+
+    # Neural Score components (full — all metrics equally weighted)
+    full_neural_score_total: Mapped[float | None] = mapped_column(Float, nullable=True)
+    full_hook_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    full_sustained_attention: Mapped[float | None] = mapped_column(Float, nullable=True)
+    full_emotional_resonance: Mapped[float | None] = mapped_column(Float, nullable=True)
+    full_memory_encoding: Mapped[float | None] = mapped_column(Float, nullable=True)
+    full_aesthetic_quality: Mapped[float | None] = mapped_column(Float, nullable=True)
+    full_cognitive_accessibility: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Scoring metadata
+    content_types_json: Mapped[dict | None] = mapped_column(JSON)
+    metric_relevance_json: Mapped[dict | None] = mapped_column(JSON)
+
+    # AI feedback regeneration counter (max 3 user-triggered regenerations)
+    ai_regen_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     # S3 paths
     timeseries_s3_key: Mapped[str | None] = mapped_column(Text)

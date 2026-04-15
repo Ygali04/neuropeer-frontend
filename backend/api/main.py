@@ -17,11 +17,29 @@ from backend.config import settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Create database tables on startup."""
+    """Create database tables + run migrations on startup."""
+    from sqlalchemy import text
     from backend.models.db import Base, engine
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Add columns that create_all won't add to existing tables
+        for sql in [
+            "ALTER TABLE results ADD COLUMN IF NOT EXISTS full_neural_score_total FLOAT",
+            "ALTER TABLE results ADD COLUMN IF NOT EXISTS full_hook_score FLOAT",
+            "ALTER TABLE results ADD COLUMN IF NOT EXISTS full_sustained_attention FLOAT",
+            "ALTER TABLE results ADD COLUMN IF NOT EXISTS full_emotional_resonance FLOAT",
+            "ALTER TABLE results ADD COLUMN IF NOT EXISTS full_memory_encoding FLOAT",
+            "ALTER TABLE results ADD COLUMN IF NOT EXISTS full_aesthetic_quality FLOAT",
+            "ALTER TABLE results ADD COLUMN IF NOT EXISTS full_cognitive_accessibility FLOAT",
+            "ALTER TABLE results ADD COLUMN IF NOT EXISTS content_types_json JSONB",
+            "ALTER TABLE results ADD COLUMN IF NOT EXISTS metric_relevance_json JSONB",
+            "ALTER TABLE results ADD COLUMN IF NOT EXISTS ai_regen_count INTEGER DEFAULT 0",
+        ]:
+            try:
+                await conn.execute(text(sql))
+            except Exception:
+                pass
     yield
     await engine.dispose()
 
@@ -61,6 +79,63 @@ app.include_router(ws_router)
 async def health() -> dict:
     """Basic health check."""
     return {"status": "ok", "service": "neuropeer"}
+
+
+@app.get("/debug/flush-cache/{job_id}")
+async def debug_flush_cache(job_id: str) -> dict:
+    """Flush the Redis cache for a specific job."""
+    import redis.asyncio as aioredis
+    r = aioredis.from_url(settings.redis_url, decode_responses=True)
+    deleted = await r.delete(f"neuropeer:result:{job_id}")
+    await r.aclose()
+    return {"flushed": job_id, "deleted": deleted}
+
+
+@app.get("/debug/recompute/{job_id}")
+async def debug_recompute(job_id: str) -> dict:
+    """Recompute scores for a specific job (bypasses all caching)."""
+    import redis.asyncio as aioredis
+    r = aioredis.from_url(settings.redis_url, decode_responses=True)
+    raw = await r.get(f"neuropeer:result:{job_id}")
+    await r.aclose()
+    if not raw:
+        return {"error": "not in cache"}
+    import json as _json
+    cached = _json.loads(raw)
+    metrics_data = cached.get("metrics", [])
+    if not metrics_data:
+        return {"error": "no metrics in cache"}
+    from backend.pipeline.metric_engine import MetricResult
+    from backend.pipeline.neural_score import compute_neural_score
+    from backend.models.schemas import ContentType
+    metric_objs = [MetricResult(**m) for m in metrics_data]
+    ct = ContentType(cached.get("content_type", "custom"))
+    recomputed = compute_neural_score(metric_objs, content_types=[ct])
+    return recomputed.model_dump()
+
+
+@app.get("/debug/reset-regen-counts")
+async def debug_reset_regen_counts() -> dict:
+    """Reset ai_regen_count to 0 for all results (admin use after bulk refresh)."""
+    from sqlalchemy import text, update
+    from backend.models.db import Result, engine
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    async with Session() as session:
+        await session.execute(update(Result).values(ai_regen_count=0))
+        await session.commit()
+    return {"status": "ok", "message": "All regen counts reset to 0"}
+
+
+@app.get("/debug/score-test")
+async def debug_score_test() -> dict:
+    """Test the scoring engine."""
+    from backend.pipeline.metric_engine import MetricResult
+    from backend.pipeline.neural_score import compute_neural_score
+    from backend.models.schemas import ContentType
+    m = MetricResult(name="Hook Score", score=50.0, raw_value=0.0, description="x", brain_region="y", gtm_proxy="z")
+    result = compute_neural_score([m], content_types=[ContentType.product_demo])
+    return result.model_dump()
 
 
 @app.get("/health/deep")

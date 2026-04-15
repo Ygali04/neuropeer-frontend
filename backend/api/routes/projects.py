@@ -89,7 +89,7 @@ async def list_projects(user_email: str) -> list[ProjectSummary]:
                 select(func.count()).where(Job.project_id == p.id)
             )).scalar() or 0
 
-            # Latest score
+            # Most recent report score in project
             latest = (await session.execute(
                 select(Result.neural_score_total)
                 .join(Job, Result.job_id == Job.id)
@@ -180,7 +180,7 @@ async def get_project_detail(project_id: str) -> dict:
         for c in campaigns:
             # Get actual reports in this campaign
             camp_jobs = (await session.execute(
-                select(Job, Result.neural_score_total)
+                select(Job, Result.neural_score_total, Result.ai_report_title)
                 .outerjoin(Result, Result.job_id == Job.id)
                 .where(Job.campaign_id == c.id)
                 .order_by(Job.created_at.desc())
@@ -188,8 +188,9 @@ async def get_project_detail(project_id: str) -> dict:
 
             camp_reports = [{
                 "job_id": str(j.id), "url": j.url, "content_type": j.content_type,
-                "score": score, "created_at": j.created_at.isoformat() if j.created_at else "",
-            } for j, score in camp_jobs]
+                "score": score, "status": j.status, "title": title,
+                "created_at": j.created_at.isoformat() if j.created_at else "",
+            } for j, score, title in camp_jobs]
 
             latest = camp_reports[0]["score"] if camp_reports else None
 
@@ -202,7 +203,7 @@ async def get_project_detail(project_id: str) -> dict:
 
         # Get loose reports (in project but no campaign)
         loose_jobs = (await session.execute(
-            select(Job, Result.neural_score_total)
+            select(Job, Result.neural_score_total, Result.ai_report_title)
             .outerjoin(Result, Result.job_id == Job.id)
             .where(Job.project_id == project.id, Job.campaign_id.is_(None))
             .order_by(Job.created_at.desc())
@@ -210,8 +211,9 @@ async def get_project_detail(project_id: str) -> dict:
 
         loose_reports = [{
             "job_id": str(j.id), "url": j.url, "content_type": j.content_type,
-            "score": score, "created_at": j.created_at.isoformat() if j.created_at else "",
-        } for j, score in loose_jobs]
+            "score": score, "status": j.status, "title": title,
+            "created_at": j.created_at.isoformat() if j.created_at else "",
+        } for j, score, title in loose_jobs]
 
     await engine.dispose()
     return {

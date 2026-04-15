@@ -12,6 +12,7 @@ by zeroing out the unused modality columns in the events DataFrame.
 
 from __future__ import annotations
 
+import logging
 from enum import Enum
 from pathlib import Path
 
@@ -19,6 +20,8 @@ import numpy as np
 import pandas as pd
 
 from backend.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class Modality(str, Enum):
@@ -86,10 +89,13 @@ def run_inference(events_df: pd.DataFrame, modality: Modality = Modality.FULL) -
         predictions = predictions.cpu().numpy()
     predictions = predictions.astype(np.float32)
 
-    # Expected shape: (n_timesteps, 20484)
-    assert predictions.ndim == 2 and predictions.shape[1] == 20484, (
-        f"Unexpected TRIBE v2 output shape: {predictions.shape}. Expected (n_timesteps, 20484)."
+    # Expected shape: (n_timesteps, 20484) cortical, or (n_timesteps, 29286) with subcortical
+    assert predictions.ndim == 2 and predictions.shape[1] >= 20484, (
+        f"Unexpected TRIBE v2 output shape: {predictions.shape}. Expected >= 20484 vertices."
     )
+    if predictions.shape[1] > 20484:
+        logger.info("TRIBE v2 returned %d vertices (20484 cortical + %d subcortical)",
+                     predictions.shape[1], predictions.shape[1] - 20484)
     return predictions
 
 

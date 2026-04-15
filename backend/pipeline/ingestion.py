@@ -87,38 +87,42 @@ class DownloadError(RuntimeError):
 
 def _residential_proxy_url() -> str | None:
     """
-    Build a rotating residential proxy URL with a fresh session ID per call.
+    Build a proxy URL with credentials.
 
-    Oxylabs format:
-      http://username-sessid_RANDOM:password@proxy.oxylabs.io:60000
-    A new random session ID per request prevents accumulation of rate-limit
-    strikes against a single session.
+    Supports two modes:
+    - Oxylabs-style (proxy URL contains "oxylabs" or "superproxy"): adds random
+      session ID to username for IP rotation.
+    - Simple proxy (tinyproxy, squid, etc.): plain username:password auth.
 
     Returns None if proxy is not configured.
     """
     if not settings.proxy_url or not settings.proxy_username:
         return None
 
-    session_id = uuid.uuid4().hex[:12]
-    username = f"{settings.proxy_username}-sessid_{session_id}"
+    username = settings.proxy_username
     password = settings.proxy_password
+
+    # Oxylabs / Bright Data style: rotate session IDs for fresh IPs
+    if any(kw in settings.proxy_url for kw in ("oxylabs", "superproxy", "brightdata")):
+        session_id = uuid.uuid4().hex[:12]
+        username = f"{username}-sessid_{session_id}"
 
     # Insert credentials into the proxy URL if it doesn't already have them
     if "@" not in settings.proxy_url:
-        # http://host:port  →  http://user:pass@host:port
         scheme, rest = settings.proxy_url.split("://", 1)
         return f"{scheme}://{username}:{password}@{rest}"
 
     return settings.proxy_url
 
 
-def _base_ytdlp_args(use_proxy: bool = False) -> list[str]:
+def _base_ytdlp_args(use_proxy: bool = False, impersonate: bool = False) -> list[str]:
     """
     Common yt-dlp flags shared across all platforms.
 
     Args:
         use_proxy: If True and proxy is configured, inject --proxy arg.
-                   Pass True for Instagram/Facebook (blocked on datacenter IPs).
+        impersonate: If True, use curl-cffi browser impersonation to bypass
+                     TLS fingerprinting (requires curl-cffi package).
     """
     args: list[str] = [
         "yt-dlp",
@@ -144,6 +148,11 @@ def _base_ytdlp_args(use_proxy: bool = False) -> list[str]:
         "--force-ipv4",
     ]
 
+    # Browser impersonation via curl-cffi — mimics Chrome TLS fingerprint
+    # to bypass bot detection (YouTube "Sign in to confirm you're not a bot")
+    if impersonate:
+        args += ["--impersonate", "chrome"]
+
     # Residential proxy (required for Instagram/Facebook from cloud IPs)
     if use_proxy:
         proxy = _residential_proxy_url()
@@ -153,7 +162,7 @@ def _base_ytdlp_args(use_proxy: bool = False) -> list[str]:
         else:
             logger.warning(
                 "Proxy requested but PROXY_URL/PROXY_USERNAME not configured. "
-                "Instagram downloads from cloud IPs will likely fail."
+                "Downloads from cloud IPs will likely fail."
             )
 
     # Inject cookies file if configured (use Firefox export — Chrome broken since July 2024)
@@ -178,9 +187,11 @@ def _strategies_for_platform(url: str, output_template: str, platform: str) -> l
     We try the best-quality format first, then progressively simpler fallbacks.
     Each inner list is a complete argv.
     """
-    # Instagram and Facebook require a residential proxy — cloud/datacenter IPs are blocked by Meta
-    needs_proxy = platform in ("instagram", "facebook")
-    base = _base_ytdlp_args(use_proxy=needs_proxy)
+    # Platforms that need residential proxy (datacenter IPs are blocked)
+    needs_proxy = platform in ("instagram", "facebook", "youtube")
+    # YouTube needs browser impersonation (curl-cffi) to bypass TLS bot detection
+    needs_impersonate = platform in ("youtube",)
+    base = _base_ytdlp_args(use_proxy=needs_proxy, impersonate=needs_impersonate)
     out = ["--output", output_template, "--merge-output-format", "mp4"]
 
     def _cmd(*extra: str) -> list[str]:
@@ -211,8 +222,9 @@ def _strategies_for_platform(url: str, output_template: str, platform: str) -> l
         ]
 
     elif platform == "youtube":
+        # All strategies use proxy (residential IP) + browser impersonation
         return [
-            # Strategy 1: best mp4 video + m4a audio (most compatible)
+            # Strategy 1: best mp4 video + m4a audio
             _cmd(
                 "--format",
                 "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
@@ -224,7 +236,7 @@ def _strategies_for_platform(url: str, output_template: str, platform: str) -> l
             ),
             # Strategy 3: single best stream
             _cmd("--format", "best"),
-            # Strategy 4: absolute fallback
+            # Strategy 4: worst quality fallback
             _cmd("--format", "worst"),
         ]
 
@@ -582,12 +594,13 @@ def download_video(url: str, output_dir: Path) -> Path:
                 ]
             )
             if is_auth:
-                # For Instagram, don't raise immediately — let it exhaust strategies
-                # so we can try the GraphQL fallback after all yt-dlp strategies fail
-                if platform != "instagram":
+                # Don't raise immediately — let it exhaust all strategies first
+                # (impersonation / proxy strategies may succeed where earlier ones failed)
+                if platform not in ("instagram", "youtube"):
                     _raise_auth_error(platform, result.stderr)
                 logger.info(
-                    "Instagram auth error on strategy %d, will try remaining strategies + GraphQL fallback",
+                    "%s auth error on strategy %d, will try remaining strategies",
+                    platform,
                     attempt_i,
                 )
 
@@ -607,11 +620,60 @@ def download_video(url: str, output_dir: Path) -> Path:
         if graphql_path:
             return graphql_path
 
+    if platform == "youtube":
+        logger.info("All yt-dlp strategies failed for YouTube, trying pytubefix fallback")
+        pytube_path = _download_youtube_pytubefix(url, output_dir)
+        if pytube_path:
+            return pytube_path
+
     raise DownloadError(
         f"All download strategies failed for platform '{platform}'. "
         f"Last exit code: {last_returncode}. " + _auth_hint(platform),
         stderr=last_stderr,
     )
+
+
+def _download_youtube_pytubefix(url: str, output_dir: Path) -> Path | None:
+    """
+    Fallback YouTube downloader using pytubefix.
+
+    pytubefix uses a different extraction approach than yt-dlp (direct innertube
+    API calls with browser-like OAuth tokens) which may bypass bot detection that
+    blocks yt-dlp on datacenter IPs.
+    """
+    try:
+        from pytubefix import YouTube
+        from pytubefix.cli import on_progress
+
+        logger.info("pytubefix: attempting download for %s", url)
+        yt = YouTube(url, on_progress_callback=on_progress)
+
+        # Try progressive stream first (video+audio in one file)
+        stream = yt.streams.filter(progressive=True, file_extension="mp4").order_by("resolution").desc().first()
+        if not stream:
+            # Fall back to adaptive (highest quality video)
+            stream = yt.streams.filter(file_extension="mp4").order_by("resolution").desc().first()
+        if not stream:
+            stream = yt.streams.first()
+
+        if not stream:
+            logger.warning("pytubefix: no streams found for %s", url)
+            return None
+
+        logger.info("pytubefix: downloading stream %s (%s)", stream.resolution, stream.mime_type)
+        out_path = stream.download(output_path=str(output_dir), filename="video.mp4")
+        result = Path(out_path)
+
+        if result.exists() and result.stat().st_size > 0:
+            logger.info("pytubefix: download succeeded → %s (%d bytes)", result, result.stat().st_size)
+            return result
+
+        logger.warning("pytubefix: file empty or missing after download")
+        return None
+
+    except Exception as exc:
+        logger.warning("pytubefix fallback failed (non-fatal): %s", exc)
+        return None
 
 
 def _auth_hint(platform: str) -> str:

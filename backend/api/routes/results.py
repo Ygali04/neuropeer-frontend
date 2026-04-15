@@ -27,7 +27,26 @@ async def _get_result(job_id: str) -> dict:
     r = await _get_redis()
     raw = await r.get(f"neuropeer:result:{job_id}")
     if raw:
-        return json.loads(raw)
+        cached = json.loads(raw)
+        # Backfill targeted/full scores for legacy cached results
+        ns = cached.get("neural_score", {})
+        # Always recompute targeted/full scores from stored metrics
+        if cached.get("metrics"):
+            try:
+                from backend.pipeline.metric_engine import MetricResult
+                from backend.pipeline.neural_score import compute_neural_score
+                from backend.models.schemas import ContentType
+
+                metric_objs = [MetricResult(**m) for m in cached["metrics"]]
+                ct = ContentType(cached.get("content_type", "custom"))
+                recomputed = compute_neural_score(metric_objs, content_types=[ct])
+                cached["neural_score"] = recomputed.model_dump()
+                # Update Redis cache too
+                await r.set(f"neuropeer:result:{job_id}", json.dumps(cached), ex=60 * 60 * 24 * 7)
+            except Exception as exc:
+                # Surface the error in the response for debugging
+                cached["_scoring_error"] = f"{type(exc).__name__}: {exc}"
+        return cached
 
     # Redis miss — try PostgreSQL (permanent storage)
     result = await _load_from_db(job_id)
@@ -36,14 +55,44 @@ async def _get_result(job_id: str) -> dict:
         await r.set(f"neuropeer:result:{job_id}", json.dumps(result), ex=60 * 60 * 24 * 7)
         return result
 
-    # Check if job is still processing
+    # Check if this job was auto-retried → redirect to new job
+    retry_raw = await r.get(f"neuropeer:retry:{job_id}")
+    if retry_raw:
+        retry_data = json.loads(retry_raw)
+        raise HTTPException(
+            status_code=301,
+            detail={"new_job_id": retry_data["new_job_id"], "reason": retry_data.get("reason", "GPU error")},
+            headers={"Location": f"/api/v1/results/{retry_data['new_job_id']}"},
+        )
+
+    # Check if job is still processing or failed
     status_raw = await r.get(f"neuropeer:job_status:{job_id}")
     if status_raw:
         status_data = json.loads(status_raw)
+        job_status = status_data.get("status", "processing")
+        if job_status == "error":
+            error_msg = status_data.get("error", "Analysis failed")
+            raise HTTPException(status_code=500, detail=error_msg)
         raise HTTPException(
             status_code=202,
-            detail={"status": status_data.get("status", "processing"), "message": "Analysis in progress"},
+            detail={"status": job_status, "message": "Analysis in progress"},
         )
+
+    # Check DB for job status
+    from sqlalchemy import select as _sel
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from backend.models.db import Job
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    async with Session() as session:
+        from uuid import UUID as _UUID
+        job = (await session.execute(_sel(Job).where(Job.id == _UUID(job_id)))).scalar_one_or_none()
+    await engine.dispose()
+    if job:
+        if job.status == "error":
+            raise HTTPException(status_code=500, detail="Analysis failed — GPU provisioning error")
+        raise HTTPException(status_code=202, detail={"status": job.status, "message": "Analysis in progress"})
+
     raise HTTPException(status_code=404, detail="Job not found")
 
 
@@ -91,20 +140,66 @@ async def _load_from_db(job_id: str) -> dict | None:
                 except Exception:
                     pass  # timeseries unavailable — return empty arrays
 
+            # Compute targeted + full scores on-the-fly for legacy reports
+            neural_score_data = {
+                "total": res.neural_score_total,
+                "hook_score": res.hook_score,
+                "sustained_attention": res.sustained_attention,
+                "emotional_resonance": res.emotional_resonance,
+                "memory_encoding": res.memory_encoding,
+                "aesthetic_quality": res.aesthetic_quality,
+                "cognitive_accessibility": res.cognitive_accessibility,
+                "full_total": res.full_neural_score_total,
+                "full_hook_score": res.full_hook_score,
+                "full_sustained_attention": res.full_sustained_attention,
+                "full_emotional_resonance": res.full_emotional_resonance,
+                "full_memory_encoding": res.full_memory_encoding,
+                "full_aesthetic_quality": res.full_aesthetic_quality,
+                "full_cognitive_accessibility": res.full_cognitive_accessibility,
+                "content_types": res.content_types_json,
+                "targeted_dimensions": None,
+                "metric_relevance": res.metric_relevance_json,
+            }
+
+            # Backfill for legacy reports — always recompute to get targeted_dimensions
+            if res.metrics_json:
+                try:
+                    from backend.pipeline.metric_engine import MetricResult
+                    from backend.pipeline.neural_score import compute_neural_score
+                    from backend.models.schemas import ContentType
+
+                    metric_objs = [MetricResult(**m) for m in res.metrics_json]
+                    ct = ContentType(job.content_type) if job.content_type else ContentType.custom
+                    recomputed = compute_neural_score(metric_objs, content_types=[ct])
+                    neural_score_data.update({
+                        "total": recomputed.total,
+                        "hook_score": recomputed.hook_score,
+                        "sustained_attention": recomputed.sustained_attention,
+                        "emotional_resonance": recomputed.emotional_resonance,
+                        "memory_encoding": recomputed.memory_encoding,
+                        "aesthetic_quality": recomputed.aesthetic_quality,
+                        "cognitive_accessibility": recomputed.cognitive_accessibility,
+                        "full_total": recomputed.full_total,
+                        "full_hook_score": recomputed.full_hook_score,
+                        "full_sustained_attention": recomputed.full_sustained_attention,
+                        "full_emotional_resonance": recomputed.full_emotional_resonance,
+                        "full_memory_encoding": recomputed.full_memory_encoding,
+                        "full_aesthetic_quality": recomputed.full_aesthetic_quality,
+                        "full_cognitive_accessibility": recomputed.full_cognitive_accessibility,
+                        "content_types": recomputed.content_types,
+                        "targeted_dimensions": recomputed.targeted_dimensions,
+                        "metric_relevance": recomputed.metric_relevance,
+                    })
+                except Exception:
+                    import traceback
+                    traceback.print_exc()
+
             return {
                 "job_id": str(job.id),
                 "url": job.url,
                 "content_type": job.content_type,
                 "duration_seconds": res.duration_seconds,
-                "neural_score": {
-                    "total": res.neural_score_total,
-                    "hook_score": res.hook_score,
-                    "sustained_attention": res.sustained_attention,
-                    "emotional_resonance": res.emotional_resonance,
-                    "memory_encoding": res.memory_encoding,
-                    "aesthetic_quality": res.aesthetic_quality,
-                    "cognitive_accessibility": res.cognitive_accessibility,
-                },
+                "neural_score": neural_score_data,
                 "metrics": res.metrics_json or [],
                 "attention_curve": attention_curve,
                 "emotional_arousal_curve": arousal_curve,
@@ -135,6 +230,114 @@ async def get_result(job_id: UUID) -> dict:
     data = await _get_result(str(job_id))
     # Re-validate through Pydantic before returning
     return AnalysisResult.model_validate(data).model_dump()
+
+
+@router.post("/results/{job_id}/regenerate-feedback")
+async def regenerate_feedback(job_id: UUID) -> dict:
+    """Regenerate AI feedback for a report. Limited to 3 user-triggered regenerations."""
+    from sqlalchemy import select as _select
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from backend.models.db import Job, Result
+    from backend.pipeline.ai_feedback import generate_ai_feedback
+
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with Session() as session:
+        stmt = _select(Job, Result).join(Result, Result.job_id == Job.id).where(Job.id == job_id)
+        row = (await session.execute(stmt)).first()
+        if not row:
+            await engine.dispose()
+            raise HTTPException(404, "Report not found")
+        job, res = row
+
+        # Check regeneration limit
+        count = res.ai_regen_count or 0
+        if count >= 3:
+            await engine.dispose()
+            raise HTTPException(429, "AI feedback regeneration limit reached (3/3)")
+
+        # Build the result dict for the AI feedback generator
+        result_data = {
+            "neural_score": {
+                "total": res.neural_score_total, "hook_score": res.hook_score,
+                "sustained_attention": res.sustained_attention, "emotional_resonance": res.emotional_resonance,
+                "memory_encoding": res.memory_encoding, "aesthetic_quality": res.aesthetic_quality,
+                "cognitive_accessibility": res.cognitive_accessibility,
+            },
+            "metrics": res.metrics_json or [],
+            "key_moments": res.key_moments_json or [],
+            "content_type": job.content_type,
+            "duration_seconds": res.duration_seconds,
+        }
+
+        # Recompute scores with targeted system before generating feedback
+        try:
+            from backend.pipeline.metric_engine import MetricResult
+            from backend.pipeline.neural_score import compute_neural_score
+            from backend.models.schemas import ContentType
+            metric_objs = [MetricResult(**m) for m in res.metrics_json]
+            ct = ContentType(job.content_type) if job.content_type else ContentType.custom
+            recomputed = compute_neural_score(metric_objs, content_types=[ct])
+            result_data["neural_score"] = recomputed.model_dump()
+        except Exception:
+            pass
+
+        # Generate new feedback
+        feedback = generate_ai_feedback(result_data)
+        if not feedback:
+            await engine.dispose()
+            raise HTTPException(500, "AI feedback generation failed")
+
+        # Update the Result row
+        res.ai_summary = feedback.get("summary") or res.ai_summary
+        res.ai_report_title = feedback.get("report_title") or res.ai_report_title
+        res.ai_action_items = feedback.get("action_items") or res.ai_action_items
+        res.ai_priorities = feedback.get("priorities") or res.ai_priorities
+        res.ai_category_strategies = feedback.get("category_strategies") or res.ai_category_strategies
+        res.ai_metric_tips = feedback.get("metric_tips") or res.ai_metric_tips
+        res.ai_regen_count = count + 1
+        await session.commit()
+
+    await engine.dispose()
+
+    # Invalidate Redis cache so next load picks up new feedback
+    r = await _get_redis()
+    await r.delete(f"neuropeer:result:{job_id}")
+
+    return {
+        "job_id": str(job_id),
+        "regenerations_used": count + 1,
+        "regenerations_remaining": 3 - (count + 1),
+        "summary": feedback.get("summary", ""),
+        "report_title": feedback.get("report_title", ""),
+    }
+
+
+@router.delete("/results/{job_id}")
+async def delete_report(job_id: UUID) -> dict:
+    """Delete a report (Job + Result rows) and clear its cache."""
+    from sqlalchemy import select as _sel, delete as _del
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from backend.models.db import Job, Result
+
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    async with Session() as session:
+        job = (await session.execute(_sel(Job).where(Job.id == job_id))).scalar_one_or_none()
+        if not job:
+            await engine.dispose()
+            raise HTTPException(404, "Report not found")
+        await session.execute(_del(Result).where(Result.job_id == job_id))
+        await session.execute(_del(Job).where(Job.id == job_id))
+        await session.commit()
+    await engine.dispose()
+
+    r = await _get_redis()
+    await r.delete(f"neuropeer:result:{job_id}")
+    await r.delete(f"neuropeer:job_status:{job_id}")
+
+    return {"deleted": str(job_id)}
 
 
 @router.put("/results/{job_id}/title")

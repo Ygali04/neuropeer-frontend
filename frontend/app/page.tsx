@@ -3,14 +3,13 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Brain, Zap, BarChart3, GitCompare, Activity, Sparkles, Clock, ExternalLink, Trash2, ArrowRight } from "lucide-react";
+import { Brain, Zap, BarChart3, GitCompare, Activity, Sparkles, Clock, ExternalLink, Trash2, ArrowRight, Loader2 } from "lucide-react";
 import { UrlInputCard } from "@/components/UrlInputCard";
-import { UserMenu } from "@/components/UserMenu";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { Navbar } from "@/components/Navbar";
 import { Badge } from "@/components/ui/badge";
 import { submitAnalysis } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { getRunHistory, clearRunHistory, type RunHistoryEntry } from "@/lib/run-history";
+import { getRunHistory, clearRunHistory, addRunToHistory, type RunHistoryEntry } from "@/lib/run-history";
 import type { ContentType } from "@/lib/types";
 
 const FEATURES = [
@@ -56,10 +55,21 @@ export default function HomePage() {
     setHistory(getRunHistory(session?.user?.email ?? undefined));
   }, [session]);
 
-  const handleSubmit = async (url: string, contentType: ContentType) => {
+  const handleSubmit = async (url: string, contentType: ContentType, contentTypes?: ContentType[]) => {
     setLoading(true);
     try {
-      const { job_id } = await submitAnalysis(url, contentType);
+      const email = session?.user?.email ?? undefined;
+      const { job_id } = await submitAnalysis(url, contentType, undefined, email, contentTypes);
+      // Save to history immediately so it shows as pending
+      addRunToHistory({
+        jobId: job_id,
+        url,
+        contentType,
+        neuralScore: 0,
+        timestamp: Date.now(),
+        durationSeconds: 0,
+        status: "pending",
+      }, email);
       router.push(`/analyze/${job_id}`);
     } finally {
       setLoading(false);
@@ -75,29 +85,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* ── Nav ─────────────────────────────────────────────────────────────── */}
-      <header className="nav-backdrop border-b border-white/[0.06] px-4 sm:px-6 py-3 sm:py-4 backdrop-blur-xl bg-[#07060b]/80">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
-              <Brain className="w-4 h-4 text-white" />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="font-[family-name:var(--font-display)] text-white font-semibold text-lg tracking-tight">NeuroPeer</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-4">
-            <Link href="/methodology" className="hidden sm:block text-sm text-white/40 hover:text-white/70 transition-colors">Methodology</Link>
-            <Link href="/compare" className="hidden sm:block text-sm text-white/40 hover:text-white/70 transition-colors">A/B Compare</Link>
-            <Badge variant="default" className="hidden sm:inline-flex">
-              <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
-              TRIBE v2
-            </Badge>
-            <ThemeToggle />
-            <UserMenu />
-          </div>
-        </div>
-      </header>
+      <Navbar />
 
       {/* ── Hero ────────────────────────────────────────────────────────────── */}
       <main className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 py-12 sm:py-20">
@@ -242,23 +230,31 @@ export default function HomePage() {
                   href={`/analyze/${run.jobId}`}
                   className="glass-card glass-card-hover !p-4 !rounded-xl flex items-center gap-4 group"
                 >
-                  {/* Score circle */}
+                  {/* Score circle or pending spinner */}
                   <div className="relative w-10 h-10 flex-shrink-0">
-                    <svg width="40" height="40" style={{ transform: "rotate(-90deg)" }}>
-                      <circle cx="20" cy="20" r="16" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="3" />
-                      <circle
-                        cx="20" cy="20" r="16"
-                        fill="none"
-                        stroke={scoreColor(run.neuralScore)}
-                        strokeWidth="3"
-                        strokeDasharray={2 * Math.PI * 16}
-                        strokeDashoffset={2 * Math.PI * 16 * (1 - run.neuralScore / 100)}
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                    <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold tabular-nums" style={{ color: scoreColor(run.neuralScore) }}>
-                      {run.neuralScore.toFixed(1)}
-                    </span>
+                    {run.status && run.status !== "complete" ? (
+                      <div className="w-10 h-10 flex items-center justify-center">
+                        <Loader2 className="w-5 h-5 text-brand-400 animate-spin" />
+                      </div>
+                    ) : (
+                      <>
+                        <svg width="40" height="40" style={{ transform: "rotate(-90deg)" }}>
+                          <circle cx="20" cy="20" r="16" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="3" />
+                          <circle
+                            cx="20" cy="20" r="16"
+                            fill="none"
+                            stroke={scoreColor(run.neuralScore)}
+                            strokeWidth="3"
+                            strokeDasharray={2 * Math.PI * 16}
+                            strokeDashoffset={2 * Math.PI * 16 * (1 - run.neuralScore / 100)}
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold tabular-nums" style={{ color: scoreColor(run.neuralScore) }}>
+                          {run.neuralScore.toFixed(1)}
+                        </span>
+                      </>
+                    )}
                   </div>
 
                   {/* Info */}
@@ -266,7 +262,11 @@ export default function HomePage() {
                     <p className="text-sm text-white/70 truncate group-hover:text-white/90 transition-colors">{run.url}</p>
                     <div className="flex items-center gap-3 mt-1">
                       <span className="text-[10px] text-white/25">{run.contentType.replace("_", " ")}</span>
-                      <span className="text-[10px] text-white/25">{run.durationSeconds}s</span>
+                      {run.status && run.status !== "complete" ? (
+                        <span className="text-[10px] text-brand-400/70">Analyzing...</span>
+                      ) : (
+                        <span className="text-[10px] text-white/25">{run.durationSeconds}s</span>
+                      )}
                       <span className="text-[10px] text-white/20">{timeAgo(run.timestamp)}</span>
                     </div>
                   </div>

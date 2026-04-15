@@ -4,17 +4,16 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Brain, Folder, FolderOpen, FileText, Plus, Trash2,
+  Brain, Folder, FolderOpen, FileText, Plus, Trash2, Pencil,
   ChevronRight, ChevronDown, MoreHorizontal, FolderInput,
   ExternalLink, X, Check, Loader2, BarChart3,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import {
   getProjects, getProjectDetail, createProject, deleteProject,
-  createCampaignV2, moveReport, getAllReports, getProfile, getCampaigns,
+  createCampaignV2, moveReport, renameReport, deleteReport, getAllReports, getProfile, getCampaigns,
 } from "@/lib/api";
-import { UserMenu } from "@/components/UserMenu";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { Navbar } from "@/components/Navbar";
 import { MarketerProfileCard } from "@/components/MarketerProfileCard";
 import { ScoreTimeline } from "@/components/ScoreTimeline";
 import { Button } from "@/components/ui/button";
@@ -26,7 +25,9 @@ import { cn } from "@/lib/utils";
 interface LooseReport {
   job_id: string; url: string; content_type: string;
   score: number | null; created_at: string;
-  campaign_name?: string | null; content_group_id?: string;
+  status?: string;
+  campaign_name?: string | null; project_name?: string | null;
+  title?: string | null; content_group_id?: string;
   project_id?: string | null; campaign_id?: string | null;
 }
 
@@ -77,6 +78,7 @@ export default function DashboardPage() {
   const [newName, setNewName] = useState("");
   const [draggedReport, setDraggedReport] = useState<string | null>(null);
   const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
+  const [renamingReport, setRenamingReport] = useState<{ jobId: string; value: string } | null>(null);
 
   // ── Data loading ───────────────────────────────────────────────────────
   const refresh = useCallback(async () => {
@@ -109,7 +111,7 @@ export default function DashboardPage() {
           assignedJobIds.add(r.job_id);
         }
         for (const c of d.campaigns) {
-          for (const r of c.reports) {
+          for (const r of (c.reports ?? [])) {
             assignedJobIds.add(r.job_id);
           }
         }
@@ -169,6 +171,72 @@ export default function DashboardPage() {
     refresh();
   };
 
+  // ── Rename report (optimistic) ─────────────────────────────────────────
+  const handleRenameReport = async (jobId: string, newTitle: string) => {
+    if (!newTitle.trim()) { setRenamingReport(null); return; }
+    const title = newTitle.trim();
+    setRenamingReport(null);
+
+    // Optimistic: update in project details
+    setProjectDetails(prev => {
+      const next = { ...prev };
+      for (const [pid, detail] of Object.entries(next)) {
+        const newLoose = detail.loose_reports.map(r =>
+          r.job_id === jobId ? { ...r, title } : r
+        );
+        const newCamps = detail.campaigns.map(c => ({
+          ...c,
+          reports: (c.reports ?? []).map(r =>
+            r.job_id === jobId ? { ...r, title } : r
+          ),
+        }));
+        next[pid] = { ...detail, loose_reports: newLoose, campaigns: newCamps };
+      }
+      return next;
+    });
+    // Optimistic: update in loose reports
+    setLooseReports(prev => prev.map(r =>
+      r.job_id === jobId ? { ...r, title } : r
+    ));
+
+    // Persist
+    try {
+      await renameReport(jobId, title);
+    } catch (e) {
+      console.error("Rename failed:", e);
+      refresh();
+    }
+  };
+
+  // ── Delete report (optimistic) ─────────────────────────────────────────
+  const handleDeleteReport = async (jobId: string) => {
+    // Optimistic: remove from everywhere
+    setLooseReports(prev => prev.filter(r => r.job_id !== jobId));
+    setProjectDetails(prev => {
+      const next = { ...prev };
+      for (const [pid, detail] of Object.entries(next)) {
+        next[pid] = {
+          ...detail,
+          loose_reports: detail.loose_reports.filter(r => r.job_id !== jobId),
+          campaigns: detail.campaigns.map(c => {
+            const reps = (c.reports ?? []).filter(r => r.job_id !== jobId);
+            return reps.length !== (c.reports ?? []).length
+              ? { ...c, reports: reps, report_count: reps.length }
+              : c;
+          }),
+        };
+      }
+      return next;
+    });
+
+    try {
+      await deleteReport(jobId);
+    } catch (e) {
+      console.error("Delete failed:", e);
+      refresh();
+    }
+  };
+
   // ── Optimistic drag-and-drop ──────────────────────────────────────────
   const handleMoveReport = async (jobId: string, targetProjectId?: string, targetCampaignId?: string) => {
     // Find the report from all sources
@@ -181,7 +249,7 @@ export default function DashboardPage() {
         const fromProjectLoose = d.loose_reports.find(r => r.job_id === jobId);
         if (fromProjectLoose) return { ...fromProjectLoose, content_type: fromProjectLoose.content_type };
         for (const c of d.campaigns) {
-          const fromCampaign = c.reports.find(r => r.job_id === jobId);
+          const fromCampaign = (c.reports ?? []).find(r => r.job_id === jobId);
           if (fromCampaign) return { ...fromCampaign, content_type: fromCampaign.content_type };
         }
       }
@@ -194,27 +262,44 @@ export default function DashboardPage() {
     // Snapshot for rollback
     const prevLooseReports = looseReports;
     const prevProjectDetails = projectDetails;
+    const prevProjects = projects;
 
     // ── Optimistic update ──
-    // 1. Remove from loose reports
-    setLooseReports(prev => prev.filter(r => r.job_id !== jobId));
+    const reportEntry = { job_id: report.job_id, url: report.url, content_type: report.content_type, score: report.score, title: report.title, created_at: report.created_at };
+    const movingToUncategorized = !targetProjectId && !targetCampaignId;
+
+    // 1. Remove from loose reports (will re-add if moving to uncategorized)
+    setLooseReports(prev => {
+      const filtered = prev.filter(r => r.job_id !== jobId);
+      return movingToUncategorized ? [report, ...filtered] : filtered;
+    });
+
+    // Helper: most recent report score (sorted desc by created_at)
+    const latestScore = (reports: { score: number | null; created_at: string }[]): number | null => {
+      const withScores = reports.filter((r): r is typeof r & { score: number } => r.score != null);
+      if (withScores.length === 0) return null;
+      withScores.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      return withScores[0].score;
+    };
 
     // 2. Remove from all project details (loose + campaigns) and add to target
     setProjectDetails(prev => {
       const next = { ...prev };
 
-      // Remove from everywhere
+      // Remove from everywhere and recalculate scores
       for (const [pid, detail] of Object.entries(next)) {
         let modified = false;
         const newLoose = detail.loose_reports.filter(r => r.job_id !== jobId);
         if (newLoose.length !== detail.loose_reports.length) modified = true;
 
         const newCampaigns = detail.campaigns.map(c => {
-          const newReports = c.reports.filter(r => r.job_id !== jobId);
-          if (newReports.length !== c.reports.length) modified = true;
-          return newReports.length !== c.reports.length
-            ? { ...c, reports: newReports, report_count: newReports.length }
-            : c;
+          const reps = c.reports ?? [];
+          const newReports = reps.filter(r => r.job_id !== jobId);
+          if (newReports.length !== reps.length) {
+            modified = true;
+            return { ...c, reports: newReports, report_count: newReports.length, latest_score: latestScore(newReports) };
+          }
+          return c;
         });
 
         if (modified) {
@@ -222,21 +307,18 @@ export default function DashboardPage() {
         }
       }
 
-      // Add to target
+      // Add to target project/campaign
       if (targetProjectId && next[targetProjectId]) {
         const detail = next[targetProjectId];
-        const reportEntry = { job_id: report.job_id, url: report.url, content_type: report.content_type, score: report.score, created_at: report.created_at };
 
         if (targetCampaignId) {
-          // Add to specific campaign
-          const newCampaigns = detail.campaigns.map(c =>
-            c.id === targetCampaignId
-              ? { ...c, reports: [reportEntry, ...c.reports], report_count: c.report_count + 1 }
-              : c
-          );
+          const newCampaigns = detail.campaigns.map(c => {
+            if (c.id !== targetCampaignId) return c;
+            const newReports = [reportEntry, ...(c.reports ?? [])];
+            return { ...c, reports: newReports, report_count: newReports.length, latest_score: latestScore(newReports) };
+          });
           next[targetProjectId] = { ...detail, campaigns: newCampaigns };
         } else {
-          // Add as loose report in project
           next[targetProjectId] = { ...detail, loose_reports: [reportEntry, ...detail.loose_reports] };
         }
       }
@@ -244,14 +326,40 @@ export default function DashboardPage() {
       return next;
     });
 
-    // 3. Persist to server
+    // 3. Update project summary scores to match
+    setProjects(prev => prev.map(p => {
+      const detail = projectDetails[p.id];
+      if (!detail) return p;
+
+      // Recompute from the detail we just modified (use latest projectDetails snapshot)
+      // We need to account for the move we just did
+      const isSource = detail.campaigns.some(c => (c.reports ?? []).some(r => r.job_id === jobId)) ||
+                       detail.loose_reports.some(r => r.job_id === jobId);
+      const isTarget = p.id === targetProjectId;
+
+      if (!isSource && !isTarget) return p;
+
+      // Collect all remaining reports for this project after the move
+      let allReports = [
+        ...detail.loose_reports.filter(r => r.job_id !== jobId),
+        ...detail.campaigns.flatMap(c => (c.reports ?? []).filter(r => r.job_id !== jobId)),
+      ];
+      // Add the moved report if this is the target
+      if (isTarget) allReports = [reportEntry, ...allReports];
+
+      const newScore = latestScore(allReports);
+      const newCount = allReports.length;
+      return { ...p, latest_score: newScore, report_count: newCount };
+    }));
+
+    // 4. Persist to server (null values sent explicitly)
     try {
-      await moveReport(jobId, targetProjectId, targetCampaignId);
+      await moveReport(jobId, targetProjectId ?? null, targetCampaignId ?? null);
     } catch (e) {
       console.error("Move failed, reverting:", e);
-      // Rollback
       setLooseReports(prevLooseReports);
       setProjectDetails(prevProjectDetails);
+      setProjects(prevProjects);
     }
   };
 
@@ -283,21 +391,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen">
       {/* Nav */}
-      <header className="nav-backdrop border-b border-white/[0.06] px-4 sm:px-6 py-3 sticky top-0 z-10 backdrop-blur-xl bg-[#07060b]/80">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 group">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
-              <Brain className="w-3.5 h-3.5 text-white" />
-            </div>
-            <span className="font-[family-name:var(--font-display)] text-white font-semibold text-sm sm:text-lg">NeuroPeer</span>
-          </Link>
-          <div className="flex items-center gap-2 sm:gap-4">
-            <Link href="/" className="text-sm text-white/40 hover:text-white/70 transition-colors">New Analysis</Link>
-            <ThemeToggle />
-            <UserMenu />
-          </div>
-        </div>
-      </header>
+      <Navbar breadcrumb={{ label: "Dashboard", href: "/dashboard" }} />
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
         {/* Profile header */}
@@ -355,7 +449,7 @@ export default function DashboardPage() {
         {activeTab === "stats" && profile && (
           <div className="space-y-6 animate-fade-up">
             <MarketerProfileCard profile={profile} campaigns={campaigns} />
-            <ScoreTimeline campaigns={campaigns} overallScore={profile.overall_score} reports={allReports.map(r => ({ job_id: r.job_id, url: r.url, content_type: r.content_type, score: r.score ?? 0, campaign_name: r.campaign_name ?? null, content_group_id: r.content_group_id ?? "", created_at: r.created_at }))} />
+            <ScoreTimeline campaigns={campaigns} overallScore={profile.overall_score} reports={allReports.filter(r => r.status === "complete" || !r.status).map(r => ({ job_id: r.job_id, url: r.url, content_type: r.content_type, score: r.score ?? 0, campaign_name: r.campaign_name ?? null, project_name: r.project_name ?? null, content_group_id: r.content_group_id ?? "", created_at: r.created_at }))} />
           </div>
         )}
 
@@ -467,25 +561,58 @@ export default function DashboardPage() {
                               {/* Campaign reports */}
                               {campExpanded && (
                                 <div className="ml-6 border-l border-white/[0.03] pl-3 space-y-0.5 mt-0.5">
-                                  {campaign.reports.length > 0 ? (
-                                    campaign.reports.map(report => (
-                                      <Link
-                                        key={report.job_id}
-                                        href={`/analyze/${report.job_id}`}
-                                        className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/[0.02] transition-all group"
-                                        draggable
-                                        onDragStart={e => { e.stopPropagation(); setDraggedReport(report.job_id); }}
-                                        onDragEnd={() => { setDraggedReport(null); setDragOverTarget(null); }}
-                                      >
-                                        <FileText className="w-3.5 h-3.5 text-white/20" />
-                                        <span className="text-sm text-white/50 truncate flex-1">{shortUrl(report.url)}</span>
-                                        {report.score != null && (
-                                          <span className={cn("text-[11px] font-semibold tabular-nums", scoreColor(report.score))}>
-                                            {report.score.toFixed(1)}
-                                          </span>
-                                        )}
-                                        <ExternalLink className="w-3 h-3 text-white/10 group-hover:text-white/30" />
-                                      </Link>
+                                  {(campaign.reports ?? []).length > 0 ? (
+                                    (campaign.reports ?? []).map(report => (
+                                      renamingReport?.jobId === report.job_id ? (
+                                        <div key={report.job_id} className="flex items-center gap-2 px-3 py-2">
+                                          <FileText className="w-3.5 h-3.5 text-white/20" />
+                                          <input
+                                            autoFocus
+                                            value={renamingReport.value}
+                                            onChange={e => setRenamingReport({ ...renamingReport, value: e.target.value })}
+                                            onKeyDown={e => { if (e.key === "Enter") handleRenameReport(report.job_id, renamingReport.value); if (e.key === "Escape") setRenamingReport(null); }}
+                                            onBlur={() => handleRenameReport(report.job_id, renamingReport.value)}
+                                            className="flex-1 bg-transparent border-b border-white/10 text-sm text-white focus:outline-none focus:border-brand-400 py-0.5"
+                                          />
+                                          <button onClick={() => handleRenameReport(report.job_id, renamingReport.value)} className="text-brand-400"><Check className="w-3 h-3" /></button>
+                                          <button onClick={() => setRenamingReport(null)} className="text-white/30"><X className="w-3 h-3" /></button>
+                                        </div>
+                                      ) : (
+                                        <Link
+                                          key={report.job_id}
+                                          href={`/analyze/${report.job_id}`}
+                                          className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/[0.02] transition-all group"
+                                          draggable
+                                          onDragStart={e => { e.stopPropagation(); setDraggedReport(report.job_id); }}
+                                          onDragEnd={() => { setDraggedReport(null); setDragOverTarget(null); }}
+                                        >
+                                          <FileText className="w-3.5 h-3.5 text-white/20" />
+                                          <span className="text-sm text-white/50 truncate flex-1">{report.title || shortUrl(report.url)}</span>
+                                          {report.status && report.status !== "complete" ? (
+                                            <span className="flex items-center gap-1 text-[10px] text-brand-400/70">
+                                              <Loader2 className="w-3 h-3 animate-spin" />
+                                              Analyzing...
+                                            </span>
+                                          ) : report.score != null ? (
+                                            <span className={cn("text-[11px] font-semibold tabular-nums", scoreColor(report.score))}>
+                                              {report.score.toFixed(1)}
+                                            </span>
+                                          ) : null}
+                                          <button
+                                            onClick={e => { e.preventDefault(); e.stopPropagation(); setRenamingReport({ jobId: report.job_id, value: report.title || "" }); }}
+                                            className="p-0.5 opacity-0 group-hover:opacity-100 text-white/20 hover:text-white/50 transition-all"
+                                          >
+                                            <Pencil className="w-3 h-3" />
+                                          </button>
+                                          <button
+                                            onClick={e => { e.preventDefault(); e.stopPropagation(); handleDeleteReport(report.job_id); }}
+                                            className="p-0.5 opacity-0 group-hover:opacity-100 text-white/20 hover:text-red-400/70 transition-all"
+                                          >
+                                            <Trash2 className="w-3 h-3" />
+                                          </button>
+                                          <ExternalLink className="w-3 h-3 text-white/10 group-hover:text-white/30" />
+                                        </Link>
+                                      )
                                     ))
                                   ) : (
                                     <p className="text-[10px] text-white/20 px-3 py-1">No reports yet</p>
@@ -498,23 +625,56 @@ export default function DashboardPage() {
 
                         {/* Loose reports in project */}
                         {detail.loose_reports.map(report => (
-                          <Link
-                            key={report.job_id}
-                            href={`/analyze/${report.job_id}`}
-                            className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/[0.02] transition-all group"
-                            draggable
-                            onDragStart={() => setDraggedReport(report.job_id)}
-                            onDragEnd={() => { setDraggedReport(null); setDragOverTarget(null); }}
-                          >
-                            <FileText className="w-3.5 h-3.5 text-white/20" />
-                            <span className="text-sm text-white/50 truncate flex-1">{shortUrl(report.url)}</span>
-                            {report.score != null && (
-                              <span className={cn("text-[11px] font-semibold tabular-nums", scoreColor(report.score))}>
-                                {report.score.toFixed(1)}
-                              </span>
-                            )}
-                            <ExternalLink className="w-3 h-3 text-white/10 group-hover:text-white/30" />
-                          </Link>
+                          renamingReport?.jobId === report.job_id ? (
+                            <div key={report.job_id} className="flex items-center gap-2 px-3 py-2">
+                              <FileText className="w-3.5 h-3.5 text-white/20" />
+                              <input
+                                autoFocus
+                                value={renamingReport.value}
+                                onChange={e => setRenamingReport({ ...renamingReport, value: e.target.value })}
+                                onKeyDown={e => { if (e.key === "Enter") handleRenameReport(report.job_id, renamingReport.value); if (e.key === "Escape") setRenamingReport(null); }}
+                                onBlur={() => handleRenameReport(report.job_id, renamingReport.value)}
+                                className="flex-1 bg-transparent border-b border-white/10 text-sm text-white focus:outline-none focus:border-brand-400 py-0.5"
+                              />
+                              <button onClick={() => handleRenameReport(report.job_id, renamingReport.value)} className="text-brand-400"><Check className="w-3 h-3" /></button>
+                              <button onClick={() => setRenamingReport(null)} className="text-white/30"><X className="w-3 h-3" /></button>
+                            </div>
+                          ) : (
+                            <Link
+                              key={report.job_id}
+                              href={`/analyze/${report.job_id}`}
+                              className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/[0.02] transition-all group"
+                              draggable
+                              onDragStart={() => setDraggedReport(report.job_id)}
+                              onDragEnd={() => { setDraggedReport(null); setDragOverTarget(null); }}
+                            >
+                              <FileText className="w-3.5 h-3.5 text-white/20" />
+                              <span className="text-sm text-white/50 truncate flex-1">{report.title || shortUrl(report.url)}</span>
+                              {report.status && report.status !== "complete" ? (
+                                <span className="flex items-center gap-1 text-[10px] text-brand-400/70">
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  Analyzing...
+                                </span>
+                              ) : report.score != null ? (
+                                <span className={cn("text-[11px] font-semibold tabular-nums", scoreColor(report.score))}>
+                                  {report.score.toFixed(1)}
+                                </span>
+                              ) : null}
+                              <button
+                                onClick={e => { e.preventDefault(); e.stopPropagation(); setRenamingReport({ jobId: report.job_id, value: report.title || "" }); }}
+                                className="p-0.5 opacity-0 group-hover:opacity-100 text-white/20 hover:text-white/50 transition-all"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={e => { e.preventDefault(); e.stopPropagation(); handleDeleteReport(report.job_id); }}
+                                className="p-0.5 opacity-0 group-hover:opacity-100 text-white/20 hover:text-red-400/70 transition-all"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                              <ExternalLink className="w-3 h-3 text-white/10 group-hover:text-white/30" />
+                            </Link>
+                          )
                         ))}
 
                         {/* Add campaign button */}
@@ -546,39 +706,85 @@ export default function DashboardPage() {
                 );
               })}
 
-              {/* Loose reports (not in any project or campaign) */}
-              {looseReports.length > 0 && (
-                <div className="mt-6">
-                  <div className="flex items-center gap-2 px-3 py-2 mb-1">
-                    <FileText className="w-4 h-4 text-white/20" />
-                    <span className="text-xs text-white/30 uppercase tracking-wider font-medium">Uncategorized Reports</span>
-                    <span className="text-[10px] text-white/15">{looseReports.length}</span>
-                  </div>
+              {/* Uncategorized drop zone + reports */}
+              <div
+                className={cn(
+                  "mt-6 rounded-lg transition-all",
+                  dragOverTarget === "uncategorized" && "ring-1 ring-white/20 bg-white/[0.02]"
+                )}
+                onDragOver={e => { e.preventDefault(); setDragOverTarget("uncategorized"); }}
+                onDragLeave={() => setDragOverTarget(null)}
+                onDrop={e => {
+                  e.preventDefault();
+                  if (draggedReport) handleMoveReport(draggedReport);
+                  setDragOverTarget(null);
+                  setDraggedReport(null);
+                }}
+              >
+                <div className="flex items-center gap-2 px-3 py-2 mb-1">
+                  <FileText className="w-4 h-4 text-white/20" />
+                  <span className="text-xs text-white/30 uppercase tracking-wider font-medium">Uncategorized Reports</span>
+                  <span className="text-[10px] text-white/15">{looseReports.length}</span>
+                </div>
+                {looseReports.length > 0 && (
                   <div className="space-y-0.5">
                     {looseReports.map(report => (
-                      <Link
-                        key={report.job_id}
-                        href={`/analyze/${report.job_id}`}
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/[0.02] transition-all group"
-                        draggable
-                        onDragStart={() => setDraggedReport(report.job_id)}
-                        onDragEnd={() => { setDraggedReport(null); setDragOverTarget(null); }}
-                      >
-                        <FileText className="w-3.5 h-3.5 text-white/15" />
-                        <span className="text-sm text-white/40 truncate flex-1">{shortUrl(report.url)}</span>
-                        <span className="text-[10px] text-white/15">{report.content_type?.replace("_", " ")}</span>
-                        {report.score != null && (
-                          <span className={cn("text-[11px] font-semibold tabular-nums", scoreColor(report.score))}>
-                            {(report.score).toFixed(1)}
-                          </span>
-                        )}
-                        <span className="text-[10px] text-white/10">{timeAgo(report.created_at)}</span>
-                        <ExternalLink className="w-3 h-3 text-white/10 group-hover:text-white/30" />
-                      </Link>
+                      renamingReport?.jobId === report.job_id ? (
+                        <div key={report.job_id} className="flex items-center gap-2 px-3 py-2">
+                          <FileText className="w-3.5 h-3.5 text-white/15" />
+                          <input
+                            autoFocus
+                            value={renamingReport.value}
+                            onChange={e => setRenamingReport({ ...renamingReport, value: e.target.value })}
+                            onKeyDown={e => { if (e.key === "Enter") handleRenameReport(report.job_id, renamingReport.value); if (e.key === "Escape") setRenamingReport(null); }}
+                            onBlur={() => handleRenameReport(report.job_id, renamingReport.value)}
+                            className="flex-1 bg-transparent border-b border-white/10 text-sm text-white focus:outline-none focus:border-brand-400 py-0.5"
+                          />
+                          <button onClick={() => handleRenameReport(report.job_id, renamingReport.value)} className="text-brand-400"><Check className="w-3 h-3" /></button>
+                          <button onClick={() => setRenamingReport(null)} className="text-white/30"><X className="w-3 h-3" /></button>
+                        </div>
+                      ) : (
+                        <Link
+                          key={report.job_id}
+                          href={`/analyze/${report.job_id}`}
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/[0.02] transition-all group"
+                          draggable
+                          onDragStart={() => setDraggedReport(report.job_id)}
+                          onDragEnd={() => { setDraggedReport(null); setDragOverTarget(null); }}
+                        >
+                          <FileText className="w-3.5 h-3.5 text-white/15" />
+                          <span className="text-sm text-white/40 truncate flex-1">{report.title || shortUrl(report.url)}</span>
+                          <span className="text-[10px] text-white/15">{report.content_type?.replace("_", " ")}</span>
+                          {report.status && report.status !== "complete" ? (
+                            <span className="flex items-center gap-1 text-[10px] text-brand-400/70">
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              Analyzing...
+                            </span>
+                          ) : report.score != null ? (
+                            <span className={cn("text-[11px] font-semibold tabular-nums", scoreColor(report.score))}>
+                              {(report.score).toFixed(1)}
+                            </span>
+                          ) : null}
+                          <span className="text-[10px] text-white/10">{timeAgo(report.created_at)}</span>
+                          <button
+                            onClick={e => { e.preventDefault(); e.stopPropagation(); setRenamingReport({ jobId: report.job_id, value: report.title || "" }); }}
+                            className="p-0.5 opacity-0 group-hover:opacity-100 text-white/20 hover:text-white/50 transition-all"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={e => { e.preventDefault(); e.stopPropagation(); handleDeleteReport(report.job_id); }}
+                            className="p-0.5 opacity-0 group-hover:opacity-100 text-white/20 hover:text-red-400/70 transition-all"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                          <ExternalLink className="w-3 h-3 text-white/10 group-hover:text-white/30" />
+                        </Link>
+                      )
                     ))}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Empty state */}
               {projects.length === 0 && looseReports.length === 0 && (

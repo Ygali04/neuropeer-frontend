@@ -36,7 +36,9 @@ nilearn==0.10.4
 nibabel==5.2.1
 
 # Audio / Video
-yt-dlp==2024.8.6
+yt-dlp>=2025.1.15
+curl-cffi>=0.7.0
+pytubefix>=8.0.0
 ffmpeg-python==0.2.0
 
 # Transcription

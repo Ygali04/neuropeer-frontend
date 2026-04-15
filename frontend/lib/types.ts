@@ -4,7 +4,15 @@ export type ContentType =
   | "youtube_preroll"
   | "conference_talk"
   | "podcast_audio"
+  | "music_video"
+  | "brand_commercial"
+  | "tutorial_screencast"
+  | "testimonial"
+  | "educational_lecture"
+  | "live_stream_clip"
   | "custom";
+
+export type ScoringMode = "targeted" | "full";
 
 export type JobStatus =
   | "queued"
@@ -47,6 +55,7 @@ export interface ModalityContribution {
 }
 
 export interface NeuralScoreBreakdown {
+  // Targeted scores (content-type-aware, default)
   total: number;
   hook_score: number;
   sustained_attention: number;
@@ -54,6 +63,18 @@ export interface NeuralScoreBreakdown {
   memory_encoding: number;
   aesthetic_quality: number;
   cognitive_accessibility: number;
+  // Full scores (all metrics equally weighted)
+  full_total?: number | null;
+  full_hook_score?: number | null;
+  full_sustained_attention?: number | null;
+  full_emotional_resonance?: number | null;
+  full_memory_encoding?: number | null;
+  full_aesthetic_quality?: number | null;
+  full_cognitive_accessibility?: number | null;
+  // Metadata
+  content_types?: string[] | null;
+  targeted_dimensions?: string[] | null;
+  metric_relevance?: Record<string, number> | null;
 }
 
 export interface AnalysisResult {
@@ -131,6 +152,8 @@ export interface ProjectDetailReport {
   url: string;
   content_type: string;
   score: number | null;
+  status?: string;
+  title?: string | null;
   created_at: string;
 }
 

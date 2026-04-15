@@ -9,6 +9,7 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ ./backend/
+# v2: targeted dimension scoring + subcortical
 
 RUN mkdir -p /tmp/neuropeer
 

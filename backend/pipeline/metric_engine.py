@@ -79,7 +79,7 @@ def novelty_spike(predictions_full: np.ndarray) -> MetricResult:
     raw = float(combined.max())
     return MetricResult(
         name="Novelty Spike",
-        score=_norm(raw, 0.0, 0.3),
+        score=_norm(raw, -0.05, 0.3),
         raw_value=raw,
         description="Peak hippocampal novelty + TPJ reorienting response — measures strongest pattern interrupt.",
         brain_region="Medial temporal lobe + Temporoparietal junction",
@@ -96,7 +96,7 @@ def curiosity_gap_index(predictions_full: np.ndarray) -> MetricResult:
     raw = float(acc.mean())
     return MetricResult(
         name="Curiosity Gap Index",
-        score=_norm(raw, 0.0, 0.15),
+        score=_norm(raw, -0.05, 0.15),
         raw_value=raw,
         description="ACC conflict monitoring intensity — measures how strongly the content creates an unresolved information gap.",
         brain_region="Medial frontal cortex + Dorsal ACC",
@@ -233,7 +233,7 @@ def reward_prediction(predictions_full: np.ndarray) -> MetricResult:
     raw = float(nacc)
     return MetricResult(
         name="Reward Prediction",
-        score=_norm(raw, 0.0, 0.1),
+        score=_norm(raw, -0.05, 0.1),
         raw_value=raw,
         description="Ventral striatum / NAcc reward circuit activation — neural correlate of purchase intent and CTA click likelihood.",
         brain_region="Ventral striatum (subcortical reward)",
@@ -248,7 +248,7 @@ def social_cognition(predictions_full: np.ndarray) -> MetricResult:
     raw = float(((mpfc + tpj) / 2).mean())
     return MetricResult(
         name="Social Cognition",
-        score=_norm(raw, 0.0, 0.1),
+        score=_norm(raw, -0.05, 0.1),
         raw_value=raw,
         description="mPFC + TPJ theory-of-mind network activation — predicts relatability and social sharing tendency.",
         brain_region="Medial PFC + Bilateral temporoparietal junction",
@@ -267,7 +267,7 @@ def visual_aesthetic_score(predictions_full: np.ndarray) -> MetricResult:
     raw = float(mpfc_ofc)
     return MetricResult(
         name="Visual Aesthetic Score",
-        score=_norm(raw, 0.0, 0.1),
+        score=_norm(raw, -0.05, 0.1),
         raw_value=raw,
         description="mOFC + mPFC aesthetic valuation circuit activation — neural correlate of visual beauty judgment.",
         brain_region="Medial orbitofrontal cortex + mPFC",
@@ -297,7 +297,7 @@ def scene_composition(predictions_full: np.ndarray) -> MetricResult:
     raw = float(para)
     return MetricResult(
         name="Scene Composition",
-        score=_norm(raw, 0.0, 0.15),
+        score=_norm(raw, -0.05, 0.15),
         raw_value=raw,
         description="Parahippocampal place area activation — measures how well scene composition guides visual attention.",
         brain_region="Parahippocampal gyrus (PPA)",
@@ -316,7 +316,7 @@ def cognitive_load(predictions_full: np.ndarray) -> MetricResult:
     raw = float(dlpfc)
     return MetricResult(
         name="Cognitive Load",
-        score=_norm(raw, 0.0, 0.15),
+        score=_norm(raw, -0.05, 0.15),
         raw_value=raw,
         description="dlPFC activation — measures cognitive processing demand. High load may cause viewer fatigue and drop-off.",
         brain_region="Dorsolateral prefrontal cortex (dlPFC)",
@@ -338,7 +338,7 @@ def memory_encoding(predictions_full: np.ndarray) -> MetricResult:
     raw = float((hippo + para) / 2)
     return MetricResult(
         name="Memory Encoding",
-        score=_norm(raw, 0.0, 0.1),
+        score=_norm(raw, -0.05, 0.1),
         raw_value=raw,
         description="Hippocampal + parahippocampal activity — predicts brand recall and message retention probability.",
         brain_region="Hippocampal formation + Parahippocampal gyrus",
@@ -372,7 +372,7 @@ def message_clarity(predictions_full: np.ndarray) -> MetricResult:
     raw = float(lang)
     return MetricResult(
         name="Message Clarity",
-        score=_norm(raw, 0.0, 0.1),
+        score=_norm(raw, -0.05, 0.1),
         raw_value=raw,
         description="Broca's + Wernicke's area activation — measures how clearly the verbal/textual message is encoded.",
         brain_region="Left inferior frontal gyrus (Broca's) + Superior temporal gyrus (Wernicke's)",
