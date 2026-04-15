@@ -48,12 +48,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# API-key auth is applied only to the routers Nucleus consumes. Campaigns /
-# projects / profile / export stay open for the first-party frontend for now.
+# API-key auth gates ONLY the endpoints that spend GPU compute (analyze /
+# score / compare). Report reads (/results/*) are intentionally public so a
+# scored video's permalink works for anyone who has the URL — the original
+# product promise. Campaigns / projects / profile / export stay open for
+# the first-party frontend.
 _auth = [Depends(require_api_key)]
 app.include_router(analyze.router, prefix="/api/v1", dependencies=_auth)
 app.include_router(score.router, prefix="/api/v1")  # auth handled in-route
-app.include_router(results.router, prefix="/api/v1", dependencies=_auth)
+app.include_router(results.router, prefix="/api/v1")  # public read
 app.include_router(compare.router, prefix="/api/v1", dependencies=_auth)
 app.include_router(export.router, prefix="/api/v1")
 app.include_router(campaigns_router, prefix="/api/v1")
