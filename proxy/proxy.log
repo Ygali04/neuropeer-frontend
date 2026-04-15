@@ -1,0 +1,43 @@
+Wed Apr  1 20:35:09 PDT 2026: proxy stopped
+Wed Apr  1 20:35:11 PDT 2026: tinyproxy started (PID 6224)
+[2m2026-04-02T03:35:12.986545Z[0m [32m INFO[0m [2mbore_cli::client[0m[2m:[0m connected to server [3mremote_port[0m[2m=[0m25836
+[2m2026-04-02T03:35:12.986616Z[0m [32m INFO[0m [2mbore_cli::client[0m[2m:[0m listening at bore.pub:25836
+Wed Apr  1 20:35:15 PDT 2026: bore tunnel active at bore.pub:25836 (PID 6318)
+Linked service neuropeer-worker
+Wed Apr  1 20:35:18 PDT 2026: Railway PROXY_URL updated to http://bore.pub:25836
+[2m2026-04-02T03:35:28.809703Z[0m [32m INFO[0m [1mproxy[0m[1m{[0m[3mid[0m[2m=[0mc21f28f0-d039-48a5-a66b-fceb7d025043[1m}[0m[2m:[0m [2mbore_cli::client[0m[2m:[0m new connection
+[2m2026-04-02T03:35:30.140047Z[0m [32m INFO[0m [1mproxy[0m[1m{[0m[3mid[0m[2m=[0mc21f28f0-d039-48a5-a66b-fceb7d025043[1m}[0m[2m:[0m [2mbore_cli::client[0m[2m:[0m connection exited
+[2m2026-04-02T03:41:04.097081Z[0m [32m INFO[0m [1mproxy[0m[1m{[0m[3mid[0m[2m=[0m39519bc2-8c61-4662-a339-3060fe92d7e7[1m}[0m[2m:[0m [2mbore_cli::client[0m[2m:[0m new connection
+[2m2026-04-02T03:41:05.551445Z[0m [32m INFO[0m [1mproxy[0m[1m{[0m[3mid[0m[2m=[0m39519bc2-8c61-4662-a339-3060fe92d7e7[1m}[0m[2m:[0m [2mbore_cli::client[0m[2m:[0m connection exited
+[2m2026-04-02T03:41:11.502893Z[0m [32m INFO[0m [1mproxy[0m[1m{[0m[3mid[0m[2m=[0m2a149bb9-4440-48eb-8af1-f2eb27b580b9[1m}[0m[2m:[0m [2mbore_cli::client[0m[2m:[0m new connection
+[2m2026-04-02T03:41:13.113496Z[0m [32m INFO[0m [1mproxy[0m[1m{[0m[3mid[0m[2m=[0m2a149bb9-4440-48eb-8af1-f2eb27b580b9[1m}[0m[2m:[0m [2mbore_cli::client[0m[2m:[0m connection exited
+[2m2026-04-02T03:41:14.196873Z[0m [32m INFO[0m [1mproxy[0m[1m{[0m[3mid[0m[2m=[0m6b3a534f-9a27-4bf1-be23-1f3516c0e402[1m}[0m[2m:[0m [2mbore_cli::client[0m[2m:[0m new connection
+[2m2026-04-02T03:41:15.231902Z[0m [32m INFO[0m [1mproxy[0m[1m{[0m[3mid[0m[2m=[0m6b3a534f-9a27-4bf1-be23-1f3516c0e402[1m}[0m[2m:[0m [2mbore_cli::client[0m[2m:[0m connection exited
+[2m2026-04-02T03:41:18.545656Z[0m [32m INFO[0m [1mproxy[0m[1m{[0m[3mid[0m[2m=[0m9d3d03e4-386c-4611-8acd-4c33c5a17db1[1m}[0m[2m:[0m [2mbore_cli::client[0m[2m:[0m new connection
+[2m2026-04-02T03:41:19.847696Z[0m [32m INFO[0m [1mproxy[0m[1m{[0m[3mid[0m[2m=[0m9d3d03e4-386c-4611-8acd-4c33c5a17db1[1m}[0m[2m:[0m [2mbore_cli::client[0m[2m:[0m connection exited
+[2m2026-04-02T03:41:23.690888Z[0m [32m INFO[0m [1mproxy[0m[1m{[0m[3mid[0m[2m=[0m52c7fbaf-e00f-4cbd-975c-c7be96bbc0fb[1m}[0m[2m:[0m [2mbore_cli::client[0m[2m:[0m new connection
+[2m2026-04-02T03:41:24.899978Z[0m [32m INFO[0m [1mproxy[0m[1m{[0m[3mid[0m[2m=[0m52c7fbaf-e00f-4cbd-975c-c7be96bbc0fb[1m}[0m[2m:[0m [2mbore_cli::client[0m[2m:[0m connection exited
+Wed Apr  8 20:38:16 PDT 2026: tinyproxy started (PID 1623)
+[2m2026-04-09T03:38:18.999720Z[0m [32m INFO[0m [2mbore_cli::client[0m[2m:[0m connected to server [3mremote_port[0m[2m=[0m59759
+[2m2026-04-09T03:38:18.999948Z[0m [32m INFO[0m [2mbore_cli::client[0m[2m:[0m listening at bore.pub:59759
+Wed Apr  8 20:38:21 PDT 2026: bore tunnel active at bore.pub:59759 (PID 1634)
+Linked service neuropeer-worker
+Wed Apr  8 20:38:26 PDT 2026: Railway PROXY_URL updated to http://bore.pub:59759
+Fri Apr 10 21:28:27 PDT 2026: tinyproxy started (PID 1881)
+[2m2026-04-11T04:28:31.866982Z[0m [32m INFO[0m [2mbore_cli::client[0m[2m:[0m connected to server [3mremote_port[0m[2m=[0m7726
+[2m2026-04-11T04:28:31.867040Z[0m [32m INFO[0m [2mbore_cli::client[0m[2m:[0m listening at bore.pub:7726
+Fri Apr 10 21:28:32 PDT 2026: bore tunnel active at bore.pub:7726 (PID 1917)
+Linked service neuropeer-worker
+Fri Apr 10 21:28:35 PDT 2026: Railway PROXY_URL updated to http://bore.pub:7726
+Tue Apr 14 00:41:10 PDT 2026: tinyproxy started (PID 66993)
+[2m2026-04-14T07:41:14.697539Z[0m [32m INFO[0m [2mbore_cli::client[0m[2m:[0m connected to server [3mremote_port[0m[2m=[0m37129
+[2m2026-04-14T07:41:14.703506Z[0m [32m INFO[0m [2mbore_cli::client[0m[2m:[0m listening at bore.pub:37129
+Tue Apr 14 00:41:15 PDT 2026: bore tunnel active at bore.pub:37129 (PID 66997)
+Linked service neuropeer-worker
+Tue Apr 14 00:41:22 PDT 2026: Railway PROXY_URL updated to http://bore.pub:37129
+Tue Apr 14 01:13:42 PDT 2026: tinyproxy started (PID 1612)
+[2m2026-04-14T08:13:47.185651Z[0m [32m INFO[0m [2mbore_cli::client[0m[2m:[0m connected to server [3mremote_port[0m[2m=[0m24041
+[2m2026-04-14T08:13:47.185796Z[0m [32m INFO[0m [2mbore_cli::client[0m[2m:[0m listening at bore.pub:24041
+Tue Apr 14 01:13:48 PDT 2026: bore tunnel active at bore.pub:24041 (PID 1622)
+Linked service neuropeer-worker
+Tue Apr 14 01:13:53 PDT 2026: Railway PROXY_URL updated to http://bore.pub:24041
