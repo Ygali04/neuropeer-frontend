@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.api.middleware.api_key import require_api_key
 from backend.api.routes import analyze, compare, export, results
 from backend.api.routes.campaigns import router as campaigns_router
 from backend.api.routes.profile import router as profile_router
@@ -47,9 +48,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(analyze.router, prefix="/api/v1")
-app.include_router(results.router, prefix="/api/v1")
-app.include_router(compare.router, prefix="/api/v1")
+# API-key auth is applied only to the routers Nucleus consumes. Campaigns /
+# projects / profile / export stay open for the first-party frontend for now.
+_auth = [Depends(require_api_key)]
+app.include_router(analyze.router, prefix="/api/v1", dependencies=_auth)
+app.include_router(results.router, prefix="/api/v1", dependencies=_auth)
+app.include_router(compare.router, prefix="/api/v1", dependencies=_auth)
 app.include_router(export.router, prefix="/api/v1")
 app.include_router(campaigns_router, prefix="/api/v1")
 app.include_router(projects_router, prefix="/api/v1")

@@ -249,6 +249,60 @@ video-brainscore/
 
 ---
 
+## Authentication
+
+NeuroPeer ships a lightweight shared-secret API-key auth layer for
+service-to-service calls (e.g. the sibling Nucleus orchestrator).
+
+- **Dev (default):** leave `NEUROPEER_REQUIRE_API_KEY` unset. All
+  `/api/v1/analyze`, `/api/v1/results/*`, `/api/v1/compare`, and
+  `/ws/job/{id}` requests pass through without a key.
+- **Prod:** set `NEUROPEER_REQUIRE_API_KEY=true` in the backend's `.env`.
+  Every request to those routes must carry a valid key, or the server
+  returns 401.
+
+### Mint a key
+
+```bash
+cd /path/to/video-brainscore
+python -m backend.scripts.mint_api_key \
+    --label "nucleus-dev" \
+    --user-email you@example.com
+```
+
+The raw key is printed **once** and cannot be recovered. Only its sha256
+digest is stored (`api_keys.key_hash`). To revoke a key, set
+`api_keys.revoked_at = NOW()` on its row.
+
+### Consuming the key from Nucleus
+
+Nucleus already reads `NEUROPEER_API_KEY` and sends it as `X-API-Key` on
+every HTTP call (see `backend/nucleus/clients/neuropeer.py`). For the
+WebSocket progress stream it falls back to `?api_key=...` on the URL
+because FastAPI WebSockets don't reliably forward custom headers through
+every proxy.
+
+```bash
+# In ugc-peer/.env:
+NEUROPEER_BASE_URL=http://localhost:8001
+NEUROPEER_API_KEY=<raw-key-from-mint>
+```
+
+### Verify
+
+```bash
+# Rejected when enforcing is on:
+curl -i http://localhost:8001/api/v1/results/00000000-0000-0000-0000-000000000000
+# → 401 Unauthorized
+
+# Accepted (job doesn't exist, but auth passes):
+curl -i -H "X-API-Key: <raw>" \
+     http://localhost:8001/api/v1/results/00000000-0000-0000-0000-000000000000
+# → 404 Job not found
+```
+
+---
+
 ## License
 
 TRIBE v2 is licensed under **CC BY-NC 4.0** (non-commercial only). Commercial deployment requires a separate licensing agreement with Meta FAIR.

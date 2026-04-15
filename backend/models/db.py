@@ -136,6 +136,28 @@ class Result(Base):
     job: Mapped[Job] = relationship("Job", back_populates="result")
 
 
+# ── API Keys (service-to-service auth, e.g. Nucleus) ─────────────────────────
+
+
+class ApiKeyRow(Base):
+    """Shared-secret API key for service-to-service auth.
+
+    The raw key is never stored — only its sha256 hex digest (`key_hash`).
+    Revoked keys are soft-deleted via `revoked_at` so historical audit still
+    works.
+    """
+
+    __tablename__ = "api_keys"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    key_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    user_email: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 # ── Marketer Profile ─────────────────────────────────────────────────────────
 
 

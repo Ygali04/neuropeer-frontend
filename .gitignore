@@ -25,6 +25,9 @@ Thumbs.db
 # Data
 neuropeer-data/
 /tmp/neuropeer/
+# Local SQLite dev/test DBs (mint CLI + pytest)
+*.db
+*.db-journal
 
 # Node
 frontend/node_modules/
