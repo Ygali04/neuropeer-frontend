@@ -241,6 +241,7 @@ def _datacrunch_create_instance(
     # Create instance — try spot first (cheaper), fall back to on-demand.
     # Spot instances may be evicted, but NeuroPeer jobs are short (2-5 min)
     # so eviction risk is low. On-demand is the safe fallback.
+    last_error = None
     for is_spot in [True, False]:
         tier = "spot" if is_spot else "on-demand"
         try:
@@ -258,11 +259,12 @@ def _datacrunch_create_instance(
             logger.info("Provisioned %s %s instance: %s", inst_type, tier, instance.id)
             return instance.id, script_obj.id
         except Exception as exc:
+            last_error = exc
             logger.warning("Failed to create %s %s instance: %s", inst_type, tier, exc)
-            if not is_spot:
-                # Both spot and on-demand failed
-                client.startup_scripts.delete_by_id(script_obj.id)
-        raise DataCrunchError(f"Failed to create DataCrunch instance: {exc}") from exc
+
+    # Both spot and on-demand failed
+    client.startup_scripts.delete_by_id(script_obj.id)
+    raise DataCrunchError(f"Failed to create {inst_type} instance (spot + on-demand both failed): {last_error}") from last_error
 
 
 def _poll_for_sentinel(instance_id: str, job_id: str, sentinel_done: str, sentinel_error: str) -> None:
