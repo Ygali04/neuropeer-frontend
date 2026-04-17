@@ -186,16 +186,22 @@ def _datacrunch_create_instance(
     # provisioned to avoid $14+/hr surprises.
     #
     # Ordered by preference (cheapest single-GPU first):
+    # Instance type names come from the DataCrunch/Verda API.
+    # Format: <count><GPU>.<totalVRAM>V (e.g. 4A100.88V = 4 A100s, 88GB VRAM each × 4 = 352 total)
+    # Single-GPU preferred (cheapest). Multi-GPU as last resort.
+    # Cap at 4-GPU to avoid $30+/hr instances.
     PREFERRED_TYPES = [
-        "1A100.80G",           # $0.45/h spot, $1.29/h on-demand
-        "1A100.40G",           # $0.25/h spot (may be tight on VRAM)
+        "1A100.80G",           # $0.45/h spot — primary choice
+        "1A100.40G",           # $0.25/h spot
         "1H100.80G",           # $0.80/h spot
-        "1RTX_PRO_6000.48G",   # $0.59/h spot (48GB VRAM, sufficient)
         "1L40S.48G",           # $0.32/h spot
-        "1RTX6000ADA.48G",     # $0.29/h spot
-        "1H200.141G",          # $1.19/h spot (overkill but available)
-        "2RTXPRO6000.60V",     # $1.18/h spot (2-GPU fallback)
-        "2A100.80G",           # $0.90/h spot (2-GPU fallback)
+        "1H200.141S",          # $1.19/h spot
+        "2A100.80G",           # $0.90/h spot (2-GPU)
+        "2RTXPRO6000.60V",     # $1.18/h spot (2-GPU)
+        # Multi-GPU fallbacks (expensive but sometimes the only option)
+        "4A100.88V",           # $1.81/h spot (4-GPU, from FIN-01)
+        "4RTXPRO6000.120V",    # $2.37/h spot (4-GPU, from FIN-03)
+        "4H200.141S.176V",     # $4.75/h spot (4-GPU, from FIN-02)
     ]
 
     avail = client.instances.get_availabilities()
