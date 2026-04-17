@@ -346,9 +346,11 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 
 # Install tribev2 WITHOUT reinstalling torch (--no-deps + manual deps)
 pip install git+https://github.com/facebookresearch/tribev2.git --no-deps 2>&1 | tail -3
+# IMPORTANT: neuralset must be pinned to 0.0.2 — version 0.0.3 removed
+# AddText from events.transforms, which tribev2 still imports.
 pip install transformers huggingface-hub numpy pandas pyarrow scipy \
   nilearn nibabel x-transformers einops soundfile moviepy julius \
-  exca neuralset neuraltrain boto3 polars mne spacy langdetect -q 2>&1 | tail -3
+  exca "neuralset==0.0.2" neuraltrain boto3 polars mne spacy langdetect -q 2>&1 | tail -3
 
 echo "Dependencies installed."
 
