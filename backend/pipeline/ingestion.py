@@ -644,9 +644,59 @@ def _raise_auth_error(platform: str, stderr: str) -> None:
 # ── Audio extraction ──────────────────────────────────────────────────────────
 
 
+def _has_audio_stream(video_path: Path) -> bool:
+    """Probe the video for an audio stream. Returns False for silent clips."""
+    result = subprocess.run(
+        [
+            "ffprobe",
+            "-v", "error",
+            "-select_streams", "a",
+            "-show_entries", "stream=codec_type",
+            "-of", "csv=p=0",
+            str(video_path),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0 and "audio" in (result.stdout or "")
+
+
+def _synthesize_silent_audio(output_path: Path, duration_s: float) -> None:
+    """Generate a silent 16 kHz mono WAV matching the video's duration so
+    downstream audio analysis (Whisper transcription, wav2vec features, etc.)
+    still runs end-to-end on videos that were produced without an audio track
+    (e.g. image-to-video models like Kling/Seedance/Veo).
+    """
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-f", "lavfi",
+        "-i", f"anullsrc=channel_layout=mono:sample_rate=16000",
+        "-t", f"{max(0.5, duration_s):.3f}",
+        "-ac", "1",
+        "-ar", "16000",
+        "-loglevel", "error",
+        str(output_path),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"silent audio synthesis failed:\n{result.stderr}")
+
+
 def extract_audio(video_path: Path, output_dir: Path) -> Path:
-    """Extract audio track as 16 kHz mono WAV via ffmpeg."""
+    """Extract audio track as 16 kHz mono WAV via ffmpeg.
+
+    If the video has no audio stream (common for image-to-video generators
+    like Kling/Seedance), synthesize a silent track of the same duration so
+    the rest of the neural pipeline — which assumes an audio input — keeps
+    working instead of failing the whole scoring job.
+    """
     audio_path = output_dir / "audio.wav"
+    if not _has_audio_stream(video_path):
+        duration_s, _ = get_video_duration(video_path)
+        _synthesize_silent_audio(audio_path, duration_s)
+        return audio_path
+
     cmd = [
         "ffmpeg",
         "-y",

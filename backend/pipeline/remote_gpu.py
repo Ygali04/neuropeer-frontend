@@ -180,16 +180,35 @@ def _datacrunch_create_instance(
     script_obj = client.startup_scripts.create(name=f"neuropeer-{job_id[:8]}", script=script_content)
     logger.info("Created startup script: %s", script_obj.id)
 
-    # Find available instance type + location
-    # VRAM cap: only allow single-GPU instances (1x prefix) to avoid
-    # accidentally provisioning multi-GPU monsters ($14+/hr)
-    # TRIBE v2 needs ~30GB VRAM — a single A100 80GB is plenty
-    ALLOWED_PREFIXES = ["1A100", "1H100", "1L40", "1A6000", "1RTX"]
+    # Find available instance type + location.
+    # TRIBE v2 needs ~30GB VRAM — single-GPU instances are preferred
+    # (cheapest), with 2-GPU as fallback. Multi-GPU (4x/8x) is never
+    # provisioned to avoid $14+/hr surprises.
+    #
+    # Ordered by preference (cheapest single-GPU first):
+    # Instance type names come from the DataCrunch/Verda API.
+    # Format: <count><GPU>.<totalVRAM>V (e.g. 4A100.88V = 4 A100s, 88GB VRAM each × 4 = 352 total)
+    # Single-GPU preferred (cheapest). Multi-GPU as last resort.
+    # Cap at 4-GPU to avoid $30+/hr instances.
+    PREFERRED_TYPES = [
+        "1A100.80G",           # $0.45/h spot — primary choice
+        "1A100.40G",           # $0.25/h spot
+        "1H100.80G",           # $0.80/h spot
+        "1L40S.48G",           # $0.32/h spot
+        "1H200.141S",          # $1.19/h spot
+        "2A100.80G",           # $0.90/h spot (2-GPU)
+        "2RTXPRO6000.60V",     # $1.18/h spot (2-GPU)
+        # Multi-GPU fallbacks (expensive but sometimes the only option)
+        "4A100.88V",           # $1.81/h spot (4-GPU, from FIN-01)
+        "4RTXPRO6000.120V",    # $2.37/h spot (4-GPU, from FIN-03)
+        "4H200.141S.176V",     # $4.75/h spot (4-GPU, from FIN-02)
+    ]
+
     avail = client.instances.get_availabilities()
     inst_type = settings.datacrunch_instance_type
     location = None
 
-    # Try preferred type first
+    # Try the configured type first
     for entry in avail:
         loc = entry["location_code"] if isinstance(entry, dict) else entry.location_code
         types = entry["availabilities"] if isinstance(entry, dict) else entry.availabilities
@@ -197,15 +216,18 @@ def _datacrunch_create_instance(
             location = loc
             break
 
-    # Fallback: any SINGLE-GPU instance (capped by prefix)
+    # Fallback: walk the preference list
     if not location:
-        for entry in avail:
-            loc = entry["location_code"] if isinstance(entry, dict) else entry.location_code
-            types = entry["availabilities"] if isinstance(entry, dict) else entry.availabilities
-            for t in types:
-                if any(t.startswith(p) for p in ALLOWED_PREFIXES):
-                    inst_type = t
+        for preferred in PREFERRED_TYPES:
+            if preferred == inst_type:
+                continue  # already tried
+            for entry in avail:
+                loc = entry["location_code"] if isinstance(entry, dict) else entry.location_code
+                types = entry["availabilities"] if isinstance(entry, dict) else entry.availabilities
+                if preferred in types:
+                    inst_type = preferred
                     location = loc
+                    logger.info("Primary %s unavailable, falling back to %s", settings.datacrunch_instance_type, inst_type)
                     break
             if location:
                 break
@@ -216,23 +238,33 @@ def _datacrunch_create_instance(
 
     logger.info("Using %s in %s", inst_type, location)
 
-    # Create instance with startup_script_id (not startup_script)
-    try:
-        instance = client.instances.create(
-            instance_type=inst_type,
-            image=settings.datacrunch_image,
-            ssh_key_ids=ssh_key_ids,
-            hostname=f"neuropeer-{job_id[:8]}",
-            description=f"NeuroPeer-{job_id[:8]}",
-            location=location,
-            is_spot=False,  # on-demand to avoid eviction
-            startup_script_id=script_obj.id,
-            max_wait_time=600,
-        )
-        return instance.id, script_obj.id
-    except Exception as exc:
-        client.startup_scripts.delete_by_id(script_obj.id)
-        raise DataCrunchError(f"Failed to create DataCrunch instance: {exc}") from exc
+    # Create instance — try spot first (cheaper), fall back to on-demand.
+    # Spot instances may be evicted, but NeuroPeer jobs are short (2-5 min)
+    # so eviction risk is low. On-demand is the safe fallback.
+    last_error = None
+    for is_spot in [True, False]:
+        tier = "spot" if is_spot else "on-demand"
+        try:
+            instance = client.instances.create(
+                instance_type=inst_type,
+                image=settings.datacrunch_image,
+                ssh_key_ids=ssh_key_ids,
+                hostname=f"neuropeer-{job_id[:8]}",
+                description=f"NeuroPeer-{job_id[:8]}-{tier}",
+                location=location,
+                is_spot=is_spot,
+                startup_script_id=script_obj.id,
+                max_wait_time=600,
+            )
+            logger.info("Provisioned %s %s instance: %s", inst_type, tier, instance.id)
+            return instance.id, script_obj.id
+        except Exception as exc:
+            last_error = exc
+            logger.warning("Failed to create %s %s instance: %s", inst_type, tier, exc)
+
+    # Both spot and on-demand failed
+    client.startup_scripts.delete_by_id(script_obj.id)
+    raise DataCrunchError(f"Failed to create {inst_type} instance (spot + on-demand both failed): {last_error}") from last_error
 
 
 def _poll_for_sentinel(instance_id: str, job_id: str, sentinel_done: str, sentinel_error: str) -> None:
@@ -322,9 +354,11 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 
 # Install tribev2 WITHOUT reinstalling torch (--no-deps + manual deps)
 pip install git+https://github.com/facebookresearch/tribev2.git --no-deps 2>&1 | tail -3
+# IMPORTANT: neuralset must be pinned to 0.0.2 — version 0.0.3 removed
+# AddText from events.transforms, which tribev2 still imports.
 pip install transformers huggingface-hub numpy pandas pyarrow scipy \
   nilearn nibabel x-transformers einops soundfile moviepy julius \
-  exca neuralset neuraltrain boto3 polars mne spacy langdetect -q 2>&1 | tail -3
+  exca "neuralset==0.0.2" neuraltrain boto3 polars mne spacy langdetect -q 2>&1 | tail -3
 
 echo "Dependencies installed."
 

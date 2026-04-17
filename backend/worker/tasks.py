@@ -143,7 +143,9 @@ def _persist_to_db(job_id, url, content_type, duration, neural_score, metrics_da
 
 
 @celery_app.task(name="neuropeer.analyze", bind=True, max_retries=1)
-def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: str | None = None, user_email: str | None = None, project_id: str | None = None, campaign_id: str | None = None) -> dict:
+def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: str | None = None, user_email: str | None = None, project_id: str | None = None, campaign_id: str | None = None, **_ignored_kwargs) -> dict:
+    """Permissive signature: accept any extra kwargs (e.g. `content_types`
+    from a newer API rev) without crashing the Celery task on deploy drift."""
     """
     Full NeuroPeer analysis pipeline for a single video URL.
     Streams progress events at each stage.

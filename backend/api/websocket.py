@@ -7,6 +7,7 @@ import json
 import redis.asyncio as aioredis
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from backend.api.middleware.api_key import authenticate_websocket
 from backend.config import settings
 
 router = APIRouter(tags=["WebSocket"])
@@ -25,6 +26,12 @@ async def job_progress(websocket: WebSocket, job_id: str) -> None:
 
     Closes the connection when status is "complete" or "error".
     """
+    # Gate the handshake BEFORE accept so unauthenticated clients get a clean
+    # 4401 close instead of a hung socket.
+    auth = await authenticate_websocket(websocket)
+    if auth is None:
+        return
+
     await websocket.accept()
 
     r = aioredis.from_url(settings.redis_url, decode_responses=True)
