@@ -180,16 +180,29 @@ def _datacrunch_create_instance(
     script_obj = client.startup_scripts.create(name=f"neuropeer-{job_id[:8]}", script=script_content)
     logger.info("Created startup script: %s", script_obj.id)
 
-    # Find available instance type + location
-    # VRAM cap: only allow single-GPU instances (1x prefix) to avoid
-    # accidentally provisioning multi-GPU monsters ($14+/hr)
-    # TRIBE v2 needs ~30GB VRAM — a single A100 80GB is plenty
-    ALLOWED_PREFIXES = ["1A100", "1H100", "1L40", "1A6000", "1RTX"]
+    # Find available instance type + location.
+    # TRIBE v2 needs ~30GB VRAM — single-GPU instances are preferred
+    # (cheapest), with 2-GPU as fallback. Multi-GPU (4x/8x) is never
+    # provisioned to avoid $14+/hr surprises.
+    #
+    # Ordered by preference (cheapest single-GPU first):
+    PREFERRED_TYPES = [
+        "1A100.80G",           # $0.45/h spot, $1.29/h on-demand
+        "1A100.40G",           # $0.25/h spot (may be tight on VRAM)
+        "1H100.80G",           # $0.80/h spot
+        "1RTX_PRO_6000.48G",   # $0.59/h spot (48GB VRAM, sufficient)
+        "1L40S.48G",           # $0.32/h spot
+        "1RTX6000ADA.48G",     # $0.29/h spot
+        "1H200.141G",          # $1.19/h spot (overkill but available)
+        "2RTXPRO6000.60V",     # $1.18/h spot (2-GPU fallback)
+        "2A100.80G",           # $0.90/h spot (2-GPU fallback)
+    ]
+
     avail = client.instances.get_availabilities()
     inst_type = settings.datacrunch_instance_type
     location = None
 
-    # Try preferred type first
+    # Try the configured type first
     for entry in avail:
         loc = entry["location_code"] if isinstance(entry, dict) else entry.location_code
         types = entry["availabilities"] if isinstance(entry, dict) else entry.availabilities
@@ -197,15 +210,18 @@ def _datacrunch_create_instance(
             location = loc
             break
 
-    # Fallback: any SINGLE-GPU instance (capped by prefix)
+    # Fallback: walk the preference list
     if not location:
-        for entry in avail:
-            loc = entry["location_code"] if isinstance(entry, dict) else entry.location_code
-            types = entry["availabilities"] if isinstance(entry, dict) else entry.availabilities
-            for t in types:
-                if any(t.startswith(p) for p in ALLOWED_PREFIXES):
-                    inst_type = t
+        for preferred in PREFERRED_TYPES:
+            if preferred == inst_type:
+                continue  # already tried
+            for entry in avail:
+                loc = entry["location_code"] if isinstance(entry, dict) else entry.location_code
+                types = entry["availabilities"] if isinstance(entry, dict) else entry.availabilities
+                if preferred in types:
+                    inst_type = preferred
                     location = loc
+                    logger.info("Primary %s unavailable, falling back to %s", settings.datacrunch_instance_type, inst_type)
                     break
             if location:
                 break
@@ -216,22 +232,30 @@ def _datacrunch_create_instance(
 
     logger.info("Using %s in %s", inst_type, location)
 
-    # Create instance with startup_script_id (not startup_script)
-    try:
-        instance = client.instances.create(
-            instance_type=inst_type,
-            image=settings.datacrunch_image,
-            ssh_key_ids=ssh_key_ids,
-            hostname=f"neuropeer-{job_id[:8]}",
-            description=f"NeuroPeer-{job_id[:8]}",
-            location=location,
-            is_spot=False,  # on-demand to avoid eviction
-            startup_script_id=script_obj.id,
-            max_wait_time=600,
-        )
-        return instance.id, script_obj.id
-    except Exception as exc:
-        client.startup_scripts.delete_by_id(script_obj.id)
+    # Create instance — try spot first (cheaper), fall back to on-demand.
+    # Spot instances may be evicted, but NeuroPeer jobs are short (2-5 min)
+    # so eviction risk is low. On-demand is the safe fallback.
+    for is_spot in [True, False]:
+        tier = "spot" if is_spot else "on-demand"
+        try:
+            instance = client.instances.create(
+                instance_type=inst_type,
+                image=settings.datacrunch_image,
+                ssh_key_ids=ssh_key_ids,
+                hostname=f"neuropeer-{job_id[:8]}",
+                description=f"NeuroPeer-{job_id[:8]}-{tier}",
+                location=location,
+                is_spot=is_spot,
+                startup_script_id=script_obj.id,
+                max_wait_time=600,
+            )
+            logger.info("Provisioned %s %s instance: %s", inst_type, tier, instance.id)
+            return instance.id, script_obj.id
+        except Exception as exc:
+            logger.warning("Failed to create %s %s instance: %s", inst_type, tier, exc)
+            if not is_spot:
+                # Both spot and on-demand failed
+                client.startup_scripts.delete_by_id(script_obj.id)
         raise DataCrunchError(f"Failed to create DataCrunch instance: {exc}") from exc
 
 
