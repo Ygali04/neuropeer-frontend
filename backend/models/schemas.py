@@ -12,6 +12,7 @@ class ContentType(str, Enum):
     youtube_preroll = "youtube_preroll"
     conference_talk = "conference_talk"
     podcast_audio = "podcast_audio"
+    feature_film = "feature_film"
     custom = "custom"
 
 
