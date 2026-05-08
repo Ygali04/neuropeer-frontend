@@ -18,10 +18,12 @@ export function EmotionalPanel({
   height = 120,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const safeArousal = arousaleCurve ?? [];
+  const safeCognitive = cognitiveCurve ?? [];
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || arousaleCurve.length === 0) return;
+    if (!canvas || safeArousal.length === 0) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -37,7 +39,7 @@ export function EmotionalPanel({
     const pad = { top: 8, right: 12, bottom: 20, left: 36 };
     const plotW = w - pad.left - pad.right;
     const plotH = h - pad.top - pad.bottom;
-    const n = arousaleCurve.length;
+    const n = safeArousal.length;
 
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = chartBg();
@@ -63,10 +65,10 @@ export function EmotionalPanel({
     [0, 50, 100].forEach((v) => ctx.fillText(String(v), pad.left - 4, yScale(v) + 3));
 
     // Arousal (amber)
-    drawLine(ctx, arousaleCurve, xScale, yScale, chartArousalLine(), 2);
+    drawLine(ctx, safeArousal, xScale, yScale, chartArousalLine(), 2);
 
     // Cognitive load (red)
-    drawLine(ctx, cognitiveCurve, xScale, yScale, chartCognitiveLine(), 2);
+    drawLine(ctx, safeCognitive, xScale, yScale, chartCognitiveLine(), 2);
 
     // Playhead
     if (currentSecond !== undefined && currentSecond < n) {
@@ -87,7 +89,7 @@ export function EmotionalPanel({
     for (let i = 0; i < n; i += labelEvery) {
       ctx.fillText(`${i}s`, xScale(i), h - 4);
     }
-  }, [arousaleCurve, cognitiveCurve, currentSecond, height]);
+  }, [safeArousal, safeCognitive, currentSecond, height]);
 
   return (
     <div>

@@ -81,7 +81,7 @@ export function MetricCard({ metric, expanded, onToggle }: Props) {
               </span>
             )}
           </div>
-          <div className="text-xs text-white/25 truncate">{metric.gtm_proxy}</div>
+          <div className="text-xs text-white/25 truncate">{metric.gtm_proxy ?? ""}</div>
         </div>
 
         <ChevronDown
@@ -110,7 +110,7 @@ export function MetricCard({ metric, expanded, onToggle }: Props) {
             </div>
             <div className="flex items-center gap-1.5 text-xs text-white/30">
               <Gauge className="w-3 h-3" />
-              <span className="font-mono text-white/45">{metric.raw_value.toFixed(4)}</span>
+              <span className="font-mono text-white/45">{(metric.raw_value ?? 0).toFixed(4)}</span>
             </div>
           </div>
 

@@ -92,11 +92,12 @@ export function AttentionCurve({
   const padRef = useRef({ top: 16, right: 12, bottom: 28, left: 32 });
   // Shared canvas dimensions so static + overlay stay aligned
   const dimsRef = useRef({ w: 0, h: 0, dpr: 1 });
+  const safeAttentionCurve = attentionCurve ?? [];
 
   // Draw static chart
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || attentionCurve.length === 0) return;
+    if (!canvas || safeAttentionCurve.length === 0) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -117,11 +118,11 @@ export function AttentionCurve({
     const pad = padRef.current;
     const plotW = w - pad.left - pad.right;
     const plotH = h - pad.top - pad.bottom;
-    const rawLen = attentionCurve.length;
+    const rawLen = safeAttentionCurve.length;
 
     // Aggregate to 10-second bins for long content (>600 data points)
     const binSize = rawLen > 600 ? 10 : 1;
-    const displayAttn = binSize > 1 ? aggregateCurve(attentionCurve, binSize) : attentionCurve;
+    const displayAttn = binSize > 1 ? aggregateCurve(safeAttentionCurve, binSize) : safeAttentionCurve;
     const displayEmot = emotionCurve && emotionCurve.length === rawLen
       ? (binSize > 1 ? aggregateCurve(emotionCurve, binSize) : emotionCurve)
       : undefined;
@@ -204,19 +205,19 @@ export function AttentionCurve({
       if (m.timestamp >= rawLen) return;
       const binnedIdx = m.timestamp / binSize;
       const x = xScale(binnedIdx);
-      const y = yScale(attentionCurve[Math.floor(m.timestamp)] ?? 50);
+      const y = yScale(safeAttentionCurve[Math.floor(m.timestamp)] ?? 50);
       const mColor = MOMENT_COLORS[m.type] ?? "#fff";
       ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fillStyle = mColor + "15"; ctx.fill();
       ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2); ctx.fillStyle = mColor; ctx.fill();
       ctx.strokeStyle = dotStroke(); ctx.lineWidth = 1.5; ctx.stroke();
     });
-  }, [attentionCurve, emotionCurve, keyMoments, height]);
+  }, [safeAttentionCurve, emotionCurve, keyMoments, height]);
 
   // Draw overlay — called on hover OR on every playback frame
   const drawOverlay = useCallback(
     (mouseX: number | null, time: number | null) => {
       const canvas = overlayRef.current;
-      if (!canvas || attentionCurve.length === 0) return;
+      if (!canvas || safeAttentionCurve.length === 0) return;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
 
@@ -229,11 +230,11 @@ export function AttentionCurve({
       const pad = padRef.current;
       const plotW = w - pad.left - pad.right;
       const plotH = h - pad.top - pad.bottom;
-      const rawLen = attentionCurve.length;
+      const rawLen = safeAttentionCurve.length;
 
       // Match binning from static chart
       const binSize = rawLen > 600 ? 10 : 1;
-      const displayAttn = binSize > 1 ? aggregateCurve(attentionCurve, binSize) : attentionCurve;
+      const displayAttn = binSize > 1 ? aggregateCurve(safeAttentionCurve, binSize) : safeAttentionCurve;
       const displayEmot = emotionCurve && emotionCurve.length === rawLen
         ? (binSize > 1 ? aggregateCurve(emotionCurve, binSize) : emotionCurve)
         : undefined;
@@ -332,7 +333,7 @@ export function AttentionCurve({
         setTooltip({ x: snapX, second: realSecond, attention: attnVal, emotion: emotVal, moment: nearbyMoment });
       }
     },
-    [attentionCurve, emotionCurve, keyMoments, height]
+    [safeAttentionCurve, emotionCurve, keyMoments, height]
   );
 
   // Redraw overlay on playback time change
@@ -360,14 +361,14 @@ export function AttentionCurve({
   }, [isPlaying, playbackTime, drawOverlay]);
 
   const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (attentionCurve.length === 0) return;
+    if (safeAttentionCurve.length === 0) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const pad = padRef.current;
     const canvas = overlayRef.current;
     if (!canvas) return;
     const plotW = canvas.clientWidth - pad.left - pad.right;
-    const rawLen = attentionCurve.length;
+    const rawLen = safeAttentionCurve.length;
     const binSize = rawLen > 600 ? 10 : 1;
     const binnedN = binSize > 1 ? Math.ceil(rawLen / binSize) : rawLen;
     const binnedT = ((mouseX - pad.left) / plotW) * (binnedN - 1);
@@ -383,7 +384,7 @@ export function AttentionCurve({
       onScrub?.(clampedT);
       onPlay?.();
     }
-  }, [onScrub, onPlay, attentionCurve, isPlaying]);
+  }, [onScrub, onPlay, safeAttentionCurve, isPlaying]);
 
   return (
     <div className="w-full">
@@ -416,9 +417,9 @@ export function AttentionCurve({
             </button>
             {(isPlaying || playbackTime > 0) && (
               <span className="text-[10px] text-brand-400 tabular-nums ml-1 font-medium">
-                {attentionCurve.length > 300
-                  ? `${formatMMSS(playbackTime)} / ${formatMMSS(attentionCurve.length - 1)}`
-                  : `${playbackTime.toFixed(1)}s / ${(attentionCurve.length - 1)}s`}
+                {safeAttentionCurve.length > 300
+                  ? `${formatMMSS(playbackTime)} / ${formatMMSS(safeAttentionCurve.length - 1)}`
+                  : `${playbackTime.toFixed(1)}s / ${(safeAttentionCurve.length - 1)}s`}
               </span>
             )}
           </div>
@@ -460,7 +461,7 @@ export function AttentionCurve({
           >
             <div className="rounded-xl p-3 min-w-[150px] border border-white/[0.1]" style={{ background: "rgba(15, 13, 20, 0.92)", boxShadow: "0 12px 40px rgba(0,0,0,0.6)" }}>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] text-white/40 uppercase tracking-wider font-medium">t = {attentionCurve.length > 300 ? formatMMSS(tooltip.second) : `${tooltip.second}s`}</span>
+                <span className="text-[10px] text-white/40 uppercase tracking-wider font-medium">t = {safeAttentionCurve.length > 300 ? formatMMSS(tooltip.second) : `${tooltip.second}s`}</span>
                 {tooltip.moment && (
                   <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={{ color: MOMENT_COLORS[tooltip.moment.type], backgroundColor: MOMENT_COLORS[tooltip.moment.type] + "20" }}>
                     {MOMENT_LABELS[tooltip.moment.type]}

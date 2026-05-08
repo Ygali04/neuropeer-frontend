@@ -60,7 +60,7 @@ function parseSummary(text: string): { sentences: string[] } {
 export function ImprovementStrategies({ metrics, overarchingSummary, aiPriorities, aiMetricTips, aiCategoryStrategies, aiLoading }: Props) {
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
 
-  const improvableMetrics = metrics
+  const improvableMetrics = (metrics ?? [])
     .filter((m) => m.score < 75 && METRIC_STRATEGIES[m.name])
     .sort((a, b) => a.score - b.score);
 
@@ -184,7 +184,7 @@ export function ImprovementStrategies({ metrics, overarchingSummary, aiPrioritie
                     <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/[0.04]">
                       <span className="text-[10px] text-white/25 truncate mr-2">{metric.name}</span>
                       <span className="text-sm font-bold tabular-nums whitespace-nowrap" style={{ color: metric.score >= 70 ? "var(--color-score-green)" : metric.score >= 45 ? "var(--color-score-amber)" : "var(--color-score-red)" }}>
-                        {metric.score.toFixed(1)}<span className="text-white/20 font-normal">/100</span>
+                        {(metric.score ?? 0).toFixed(1)}<span className="text-white/20 font-normal">/100</span>
                       </span>
                     </div>
                   </div>
@@ -315,7 +315,7 @@ export function ImprovementStrategies({ metrics, overarchingSummary, aiPrioritie
                                   : "var(--color-score-red)",
                             }}
                           >
-                            {metric.score.toFixed(1)}/100
+                            {(metric.score ?? 0).toFixed(1)}/100
                           </span>
                         </div>
                         <p className="text-xs text-white/35 mb-2.5">

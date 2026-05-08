@@ -12,10 +12,11 @@ interface Props {
 
 export function ModalityBreakdown({ breakdown, height = 120 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const safeBreakdown = breakdown ?? [];
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || breakdown.length === 0) return;
+    if (!canvas || safeBreakdown.length === 0) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -31,7 +32,7 @@ export function ModalityBreakdown({ breakdown, height = 120 }: Props) {
     const pad = { top: 8, right: 12, bottom: 20, left: 36 };
     const plotW = w - pad.left - pad.right;
     const plotH = h - pad.top - pad.bottom;
-    const n = breakdown.length;
+    const n = safeBreakdown.length;
     const barW = Math.max(1, plotW / n);
 
     ctx.clearRect(0, 0, w, h);
@@ -40,7 +41,7 @@ export function ModalityBreakdown({ breakdown, height = 120 }: Props) {
 
     const COLORS = modalityColors();
 
-    breakdown.forEach((d, i) => {
+    safeBreakdown.forEach((d, i) => {
       const x = pad.left + i * barW;
       let yOffset = pad.top + plotH;
 
@@ -67,7 +68,7 @@ export function ModalityBreakdown({ breakdown, height = 120 }: Props) {
     for (let i = 0; i < n; i += labelEvery) {
       ctx.fillText(`${i}s`, pad.left + i * barW + barW / 2, h - 4);
     }
-  }, [breakdown, height]);
+  }, [safeBreakdown, height]);
 
   return (
     <div>

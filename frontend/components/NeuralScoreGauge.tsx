@@ -36,7 +36,7 @@ export function NeuralScoreGauge({ breakdown, size = "lg" }: Props) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { const t = setTimeout(() => setMounted(true), 100); return () => clearTimeout(t); }, []);
 
-  const { total } = breakdown;
+  const total = breakdown?.total ?? 0;
   const radius = size === "lg" ? 80 : 50;
   const stroke = size === "lg" ? 8 : 6;
   const circumference = 2 * Math.PI * radius;
@@ -46,12 +46,12 @@ export function NeuralScoreGauge({ breakdown, size = "lg" }: Props) {
   const svgSize = (radius + stroke) * 2 + 4;
 
   const dimensions = [
-    { label: "Hook", value: breakdown.hook_score },
-    { label: "Attention", value: breakdown.sustained_attention },
-    { label: "Emotion", value: breakdown.emotional_resonance },
-    { label: "Memory", value: breakdown.memory_encoding },
-    { label: "Aesthetic", value: breakdown.aesthetic_quality },
-    { label: "Clarity", value: breakdown.cognitive_accessibility },
+    { label: "Hook", value: breakdown?.hook_score ?? 0 },
+    { label: "Attention", value: breakdown?.sustained_attention ?? 0 },
+    { label: "Emotion", value: breakdown?.emotional_resonance ?? 0 },
+    { label: "Memory", value: breakdown?.memory_encoding ?? 0 },
+    { label: "Aesthetic", value: breakdown?.aesthetic_quality ?? 0 },
+    { label: "Clarity", value: breakdown?.cognitive_accessibility ?? 0 },
   ];
 
   return (

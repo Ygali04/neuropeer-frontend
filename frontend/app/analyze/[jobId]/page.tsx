@@ -120,11 +120,12 @@ export default function AnalyzePage() {
       const prevTime = playbackTimeRef.current;
       const next = prevTime + dt * speedRef.current;
 
-      if (next >= result.duration_seconds) {
+      const duration = result.duration_seconds ?? 0;
+      if (next >= duration) {
         stoppedRef.current = true;
-        playbackTimeRef.current = result.duration_seconds;
-        setPlaybackTime(result.duration_seconds);
-        setCurrentSecond(Math.floor(result.duration_seconds));
+        playbackTimeRef.current = duration;
+        setPlaybackTime(duration);
+        setCurrentSecond(Math.floor(duration));
         setIsPlaying(false);
         return;
       }
@@ -142,7 +143,7 @@ export default function AnalyzePage() {
 
   const handlePlay = useCallback(() => {
     if (!result) return;
-    if (playbackTimeRef.current >= result.duration_seconds - 0.5) {
+    if (playbackTimeRef.current >= (result.duration_seconds ?? 0) - 0.5) {
       playbackTimeRef.current = 0; setPlaybackTime(0); setCurrentSecond(0);
     }
     setIsPlaying(true);
@@ -165,7 +166,7 @@ export default function AnalyzePage() {
       jobId: data.job_id,
       url: data.url,
       contentType: data.content_type,
-      neuralScore: data.neural_score.total,
+      neuralScore: data.neural_score?.total ?? 0,
       timestamp: Date.now(),
       durationSeconds: data.duration_seconds,
     }, session?.user?.email ?? undefined);
@@ -234,9 +235,9 @@ export default function AnalyzePage() {
   const handleReanalyze = async (url?: string) => {
     setReanalyzeLoading(true);
     try {
-      const targetUrl = url || result!.url;
-      const contentType = result!.content_type;
-      const { job_id } = await submitAnalysis(targetUrl, contentType, result!.job_id);
+      const targetUrl = url || result?.url || "";
+      const contentType = result?.content_type ?? "custom";
+      const { job_id } = await submitAnalysis(targetUrl, contentType, result?.job_id ?? "");
       window.location.href = `/analyze/${job_id}`;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Re-analysis failed");
@@ -363,14 +364,14 @@ export default function AnalyzePage() {
             {result && result.parent_job_id && runHistory.length > 0 && (() => {
               const parentRun = runHistory.find(r => r.job_id === result.parent_job_id);
               if (!parentRun) return null;
-              const delta = result.neural_score.total - parentRun.neural_score;
+              const delta = (result.neural_score?.total ?? 0) - (parentRun.neural_score ?? 0);
               const sign = delta >= 0 ? "+" : "";
               const color = delta > 0 ? "text-emerald-400" : delta < 0 ? "text-red-400" : "text-white/40";
               return (
                 <div className="glass-card !rounded-xl px-4 py-3 mb-6 flex items-center justify-between animate-fade-up">
                   <div className="flex items-center gap-3">
                     <RotateCcw className="w-4 h-4 text-brand-400" />
-                    <span className="text-sm text-white/50">vs previous run: <span className="text-white/70 font-medium">{Number(parentRun.neural_score).toFixed(1)}</span> → <span className="text-white/70 font-medium">{result.neural_score.total.toFixed(1)}</span></span>
+                    <span className="text-sm text-white/50">vs previous run: <span className="text-white/70 font-medium">{Number(parentRun.neural_score ?? 0).toFixed(1)}</span> → <span className="text-white/70 font-medium">{(result.neural_score?.total ?? 0).toFixed(1)}</span></span>
                     <span className={`text-sm font-bold tabular-nums ${color}`}>{sign}{delta.toFixed(1)}</span>
                   </div>
                   <Link href={`/analyze/${result.parent_job_id}`} className="text-xs text-brand-400 hover:text-brand-300 transition-colors">View previous →</Link>
@@ -403,9 +404,9 @@ export default function AnalyzePage() {
                         <ExternalLink className="w-3 h-3 text-white/20 flex-shrink-0" />
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge variant="default">{result.content_type.replace("_", " ")}</Badge>
-                        <Badge variant="default">{result.duration_seconds.toFixed(0)}s</Badge>
-                        <Badge variant="brand">{result.metrics.length} metrics</Badge>
+                        <Badge variant="default">{(result.content_type ?? "custom").replace("_", " ")}</Badge>
+                        <Badge variant="default">{(result.duration_seconds ?? 0).toFixed(0)}s</Badge>
+                        <Badge variant="brand">{(result.metrics ?? []).length} metrics</Badge>
                       </div>
                     </>
                   ) : (
@@ -435,7 +436,7 @@ export default function AnalyzePage() {
 
                 <div className="mt-4 space-y-2.5">
                   {result ? (
-                    result.metrics
+                    (result.metrics ?? [])
                       .sort((a, b) => Math.abs(b.score - 50) - Math.abs(a.score - 50))
                       .slice(0, 3)
                       .map((m) => (
@@ -586,7 +587,7 @@ export default function AnalyzePage() {
                       const next = !metricsExpandAll;
                       setMetricsExpandAll(next);
                       if (next) {
-                        const allRows = new Set(result.metrics.map((_, i) => Math.floor(i / 3)));
+                        const allRows = new Set((result.metrics ?? []).map((_, i) => Math.floor(i / 3)));
                         setExpandedRows(allRows);
                       } else {
                         setExpandedRows(new Set());
@@ -599,7 +600,7 @@ export default function AnalyzePage() {
                   </button>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {result.metrics.map((m, i) => {
+                  {(result.metrics ?? []).map((m, i) => {
                     const row = Math.floor(i / 3);
                     return (
                       <MetricCard
@@ -661,19 +662,19 @@ export default function AnalyzePage() {
                 <div className="space-y-2">
                   {runHistory.map((run, i) => {
                     const prev = i > 0 ? runHistory[i - 1] : null;
-                    const delta = prev ? run.neural_score - prev.neural_score : 0;
+                    const delta = prev ? (run.neural_score ?? 0) - (prev.neural_score ?? 0) : 0;
                     const sign = delta >= 0 ? "+" : "";
                     return (
                       <Link key={run.job_id} href={`/analyze/${run.job_id}`} className={`flex items-center justify-between px-3 py-2 rounded-lg transition-colors ${run.is_current ? "bg-brand-500/10 border border-brand-500/20" : "hover:bg-white/[0.04]"}`}>
                         <div className="flex items-center gap-3">
                           <span className="w-6 h-6 rounded-full bg-white/[0.06] flex items-center justify-center text-[10px] text-white/40 font-bold">v{i + 1}</span>
                           <div>
-                            <span className="text-xs text-white/50 truncate max-w-[200px] block">{run.url.replace(/https?:\/\/(www\.)?/, "").slice(0, 40)}</span>
+                            <span className="text-xs text-white/50 truncate max-w-[200px] block">{(run.url ?? "").replace(/https?:\/\/(www\.)?/, "").slice(0, 40)}</span>
                             <span className="text-[10px] text-white/25">{new Date(run.created_at).toLocaleDateString()}</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold tabular-nums" style={{ color: run.neural_score >= 75 ? "var(--color-score-green)" : run.neural_score >= 50 ? "var(--color-score-amber)" : "var(--color-score-red)" }}>{Number(run.neural_score).toFixed(1)}</span>
+                          <span className="text-sm font-bold tabular-nums" style={{ color: (run.neural_score ?? 0) >= 75 ? "var(--color-score-green)" : (run.neural_score ?? 0) >= 50 ? "var(--color-score-amber)" : "var(--color-score-red)" }}>{Number(run.neural_score ?? 0).toFixed(1)}</span>
                           {prev && delta !== 0 && (<span className={`text-[10px] font-bold tabular-nums ${delta > 0 ? "text-emerald-400" : "text-red-400"}`}>{sign}{delta.toFixed(1)}</span>)}
                         </div>
                       </Link>

@@ -121,7 +121,7 @@ export function ReportTitle({ title, url, contentType, isOwner, jobId }: Props) 
 }
 
 function formatUrl(url: string, contentType: string): string {
-  const type = contentType.replace("_", " ");
-  const domain = url.replace(/https?:\/\/(www\.)?/, "").split("/")[0];
+  const type = (contentType ?? "custom").replace("_", " ");
+  const domain = (url ?? "").replace(/https?:\/\/(www\.)?/, "").split("/")[0];
   return `${type.charAt(0).toUpperCase() + type.slice(1)} — ${domain}`;
 }

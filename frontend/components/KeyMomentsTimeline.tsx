@@ -51,6 +51,8 @@ export function KeyMomentsTimeline({
   onCycleSpeed,
 }: Props) {
   const displayTime = playbackTime !== undefined ? playbackTime : (currentSecond ?? 0);
+  const safeMoments = moments ?? [];
+  const safeDuration = duration ?? 1;
   const [momentsExpanded, setMomentsExpanded] = useState(true);
 
   return (
@@ -60,7 +62,7 @@ export function KeyMomentsTimeline({
         <div className="flex items-center gap-2">
           <Clock className="w-4 h-4 text-teal-400" />
           <h3 className="text-sm font-medium text-white/60">Key Moments</h3>
-          <span className="text-[10px] text-white/20">{moments.length} events</span>
+          <span className="text-[10px] text-white/20">{safeMoments.length} events</span>
         </div>
       </div>
 
@@ -81,8 +83,8 @@ export function KeyMomentsTimeline({
 
       {/* Timeline bar */}
       <div className="relative h-1.5 bg-white/[0.04] rounded-full">
-        {moments.map((m, i) => {
-          const pct = (m.timestamp / duration) * 100;
+        {safeMoments.map((m, i) => {
+          const pct = (m.timestamp / safeDuration) * 100;
           const cfg = MOMENT_CONFIG[m.type];
           return (
             <button
@@ -94,7 +96,7 @@ export function KeyMomentsTimeline({
                 boxShadow: `0 0 8px ${cfg.color}40`,
               }}
               onClick={() => onSelect?.(m.timestamp)}
-              title={`${m.label} @ ${m.timestamp.toFixed(0)}s`}
+              title={`${m.label ?? ""} @ ${(m.timestamp ?? 0).toFixed(0)}s`}
             />
           );
         })}
@@ -102,7 +104,7 @@ export function KeyMomentsTimeline({
         <div
           className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-0.5 h-4 bg-brand-400 rounded-full"
           style={{
-            left: `${(displayTime / duration) * 100}%`,
+            left: `${(displayTime / safeDuration) * 100}%`,
             boxShadow: "0 0 6px rgba(249, 115, 22, 0.5)",
             transition: isPlaying ? "none" : "left 200ms ease-out",
           }}
@@ -124,8 +126,8 @@ export function KeyMomentsTimeline({
           momentsExpanded ? "max-h-[50vh] sm:max-h-[500px] overflow-y-auto" : "max-h-0"
         )}
       >
-        {moments.map((m, i) => {
-          const cfg = MOMENT_CONFIG[m.type];
+        {safeMoments.map((m, i) => {
+          const cfg = MOMENT_CONFIG[m.type] ?? MOMENT_CONFIG.peak_engagement;
           const Icon = cfg.icon;
           const info = MOMENT_INFO[m.type];
           const isNear = Math.abs(m.timestamp - displayTime) < 1.5;
@@ -159,7 +161,7 @@ export function KeyMomentsTimeline({
                     {m.label}
                   </span>
                   <span className="text-xs text-white/25 ml-2">
-                    @ {m.timestamp.toFixed(0)}s
+                    @ {(m.timestamp ?? 0).toFixed(0)}s
                   </span>
                 </div>
               </button>
@@ -183,7 +185,7 @@ export function KeyMomentsTimeline({
             </div>
           );
         })}
-        {moments.length === 0 && (
+        {safeMoments.length === 0 && (
           <p className="text-xs text-white/20 text-center py-4">No key moments detected.</p>
         )}
       </div>
