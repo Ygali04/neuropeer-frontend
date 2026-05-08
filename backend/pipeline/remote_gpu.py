@@ -425,7 +425,7 @@ MAX_CHUNK_S = 300  # seconds per chunk
 OVERLAP_S = 15     # seconds of overlap for context continuity
 
 def chunked_predict(model, events_df, max_chunk_s=MAX_CHUNK_S, overlap_s=OVERLAP_S):
-    """Run TRIBE v2 in chunks to avoid OOM on long videos."""
+    # Run TRIBE v2 in chunks to avoid OOM on long videos.
     total_duration = events_df["onset"].max() + 1
 
     if total_duration <= max_chunk_s:
@@ -461,7 +461,7 @@ def chunked_predict(model, events_df, max_chunk_s=MAX_CHUNK_S, overlap_s=OVERLAP
 
 
 def merge_overlapping(batch_preds, total_duration, overlap_s=OVERLAP_S):
-    """Merge overlapping prediction chunks with linear crossfade."""
+    # Merge overlapping prediction chunks with linear crossfade.
     if len(batch_preds) == 1:
         return batch_preds[0][2]
 
