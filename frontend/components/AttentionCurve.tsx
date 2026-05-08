@@ -27,6 +27,10 @@ const MOMENT_COLORS: Record<KeyMoment["type"], string> = {
   emotional_peak: "#fbbf24",
   dropoff_risk: "#f87171",
   recovery: "#60a5fa",
+  act_boundary: "#a78bfa",
+  climax_peak: "#f43f5e",
+  reversal_point: "#38bdf8",
+  frisson_peak: "#e879f9",
 };
 
 const MOMENT_LABELS: Record<KeyMoment["type"], string> = {
@@ -35,6 +39,10 @@ const MOMENT_LABELS: Record<KeyMoment["type"], string> = {
   emotional_peak: "Emotion",
   dropoff_risk: "Drop-off",
   recovery: "Recovery",
+  act_boundary: "Act Break",
+  climax_peak: "Climax",
+  reversal_point: "Reversal",
+  frisson_peak: "Frisson",
 };
 
 interface TooltipState {
@@ -43,6 +51,23 @@ interface TooltipState {
   attention: number;
   emotion?: number;
   moment?: KeyMoment;
+}
+
+// Aggregate curve data into fixed-size bins for long-form content rendering
+function aggregateCurve(data: number[], binSize: number): number[] {
+  const bins: number[] = [];
+  for (let i = 0; i < data.length; i += binSize) {
+    const slice = data.slice(i, Math.min(i + binSize, data.length));
+    bins.push(slice.reduce((a, b) => a + b, 0) / slice.length);
+  }
+  return bins;
+}
+
+// Format seconds as MM:SS
+function formatMMSS(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 export function AttentionCurve({
@@ -92,7 +117,16 @@ export function AttentionCurve({
     const pad = padRef.current;
     const plotW = w - pad.left - pad.right;
     const plotH = h - pad.top - pad.bottom;
-    const n = attentionCurve.length;
+    const rawLen = attentionCurve.length;
+
+    // Aggregate to 10-second bins for long content (>600 data points)
+    const binSize = rawLen > 600 ? 10 : 1;
+    const displayAttn = binSize > 1 ? aggregateCurve(attentionCurve, binSize) : attentionCurve;
+    const displayEmot = emotionCurve && emotionCurve.length === rawLen
+      ? (binSize > 1 ? aggregateCurve(emotionCurve, binSize) : emotionCurve)
+      : undefined;
+    const n = displayAttn.length;
+    const useMinuteLabels = rawLen > 300;
 
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = chartBg();
@@ -129,12 +163,16 @@ export function AttentionCurve({
     [0, 25, 50, 75, 100].forEach((v) => ctx.fillText(String(v), pad.left - 6, yScale(v) + 3));
     ctx.textAlign = "center";
     const labelEvery = Math.max(1, Math.floor(n / 8));
-    for (let i = 0; i < n; i += labelEvery) ctx.fillText(`${i}s`, xScale(i), h - 6);
+    for (let i = 0; i < n; i += labelEvery) {
+      const realSeconds = i * binSize;
+      const label = useMinuteLabels ? formatMMSS(realSeconds) : `${realSeconds}s`;
+      ctx.fillText(label, xScale(i), h - 6);
+    }
 
     // Emotion curve
-    if (emotionCurve && emotionCurve.length === n) {
+    if (displayEmot && displayEmot.length === n) {
       ctx.beginPath();
-      emotionCurve.forEach((v, i) => { i === 0 ? ctx.moveTo(xScale(i), yScale(v)) : ctx.lineTo(xScale(i), yScale(v)); });
+      displayEmot.forEach((v, i) => { i === 0 ? ctx.moveTo(xScale(i), yScale(v)) : ctx.lineTo(xScale(i), yScale(v)); });
       ctx.strokeStyle = chartEmotionLine();
       ctx.lineWidth = 1.5;
       ctx.stroke();
@@ -142,7 +180,7 @@ export function AttentionCurve({
 
     // Attention curve
     ctx.beginPath();
-    attentionCurve.forEach((v, i) => { i === 0 ? ctx.moveTo(xScale(i), yScale(v)) : ctx.lineTo(xScale(i), yScale(v)); });
+    displayAttn.forEach((v, i) => { i === 0 ? ctx.moveTo(xScale(i), yScale(v)) : ctx.lineTo(xScale(i), yScale(v)); });
     ctx.strokeStyle = chartLine();
     ctx.lineWidth = 2.5;
     ctx.lineCap = "round";
@@ -161,10 +199,11 @@ export function AttentionCurve({
     ctx.fillStyle = grad;
     ctx.fill();
 
-    // Key moment markers
+    // Key moment markers (map timestamp from raw seconds to binned index)
     keyMoments.forEach((m) => {
-      if (m.timestamp >= n) return;
-      const x = xScale(m.timestamp);
+      if (m.timestamp >= rawLen) return;
+      const binnedIdx = m.timestamp / binSize;
+      const x = xScale(binnedIdx);
       const y = yScale(attentionCurve[Math.floor(m.timestamp)] ?? 50);
       const mColor = MOMENT_COLORS[m.type] ?? "#fff";
       ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fillStyle = mColor + "15"; ctx.fill();
@@ -190,34 +229,43 @@ export function AttentionCurve({
       const pad = padRef.current;
       const plotW = w - pad.left - pad.right;
       const plotH = h - pad.top - pad.bottom;
-      const n = attentionCurve.length;
+      const rawLen = attentionCurve.length;
+
+      // Match binning from static chart
+      const binSize = rawLen > 600 ? 10 : 1;
+      const displayAttn = binSize > 1 ? aggregateCurve(attentionCurve, binSize) : attentionCurve;
+      const displayEmot = emotionCurve && emotionCurve.length === rawLen
+        ? (binSize > 1 ? aggregateCurve(emotionCurve, binSize) : emotionCurve)
+        : undefined;
+      const n = displayAttn.length;
 
       const xScale = (t: number) => pad.left + (t / (n - 1)) * plotW;
       const yScale = (v: number) => pad.top + plotH - (v / 100) * plotH;
 
       ctx.clearRect(0, 0, w, h);
 
-      let t: number; // float time
+      let t: number; // float time in binned-index space
       if (mouseX !== null) {
         if (mouseX < pad.left || mouseX > w - pad.right) return;
         t = ((mouseX - pad.left) / plotW) * (n - 1);
       } else if (time !== null) {
-        t = time;
+        // Convert raw playback time (seconds) to binned index
+        t = time / binSize;
       } else {
         return;
       }
 
       t = Math.max(0, Math.min(n - 1, t));
-      const intSecond = Math.floor(t);
+      const intIdx = Math.floor(t);
       // Interpolate attention value for smooth movement
-      const frac = t - intSecond;
-      const attnVal = intSecond < n - 1
-        ? attentionCurve[intSecond] * (1 - frac) + attentionCurve[intSecond + 1] * frac
-        : attentionCurve[intSecond];
-      const emotVal = emotionCurve && emotionCurve.length === n
-        ? (intSecond < n - 1
-          ? emotionCurve[intSecond] * (1 - frac) + emotionCurve[intSecond + 1] * frac
-          : emotionCurve[intSecond])
+      const frac = t - intIdx;
+      const attnVal = intIdx < n - 1
+        ? displayAttn[intIdx] * (1 - frac) + displayAttn[intIdx + 1] * frac
+        : displayAttn[intIdx];
+      const emotVal = displayEmot && displayEmot.length === n
+        ? (intIdx < n - 1
+          ? displayEmot[intIdx] * (1 - frac) + displayEmot[intIdx + 1] * frac
+          : displayEmot[intIdx])
         : undefined;
 
       const snapX = xScale(t);
@@ -226,8 +274,8 @@ export function AttentionCurve({
       // Playhead: swept fill
       if (time !== null) {
         ctx.beginPath();
-        for (let i = 0; i <= intSecond; i++) {
-          i === 0 ? ctx.moveTo(xScale(i), yScale(attentionCurve[i])) : ctx.lineTo(xScale(i), yScale(attentionCurve[i]));
+        for (let i = 0; i <= intIdx; i++) {
+          i === 0 ? ctx.moveTo(xScale(i), yScale(displayAttn[i])) : ctx.lineTo(xScale(i), yScale(displayAttn[i]));
         }
         ctx.lineTo(snapX, snapY);
         ctx.lineTo(snapX, yScale(0));
@@ -279,8 +327,9 @@ export function AttentionCurve({
 
       // Tooltip (hover only)
       if (mouseX !== null) {
-        const nearbyMoment = keyMoments.find((m) => Math.abs(m.timestamp - t) <= 1);
-        setTooltip({ x: snapX, second: intSecond, attention: attnVal, emotion: emotVal, moment: nearbyMoment });
+        const realSecond = Math.floor(t * binSize);
+        const nearbyMoment = keyMoments.find((m) => Math.abs(m.timestamp - realSecond) <= binSize);
+        setTooltip({ x: snapX, second: realSecond, attention: attnVal, emotion: emotVal, moment: nearbyMoment });
       }
     },
     [attentionCurve, emotionCurve, keyMoments, height]
@@ -318,9 +367,13 @@ export function AttentionCurve({
     const canvas = overlayRef.current;
     if (!canvas) return;
     const plotW = canvas.clientWidth - pad.left - pad.right;
-    const n = attentionCurve.length;
-    const t = ((mouseX - pad.left) / plotW) * (n - 1);
-    const clampedT = Math.max(0, Math.min(n - 1, t));
+    const rawLen = attentionCurve.length;
+    const binSize = rawLen > 600 ? 10 : 1;
+    const binnedN = binSize > 1 ? Math.ceil(rawLen / binSize) : rawLen;
+    const binnedT = ((mouseX - pad.left) / plotW) * (binnedN - 1);
+    // Convert binned index back to raw seconds for scrubbing
+    const realT = binnedT * binSize;
+    const clampedT = Math.max(0, Math.min(rawLen - 1, realT));
 
     if (isPlaying) {
       // Click while playing → seek to that point
@@ -363,7 +416,9 @@ export function AttentionCurve({
             </button>
             {(isPlaying || playbackTime > 0) && (
               <span className="text-[10px] text-brand-400 tabular-nums ml-1 font-medium">
-                {playbackTime.toFixed(1)}s / {(attentionCurve.length - 1)}s
+                {attentionCurve.length > 300
+                  ? `${formatMMSS(playbackTime)} / ${formatMMSS(attentionCurve.length - 1)}`
+                  : `${playbackTime.toFixed(1)}s / ${(attentionCurve.length - 1)}s`}
               </span>
             )}
           </div>
@@ -405,7 +460,7 @@ export function AttentionCurve({
           >
             <div className="rounded-xl p-3 min-w-[150px] border border-white/[0.1]" style={{ background: "rgba(15, 13, 20, 0.92)", boxShadow: "0 12px 40px rgba(0,0,0,0.6)" }}>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] text-white/40 uppercase tracking-wider font-medium">t = {tooltip.second}s</span>
+                <span className="text-[10px] text-white/40 uppercase tracking-wider font-medium">t = {attentionCurve.length > 300 ? formatMMSS(tooltip.second) : `${tooltip.second}s`}</span>
                 {tooltip.moment && (
                   <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={{ color: MOMENT_COLORS[tooltip.moment.type], backgroundColor: MOMENT_COLORS[tooltip.moment.type] + "20" }}>
                     {MOMENT_LABELS[tooltip.moment.type]}
