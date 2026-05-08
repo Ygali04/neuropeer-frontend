@@ -397,7 +397,7 @@ echo "Files downloaded."
 
 # Write the inference script
 cat > /tmp/inference.py << 'PYEOF'
-import io, os, sys, logging, json
+import io, os, sys, logging, json, subprocess, glob
 import numpy as np
 import pandas as pd
 import boto3
@@ -413,6 +413,10 @@ OUTPUT_KEY = "{output_s3_key}"
 SENTINEL_DONE = "{sentinel_done}"
 SENTINEL_ERROR = "{sentinel_error}"
 
+# TRIBE v2 context window and overlap for crossfade merging
+CHUNK_DURATION = 100  # seconds - TRIBE v2 context window
+OVERLAP = 10          # seconds overlap for consistency
+
 def s3():
     return boto3.client("s3",
         endpoint_url=S3_ENDPOINT,
@@ -421,123 +425,110 @@ def s3():
         region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
     )
 
-MAX_CHUNK_S = 300  # seconds per chunk
-OVERLAP_S = 15     # seconds of overlap for context continuity
+def infer_chunk(args):
+    cid, start_s, end_s, cpath = args
+    clog = logging.getLogger("chunk_%d" % cid)
+    try:
+        from tribev2 import TribeModel
+        m = TribeModel.from_pretrained("facebook/tribev2", cache_folder="/tmp/tribe_cache")
+        df = m.get_events_dataframe(video_path=cpath)
+        preds, segs = m.predict(events=df)
+        clog.info("Chunk %d done: shape=%s", cid, preds.shape)
+        return (cid, start_s, end_s, preds)
+    except Exception as e:
+        clog.error("Chunk %d failed: %s", cid, e)
+        return (cid, start_s, end_s, None)
 
-def chunked_predict(model, events_df, max_chunk_s=MAX_CHUNK_S, overlap_s=OVERLAP_S):
-    # Run TRIBE v2 in chunks to avoid OOM on long videos.
-    total_duration = events_df["onset"].max() + 1
+try:
+    # 1. Probe video duration
+    duration_result = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", VIDEO_PATH],
+        capture_output=True, text=True
+    )
+    total_duration = float(duration_result.stdout.strip())
+    log.info("Movie duration: %.0f seconds", total_duration)
 
-    if total_duration <= max_chunk_s:
-        # Short video — single pass
-        preds, segments = model.predict(events=events_df)
-        return preds, segments
+    # 2. Split video into chunks via ffmpeg
+    os.makedirs("/tmp/chunks", exist_ok=True)
+    chunk_specs = []  # (chunk_id, start_sec, end_sec, video_path)
 
-    log.info("Chunking %d seconds into %d-second windows with %d-second overlap",
-             int(total_duration), max_chunk_s, overlap_s)
+    start = 0
+    chunk_id = 0
+    while start < total_duration:
+        end = min(start + CHUNK_DURATION, total_duration)
+        chunk_path = "/tmp/chunks/chunk_%04d.mp4" % chunk_id
 
-    all_preds = []
-    chunk_start = 0
+        subprocess.run([
+            "ffmpeg", "-y", "-ss", str(start), "-i", VIDEO_PATH,
+            "-t", str(end - start), "-c:v", "libx264", "-c:a", "aac",
+            "-movflags", "+faststart", chunk_path
+        ], capture_output=True, check=True)
 
-    while chunk_start < total_duration:
-        chunk_end = min(chunk_start + max_chunk_s, total_duration)
+        chunk_specs.append((chunk_id, start, end, chunk_path))
+        log.info("  Created chunk %d: %.0f-%.0fs", chunk_id, start, end)
 
-        # Select events in this chunk's time range
-        mask = (events_df["onset"] >= chunk_start) & (events_df["onset"] < chunk_end)
-        chunk_df = events_df[mask].copy()
+        start += CHUNK_DURATION - OVERLAP
+        chunk_id += 1
 
-        if len(chunk_df) == 0:
-            chunk_start += max_chunk_s - overlap_s
+    log.info("Split into %d chunks", len(chunk_specs))
+
+    # 3. Run TRIBE v2 on each chunk sequentially (single-GPU, avoids VRAM contention)
+    log.info("Running TRIBE v2 on %d chunks...", len(chunk_specs))
+    results = []
+    for spec in chunk_specs:
+        result = infer_chunk(spec)
+        results.append(result)
+        if result[3] is not None:
+            log.info("Chunk %d/%d complete", result[0] + 1, len(chunk_specs))
+
+    # 4. Merge with linear crossfade in overlap regions
+    log.info("Merging %d chunk predictions...", len(results))
+    total_seconds = int(total_duration)
+    # Get vertex count from first successful result
+    n_vertices = 0
+    for r in results:
+        if r[3] is not None:
+            n_vertices = r[3].shape[1] if len(r[3].shape) > 1 else 1
+            break
+
+    merged = np.zeros((total_seconds, n_vertices), dtype=np.float32)
+    weights = np.zeros(total_seconds, dtype=np.float32)
+
+    for cid, start_s, end_s, preds in results:
+        if preds is None:
             continue
-
-        log.info("  Chunk %.0f-%.0fs (%d events)", chunk_start, chunk_end, len(chunk_df))
-        preds, segments = model.predict(events=chunk_df)
-        all_preds.append((chunk_start, chunk_end, preds))
-
-        chunk_start += max_chunk_s - overlap_s
-
-    # Merge with linear crossfade
-    return merge_overlapping(all_preds, total_duration), None
-
-
-def merge_overlapping(batch_preds, total_duration, overlap_s=OVERLAP_S):
-    # Merge overlapping prediction chunks with linear crossfade.
-    if len(batch_preds) == 1:
-        return batch_preds[0][2]
-
-    total_s = int(total_duration)
-    n_vertices = batch_preds[0][2].shape[1] if len(batch_preds[0][2].shape) > 1 else 1
-    merged = np.zeros((total_s, n_vertices), dtype=np.float32)
-    weights = np.zeros(total_s, dtype=np.float32)
-
-    for start, end, preds in batch_preds:
         n = preds.shape[0]
-        offset = int(start)
-
+        offset = int(start_s)
         for t in range(n):
             gt = offset + t
-            if gt >= total_s:
+            if gt >= total_seconds:
                 break
             # Linear ramp in overlap regions
-            if t < overlap_s:
-                w = t / overlap_s
-            elif t > n - overlap_s:
-                w = (n - t) / overlap_s
+            if t < OVERLAP:
+                w = t / OVERLAP
+            elif t > n - OVERLAP:
+                w = (n - t) / OVERLAP
             else:
                 w = 1.0
             w = max(0.0, min(1.0, w))
-            merged[gt] += preds[t] * w if len(preds.shape) > 1 else preds[t] * w
+            if len(preds.shape) > 1:
+                merged[gt] += preds[t] * w
+            else:
+                merged[gt] += float(preds[t]) * w
             weights[gt] += w
 
     nonzero = weights > 1e-8
-    merged[nonzero] /= weights[nonzero, np.newaxis] if len(merged.shape) > 1 else weights[nonzero]
-    return merged
-
-try:
-    from tribev2 import TribeModel
-    from neuralset.events.utils import standardize_events
-
-    # Load TRIBE v2 model
-    log.info("Loading TRIBE v2 model...")
-    model = TribeModel.from_pretrained("facebook/tribev2", cache_folder="/tmp/tribe_cache")
-    log.info("Model loaded successfully")
-
-    # Use pre-built events if available (avoids whisperx dependency)
-    if os.path.exists(EVENTS_PATH):
-        log.info("Loading pre-built events from %s", EVENTS_PATH)
-        df = pd.read_parquet(EVENTS_PATH)
-        df = standardize_events(df)
+    if len(merged.shape) > 1:
+        merged[nonzero] /= weights[nonzero, np.newaxis]
     else:
-        log.info("Generating events from video...")
-        df = model.get_events_dataframe(video_path=VIDEO_PATH)
-    log.info("Events: %d rows", len(df))
+        merged[nonzero] /= weights[nonzero]
 
-    # Run full multimodal prediction
-    log.info("Running TRIBE v2 full multimodal inference...")
-    preds_full, segments = chunked_predict(model, df)
-    log.info("Full predictions: shape=%s", preds_full.shape)
+    preds_full = merged
+    log.info("Merged predictions: shape=%s", preds_full.shape)
 
-    # Run modality ablations (video-only, audio-only, text-only)
-    predictions = {{"full": preds_full.astype(np.float32) if hasattr(preds_full, 'astype') else np.array(preds_full, dtype=np.float32)}}
-
-    for modality_name, ablation_kwargs in [
-        ("video_only", {{"audio_path": None}}),
-        ("audio_only", {{"video_path": None}}),
-        ("text_only",  {{"video_path": None, "audio_path": None}}),
-    ]:
-        log.info("Running ablation: %s", modality_name)
-        try:
-            df_ablated = model.get_events_dataframe(video_path=VIDEO_PATH)
-            # Zero out the ablated modality columns
-            for col, val in ablation_kwargs.items():
-                if col in df_ablated.columns and val is None:
-                    df_ablated[col] = ""
-            preds, _ = chunked_predict(model, df_ablated)
-            predictions[modality_name] = preds.astype(np.float32) if hasattr(preds, 'astype') else np.array(preds, dtype=np.float32)
-            log.info("  %s: shape=%s", modality_name, predictions[modality_name].shape)
-        except Exception as e:
-            log.warning("Ablation %s failed: %s — using full predictions as fallback", modality_name, e)
-            predictions[modality_name] = predictions["full"].copy()
+    # Build predictions dict (ablations skipped for now — full multimodal only)
+    predictions = {{"full": preds_full.astype(np.float32)}}
 
     # Upload predictions to S3
     log.info("Uploading predictions to S3...")
