@@ -193,27 +193,25 @@ def _datacrunch_create_instance(
     PREFERRED_TYPES = [
         # Single-GPU — cheapest, preferred (TRIBE v2 needs ~30GB VRAM)
         # Names are exact DataCrunch API strings observed in availability responses.
+        # CUDA compat: A100/L40S=sm_80/89, RTX6000Ada=sm_89, H100/H200=sm_90.
+        # B200/B300 (Blackwell sm_100) excluded — PyTorch build lacks kernels.
         "1A100.80G",
         "1A100.40G",
         "1L40S.48G",
-        "1RTX6000ADA.10V",     # FIN-01
+        "1RTX6000ADA.10V",     # FIN-01, Ada sm_89
         "1H100.80G",
         "1H100.80S.30V",       # FIN-02 naming variant
         "1H200.141S",
-        "1H200.141S.44V",      # FIN-02/FIN-03 naming variant
-        "1B200.30V",           # FIN-03
-        "1B300.30V",           # FIN-03
+        "1H200.141S.44V",      # FIN-02/FIN-03, Hopper sm_90
         # 2-GPU fallbacks (moderate cost)
         "2A100.80G",
         "2RTX6000ADA.20V",     # FIN-03
         "2RTXPRO6000.60V",
-        "2B200.60V",           # FIN-03
-        "2B300.60V",           # FIN-03
         # Multi-GPU fallbacks (expensive, last resort)
         "4A100.88V",
         "4RTXPRO6000.120V",
         "4H200.141S.176V",
-        "8H200.141S.176V",     # FIN-03 — expensive but guaranteed available
+        "8H200.141S.176V",     # FIN-03, Hopper sm_90
     ]
 
     avail = client.instances.get_availabilities()
