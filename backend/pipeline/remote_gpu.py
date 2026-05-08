@@ -421,6 +421,78 @@ def s3():
         region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
     )
 
+MAX_CHUNK_S = 300  # seconds per chunk
+OVERLAP_S = 15     # seconds of overlap for context continuity
+
+def chunked_predict(model, events_df, max_chunk_s=MAX_CHUNK_S, overlap_s=OVERLAP_S):
+    """Run TRIBE v2 in chunks to avoid OOM on long videos."""
+    total_duration = events_df["onset"].max() + 1
+
+    if total_duration <= max_chunk_s:
+        # Short video — single pass
+        preds, segments = model.predict(events=events_df)
+        return preds, segments
+
+    log.info("Chunking %d seconds into %d-second windows with %d-second overlap",
+             int(total_duration), max_chunk_s, overlap_s)
+
+    all_preds = []
+    chunk_start = 0
+
+    while chunk_start < total_duration:
+        chunk_end = min(chunk_start + max_chunk_s, total_duration)
+
+        # Select events in this chunk's time range
+        mask = (events_df["onset"] >= chunk_start) & (events_df["onset"] < chunk_end)
+        chunk_df = events_df[mask].copy()
+
+        if len(chunk_df) == 0:
+            chunk_start += max_chunk_s - overlap_s
+            continue
+
+        log.info("  Chunk %.0f-%.0fs (%d events)", chunk_start, chunk_end, len(chunk_df))
+        preds, segments = model.predict(events=chunk_df)
+        all_preds.append((chunk_start, chunk_end, preds))
+
+        chunk_start += max_chunk_s - overlap_s
+
+    # Merge with linear crossfade
+    return merge_overlapping(all_preds, total_duration), None
+
+
+def merge_overlapping(batch_preds, total_duration, overlap_s=OVERLAP_S):
+    """Merge overlapping prediction chunks with linear crossfade."""
+    if len(batch_preds) == 1:
+        return batch_preds[0][2]
+
+    total_s = int(total_duration)
+    n_vertices = batch_preds[0][2].shape[1] if len(batch_preds[0][2].shape) > 1 else 1
+    merged = np.zeros((total_s, n_vertices), dtype=np.float32)
+    weights = np.zeros(total_s, dtype=np.float32)
+
+    for start, end, preds in batch_preds:
+        n = preds.shape[0]
+        offset = int(start)
+
+        for t in range(n):
+            gt = offset + t
+            if gt >= total_s:
+                break
+            # Linear ramp in overlap regions
+            if t < overlap_s:
+                w = t / overlap_s
+            elif t > n - overlap_s:
+                w = (n - t) / overlap_s
+            else:
+                w = 1.0
+            w = max(0.0, min(1.0, w))
+            merged[gt] += preds[t] * w if len(preds.shape) > 1 else preds[t] * w
+            weights[gt] += w
+
+    nonzero = weights > 1e-8
+    merged[nonzero] /= weights[nonzero, np.newaxis] if len(merged.shape) > 1 else weights[nonzero]
+    return merged
+
 try:
     from tribev2 import TribeModel
     from neuralset.events.utils import standardize_events
@@ -442,7 +514,7 @@ try:
 
     # Run full multimodal prediction
     log.info("Running TRIBE v2 full multimodal inference...")
-    preds_full, segments = model.predict(events=df)
+    preds_full, segments = chunked_predict(model, df)
     log.info("Full predictions: shape=%s", preds_full.shape)
 
     # Run modality ablations (video-only, audio-only, text-only)
@@ -460,7 +532,7 @@ try:
             for col, val in ablation_kwargs.items():
                 if col in df_ablated.columns and val is None:
                     df_ablated[col] = ""
-            preds, _ = model.predict(events=df_ablated)
+            preds, _ = chunked_predict(model, df_ablated)
             predictions[modality_name] = preds.astype(np.float32) if hasattr(preds, 'astype') else np.array(preds, dtype=np.float32)
             log.info("  %s: shape=%s", modality_name, predictions[modality_name].shape)
         except Exception as e:
