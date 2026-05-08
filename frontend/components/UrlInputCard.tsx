@@ -13,6 +13,7 @@ const CONTENT_TYPES: { value: ContentType; label: string; desc: string; icon: st
   { value: "product_demo", label: "Product Demo", desc: "2–5 min · Memory", icon: "🎯" },
   { value: "conference_talk", label: "Conference Talk", desc: "3–10 min · Clarity", icon: "🎤" },
   { value: "podcast_audio", label: "Podcast Clip", desc: "1–5 min · Narration", icon: "🎧" },
+  { value: "feature_film", label: "Feature Film", desc: "60-180+ min · Narrative", icon: "🎬" },
   { value: "custom", label: "Custom", desc: "Configure weights", icon: "⚙" },
 ];
 

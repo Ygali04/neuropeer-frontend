@@ -4,6 +4,7 @@ export type ContentType =
   | "youtube_preroll"
   | "conference_talk"
   | "podcast_audio"
+  | "feature_film"
   | "custom";
 
 export type JobStatus =
@@ -34,7 +35,8 @@ export interface MetricScore {
 
 export interface KeyMoment {
   timestamp: number; // seconds
-  type: "best_hook" | "peak_engagement" | "emotional_peak" | "dropoff_risk" | "recovery";
+  type: "best_hook" | "peak_engagement" | "emotional_peak" | "dropoff_risk" | "recovery"
+    | "act_boundary" | "climax_peak" | "reversal_point" | "frisson_peak";
   label: string;
   score: number;
 }
