@@ -68,6 +68,32 @@ CONTENT_PRESETS: dict[ContentType, dict[str, float]] = {
 }
 
 
+# ── Cinema scoring weights (feature_film content type) ─────────────────────
+# 18 cinema-specific metrics weighted by narrative importance.
+# Sum = 1.02 (intentional micro-rounding; clipped to 100 at output).
+
+CINEMA_WEIGHTS: dict[str, float] = {
+    "narrative_absorption": 0.12,
+    "emotional_depth": 0.10,
+    "suspense_arc": 0.08,
+    "character_empathy": 0.08,
+    "attention_grip": 0.08,
+    "memory_imprint": 0.07,
+    "cinematic_frisson": 0.06,
+    "pacing_coherence": 0.06,
+    "cognitive_clarity": 0.06,
+    "visual_spectacle": 0.05,
+    "soundtrack_integration": 0.05,
+    "surprise_prediction_error": 0.04,
+    "opening_hook": 0.04,
+    "climax_impact": 0.04,
+    "resolution_satisfaction": 0.03,
+    "scene_transition_flow": 0.02,
+    "dialogue_engagement": 0.02,
+    "tonal_consistency": 0.02,
+}
+
+
 class NeuralScoreBreakdownResult(BaseModel):
     total: float
     hook_score: float
@@ -248,3 +274,51 @@ def detect_key_moments(
             seen_times.add(m.timestamp)
 
     return deduped
+
+
+# ── Cinema neural score (feature_film) ─────────────────────────────────────
+
+
+def compute_cinema_neural_score(
+    cinema_metrics: list[dict],
+) -> NeuralScoreBreakdownResult:
+    """Compute the NeuroPeer Neural Score for feature_film content type.
+
+    Uses CINEMA_WEIGHTS to produce a weighted composite from the 18 cinema
+    metrics produced by cinema_metrics.compute_cinema_metrics().
+
+    The 6-dimension breakdown is mapped from cinema metrics:
+      hook_score            → opening_hook
+      sustained_attention   → attention_grip
+      emotional_resonance   → emotional_depth
+      memory_encoding       → memory_imprint
+      aesthetic_quality     → visual_spectacle
+      cognitive_accessibility → cognitive_clarity
+
+    Args:
+        cinema_metrics: List of 18 dicts from compute_cinema_metrics(),
+                        each with 'key' and 'score' fields.
+
+    Returns:
+        NeuralScoreBreakdownResult with total and 6-dimension breakdown.
+    """
+    # Build key -> score lookup
+    scores_by_key = {m["key"]: m["score"] for m in cinema_metrics}
+
+    # Weighted composite across all 18 cinema metrics
+    total = sum(
+        scores_by_key.get(key, 50.0) * weight
+        for key, weight in CINEMA_WEIGHTS.items()
+    )
+    total = float(np.clip(total, 0, 100))
+
+    # Map cinema metrics to the 6 standard breakdown dimensions
+    return NeuralScoreBreakdownResult(
+        total=round(total, 1),
+        hook_score=round(scores_by_key.get("opening_hook", 50.0), 1),
+        sustained_attention=round(scores_by_key.get("attention_grip", 50.0), 1),
+        emotional_resonance=round(scores_by_key.get("emotional_depth", 50.0), 1),
+        memory_encoding=round(scores_by_key.get("memory_imprint", 50.0), 1),
+        aesthetic_quality=round(scores_by_key.get("visual_spectacle", 50.0), 1),
+        cognitive_accessibility=round(scores_by_key.get("cognitive_clarity", 50.0), 1),
+    )
