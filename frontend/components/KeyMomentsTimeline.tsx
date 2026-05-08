@@ -17,6 +17,10 @@ const MOMENT_CONFIG: Record<
   emotional_peak:  { color: "#fbbf24", icon: Heart, bg: "rgba(251, 191, 36, 0.06)" },
   dropoff_risk:    { color: "#f87171", icon: AlertTriangle, bg: "rgba(248, 113, 113, 0.06)" },
   recovery:        { color: "#60a5fa", icon: ArrowUpRight, bg: "rgba(96, 165, 250, 0.06)" },
+  act_boundary:    { color: "#a78bfa", icon: Clock, bg: "rgba(167, 139, 250, 0.06)" },
+  climax_peak:     { color: "#f43f5e", icon: TrendingUp, bg: "rgba(244, 63, 94, 0.06)" },
+  reversal_point:  { color: "#38bdf8", icon: ArrowUpRight, bg: "rgba(56, 189, 248, 0.06)" },
+  frisson_peak:    { color: "#e879f9", icon: Zap, bg: "rgba(232, 121, 249, 0.06)" },
 };
 
 interface Props {
