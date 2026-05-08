@@ -28,6 +28,11 @@ class Modality(str, Enum):
     TEXT_ONLY = "text_only"
 
 
+# ── Overlap batching constants ──────────────────────────────────────────────
+OVERLAP_S = 15.0  # seconds of overlap between batches for context continuity
+MAX_CHUNK_S = 300.0  # maximum effective (non-overlap) duration per batch
+
+
 # Lazy global — model is loaded once per worker process
 _model = None
 
@@ -110,3 +115,137 @@ def load_predictions(npz_path: Path) -> dict[Modality, np.ndarray]:
     """Load predictions from a .npz file."""
     data = np.load(str(npz_path))
     return {Modality(k): data[k] for k in data.files}
+
+
+# ── Overlap batching for long-form content (feature films) ──────────────────
+
+
+def merge_overlapping_predictions(
+    batch_predictions: list[tuple[float, float, np.ndarray]],
+    overlap_s: float = OVERLAP_S,
+) -> tuple[np.ndarray, list[float]]:
+    """Merge predictions from overlapping batches with linear crossfade.
+
+    Ported from cinema/tribe.py — handles the boundary artifacts that arise
+    when TRIBE v2's hemodynamic response function needs warm-up context.
+
+    Args:
+        batch_predictions: List of (start_sec, end_sec, predictions) tuples.
+                           predictions shape: (n_seconds, 20484).
+        overlap_s: Overlap duration in seconds.
+
+    Returns:
+        (merged_predictions, timestamps) where merged has shape
+        (total_unique_seconds, 20484).
+    """
+    if not batch_predictions:
+        return np.empty((0, 20484), dtype=np.float32), []
+
+    if len(batch_predictions) == 1:
+        start, end, preds = batch_predictions[0]
+        timestamps = [start + t for t in range(preds.shape[0])]
+        return preds, timestamps
+
+    # Sort by start time
+    batch_predictions.sort(key=lambda x: x[0])
+
+    # Find the global time range
+    global_start = batch_predictions[0][0]
+    global_end = max(bp[1] for bp in batch_predictions)
+    total_seconds = int(global_end - global_start)
+
+    merged = np.zeros((total_seconds, 20484), dtype=np.float32)
+    weights = np.zeros(total_seconds, dtype=np.float32)
+
+    for start, end, preds in batch_predictions:
+        n = preds.shape[0]
+        offset = int(start - global_start)
+
+        for t in range(n):
+            global_t = offset + t
+            if global_t >= total_seconds:
+                break
+
+            # Linear ramp-up over first overlap_s seconds (warm-up)
+            if t < overlap_s:
+                w = t / overlap_s
+            # Linear ramp-down over last overlap_s seconds
+            elif t > n - overlap_s:
+                w = (n - t) / overlap_s
+            else:
+                w = 1.0
+
+            w = max(0.0, min(1.0, w))
+            merged[global_t] += preds[t] * w
+            weights[global_t] += w
+
+    # Normalize by total weight (handles overlap blending)
+    nonzero = weights > 1e-8
+    merged[nonzero] /= weights[nonzero, np.newaxis]
+
+    timestamps = [global_start + t for t in range(total_seconds)]
+    return merged, timestamps
+
+
+def run_inference_with_overlap(
+    events_df: pd.DataFrame,
+    duration_s: float,
+    modality: Modality = Modality.FULL,
+    max_chunk_s: float = MAX_CHUNK_S,
+    overlap_s: float = OVERLAP_S,
+) -> np.ndarray:
+    """Run TRIBE v2 inference with overlap batching for long-form content.
+
+    When duration exceeds max_chunk_s, the events are split into overlapping
+    windows and predictions are merged with linear crossfade to eliminate
+    boundary artifacts from the hemodynamic response warm-up period.
+
+    For content <= max_chunk_s, this is equivalent to run_inference().
+
+    Args:
+        events_df: Events DataFrame for the full content.
+        duration_s: Total content duration in seconds.
+        modality: Which modality channels to use.
+        max_chunk_s: Maximum effective duration per batch (default 300s).
+        overlap_s: Overlap between adjacent batches (default 15s).
+
+    Returns:
+        Vertex predictions as float32 array of shape (n_timesteps, 20484).
+    """
+    if duration_s <= max_chunk_s:
+        return run_inference(events_df, modality)
+
+    # Split events into overlapping time windows
+    batch_predictions: list[tuple[float, float, np.ndarray]] = []
+    chunk_start = 0.0
+
+    while chunk_start < duration_s:
+        chunk_end = min(chunk_start + max_chunk_s, duration_s)
+
+        # Filter events DataFrame to this time window
+        if "onset" in events_df.columns:
+            mask = (events_df["onset"] >= chunk_start) & (events_df["onset"] < chunk_end)
+        elif "start" in events_df.columns:
+            mask = (events_df["start"] >= chunk_start) & (events_df["start"] < chunk_end)
+        else:
+            # Fall back to index-based slicing (1 Hz assumption)
+            start_idx = int(chunk_start)
+            end_idx = min(int(chunk_end), len(events_df))
+            mask = events_df.index.isin(range(start_idx, end_idx))
+
+        chunk_df = events_df.loc[mask].copy()
+        if len(chunk_df) == 0:
+            chunk_start = chunk_end - overlap_s
+            continue
+
+        preds = run_inference(chunk_df, modality)
+        batch_predictions.append((chunk_start, chunk_end, preds))
+
+        # Advance by (max_chunk_s - overlap_s) so adjacent batches overlap
+        chunk_start += max_chunk_s - overlap_s
+
+    if not batch_predictions:
+        return run_inference(events_df, modality)
+
+    merged, _timestamps = merge_overlapping_predictions(batch_predictions, overlap_s)
+    return merged
