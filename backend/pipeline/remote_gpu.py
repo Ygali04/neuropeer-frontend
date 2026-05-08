@@ -191,17 +191,29 @@ def _datacrunch_create_instance(
     # Single-GPU preferred (cheapest). Multi-GPU as last resort.
     # Cap at 4-GPU to avoid $30+/hr instances.
     PREFERRED_TYPES = [
-        "1A100.80G",           # $0.45/h spot — primary choice
-        "1A100.40G",           # $0.25/h spot
-        "1H100.80G",           # $0.80/h spot
-        "1L40S.48G",           # $0.32/h spot
-        "1H200.141S",          # $1.19/h spot
-        "2A100.80G",           # $0.90/h spot (2-GPU)
-        "2RTXPRO6000.60V",     # $1.18/h spot (2-GPU)
-        # Multi-GPU fallbacks (expensive but sometimes the only option)
-        "4A100.88V",           # $1.81/h spot (4-GPU, from FIN-01)
-        "4RTXPRO6000.120V",    # $2.37/h spot (4-GPU, from FIN-03)
-        "4H200.141S.176V",     # $4.75/h spot (4-GPU, from FIN-02)
+        # Single-GPU — cheapest, preferred (TRIBE v2 needs ~30GB VRAM)
+        # Names are exact DataCrunch API strings observed in availability responses.
+        "1A100.80G",
+        "1A100.40G",
+        "1L40S.48G",
+        "1RTX6000ADA.10V",     # FIN-01
+        "1H100.80G",
+        "1H100.80S.30V",       # FIN-02 naming variant
+        "1H200.141S",
+        "1H200.141S.44V",      # FIN-02/FIN-03 naming variant
+        "1B200.30V",           # FIN-03
+        "1B300.30V",           # FIN-03
+        # 2-GPU fallbacks (moderate cost)
+        "2A100.80G",
+        "2RTX6000ADA.20V",     # FIN-03
+        "2RTXPRO6000.60V",
+        "2B200.60V",           # FIN-03
+        "2B300.60V",           # FIN-03
+        # Multi-GPU fallbacks (expensive, last resort)
+        "4A100.88V",
+        "4RTXPRO6000.120V",
+        "4H200.141S.176V",
+        "8H200.141S.176V",     # FIN-03 — expensive but guaranteed available
     ]
 
     avail = client.instances.get_availabilities()
