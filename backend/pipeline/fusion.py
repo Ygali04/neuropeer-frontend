@@ -40,12 +40,12 @@ class NeuralContext(BaseModel):
     """Neural signal state at a specific timestamp."""
 
     timestamp: float
-    attention: float = Field(ge=0.0, le=1.0)
+    attention: float = Field(ge=0.0, le=100.0)
     attention_delta: float = Field(
         description="Change from previous second. Negative = drop."
     )
-    arousal: float = Field(ge=0.0, le=1.0)
-    cognitive_load: float = Field(ge=0.0, le=1.0)
+    arousal: float = Field(ge=0.0, le=100.0)
+    cognitive_load: float = Field(ge=0.0, le=100.0)
     dimension: str = Field(description="Which 6-dimension score this moment maps to")
     brain_region: str = Field(description="Brain region driving the signal")
     severity: str = Field(description="'critical' | 'moderate' | 'mild'")
@@ -199,11 +199,6 @@ def fuse(
     Returns:
         FusionResult with FusedMoment objects ready for the VLM reporter.
     """
-    # metric_engine returns curves on 0-100; NeuralContext fields are 0-1
-    attention_curve = attention_curve / 100.0
-    arousal_curve = arousal_curve / 100.0
-    cognitive_load_curve = cognitive_load_curve / 100.0
-
     fused_moments: list[FusedMoment] = []
     per_second = marengo.per_second if marengo else []
 
