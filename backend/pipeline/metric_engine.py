@@ -494,9 +494,9 @@ def compute_all_metrics(
     from backend.pipeline.tribe_inference import Modality as M
 
     full = predictions[M.FULL]
-    vid = predictions[M.VIDEO_ONLY]
-    aud = predictions[M.AUDIO_ONLY]
-    txt = predictions[M.TEXT_ONLY]
+    vid = predictions.get(M.VIDEO_ONLY, full)
+    aud = predictions.get(M.AUDIO_ONLY, full)
+    txt = predictions.get(M.TEXT_ONLY, full)
 
     metrics: list[MetricResult] = [
         # 2.1 Attention Capture
