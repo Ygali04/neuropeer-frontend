@@ -63,6 +63,21 @@ class Settings(BaseSettings):
     # Cheap model for simple naming tasks
     openrouter_cheap_model: str = "meta-llama/llama-3.2-1b-instruct:free"
 
+    # TwelveLabs Marengo (multimodal video understanding)
+    twelve_labs_api_key: str = ""
+    twelvelabs_api_key: str = ""  # alias
+    twelve_labs_index_id: str = ""
+    twelvelabs_index_id: str = ""  # alias
+
+    @model_validator(mode="after")
+    def resolve_twelvelabs_aliases(self):
+        """Support both TWELVE_LABS_API_KEY and TWELVELABS_API_KEY."""
+        if self.twelve_labs_api_key and not self.twelvelabs_api_key:
+            self.twelvelabs_api_key = self.twelve_labs_api_key
+        if self.twelve_labs_index_id and not self.twelvelabs_index_id:
+            self.twelvelabs_index_id = self.twelve_labs_index_id
+        return self
+
     # Inference
     device: str = "cuda"  # cuda / cpu
     temp_dir: str = "/tmp/neuropeer"

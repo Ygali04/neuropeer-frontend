@@ -246,18 +246,54 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
         neural_score = compute_neural_score(metrics, content_type_enum)
         key_moments = detect_key_moments(attn_curve, arousal_curve, cog_curve, predictions[Modality.FULL])
 
-        # ── Stage 5: AI Feedback generation ───────────────────────────────
+        # ── Stage 5: Fusion + VLM Report (or legacy AI feedback) ─────────
+        _publish_progress(job_id, "scoring", 0.86, "Fusing neural signals with visual context…")
+
+        from backend.clients.twelvelabs import get_twelvelabs_client
+        from backend.pipeline.fusion import fuse
+
+        # Try TwelveLabs for enriched visual/audio context
+        marengo_result = None
+        pegasus_analysis = None
+        tl_client = get_twelvelabs_client()
+        if tl_client:
+            import asyncio as _asyncio
+            loop = _asyncio.new_event_loop()
+            _asyncio.set_event_loop(loop)
+            try:
+                _publish_progress(job_id, "scoring", 0.87, "Analyzing video with TwelveLabs…")
+                marengo_result = loop.run_until_complete(tl_client.analyze_video(url, media.duration_seconds))
+                logger.info("TwelveLabs Marengo analysis complete for job %s", job_id)
+
+                # For feature films, also get Pegasus scene-level analysis
+                if content_type == "feature_film" and marengo_result:
+                    _publish_progress(job_id, "scoring", 0.875, "Getting film editor scene analysis…")
+                    pegasus_analysis = loop.run_until_complete(
+                        tl_client.analyze_per_scene(marengo_result.video_id, media.duration_seconds)
+                    )
+                    logger.info("Pegasus scene analysis: %d chars", len(pegasus_analysis or ""))
+            except Exception as exc:
+                logger.warning("TwelveLabs analysis failed (non-fatal): %s", exc)
+            finally:
+                try:
+                    loop.run_until_complete(tl_client.close())
+                except Exception:
+                    pass
+                loop.close()
+
+        # Fuse TRIBE v2 signals with Marengo context
+        fusion_result = fuse(
+            key_moments=key_moments,
+            attention_curve=attn_curve,
+            arousal_curve=arousal_curve,
+            cognitive_load_curve=cog_curve,
+            neural_score=neural_score,
+            metrics=metrics,
+            marengo=marengo_result,
+        )
+
+        # Generate AI feedback — VLM reporter if fusion available, legacy otherwise
         _publish_progress(job_id, "scoring", 0.88, "Generating AI improvement strategies…")
-
-        from backend.pipeline.ai_feedback import generate_ai_feedback
-
-        _ai_input = {
-            "content_type": content_type,
-            "duration_seconds": media.duration_seconds,
-            "neural_score": neural_score.model_dump(),
-            "metrics": [m.model_dump() for m in metrics],
-            "key_moments": [km.model_dump() for km in key_moments],
-        }
 
         parent_result_data = None
         if parent_job_id:
@@ -265,7 +301,26 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
             if raw_parent:
                 parent_result_data = json.loads(raw_parent)
 
-        ai_feedback = generate_ai_feedback(_ai_input, parent_result_data)
+        if fusion_result.fused_moments:
+            from backend.pipeline.vlm_reporter import generate_vlm_report
+            ai_feedback = generate_vlm_report(
+                fusion_result,
+                content_type=content_type,
+                duration_s=media.duration_seconds,
+                parent_result=parent_result_data,
+                pegasus_analysis=pegasus_analysis,
+            )
+        else:
+            # No key moments detected — fall back to legacy AI feedback
+            from backend.pipeline.ai_feedback import generate_ai_feedback
+            _ai_input = {
+                "content_type": content_type,
+                "duration_seconds": media.duration_seconds,
+                "neural_score": neural_score.model_dump(),
+                "metrics": [m.model_dump() for m in metrics],
+                "key_moments": [km.model_dump() for km in key_moments],
+            }
+            ai_feedback = generate_ai_feedback(_ai_input, parent_result_data)
 
         # ── Stage 6: Campaign naming (first video in group only) ──────────
         campaign_name = None

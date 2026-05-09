@@ -58,8 +58,14 @@ def _run_locally(
     events_df: pd.DataFrame,
 ) -> tuple[dict[Modality, np.ndarray], str]:
     """Run all 4 TRIBE v2 passes on the local machine."""
-    logger.info("Running TRIBE v2 locally for job %s", job_id)
-    predictions = run_all_modalities(events_df)
+    if settings.inference_backend == "mock":
+        logger.info("Mock TRIBE v2 for job %s (%d events)", job_id, len(events_df))
+        n_timesteps = max(len(events_df), 1)
+        mock_preds = np.random.randn(n_timesteps, 20484).astype(np.float32) * 0.3
+        predictions = {m: mock_preds.copy() for m in Modality}
+    else:
+        logger.info("Running TRIBE v2 locally for job %s", job_id)
+        predictions = run_all_modalities(events_df)
 
     buf = io.BytesIO()
     np.savez_compressed(buf, **{m.value: arr for m, arr in predictions.items()})
