@@ -197,27 +197,33 @@ def _datacrunch_create_instance(
     # Single-GPU preferred (cheapest). Multi-GPU as last resort.
     # Cap at 4-GPU to avoid $30+/hr instances.
     PREFERRED_TYPES = [
-        # Single-GPU — cheapest, preferred (TRIBE v2 needs ~30GB VRAM)
-        # Names are exact DataCrunch API strings observed in availability responses.
-        # CUDA compat: A100/L40S=sm_80/89, RTX6000Ada=sm_89, H100/H200=sm_90.
+        # Single-GPU — cheapest first. TRIBE v2 needs ~30GB VRAM.
+        # Both old-format (e.g. 1A100.80G) and new Verda-format (e.g.
+        # 1A100.22V) are listed — API may return either depending on region.
+        # CUDA compat: A6000/A100=sm_80, L40S/RTX6000Ada=sm_89, H100/H200=sm_90.
         # B200/B300 (Blackwell sm_100) excluded — PyTorch build lacks kernels.
-        "1A100.80G",
-        "1A100.40G",
-        "1L40S.48G",
-        "1RTX6000ADA.10V",     # FIN-01, Ada sm_89
-        "1H100.80G",
-        "1H100.80S.30V",       # FIN-02 naming variant
-        "1H200.141S",
-        "1H200.141S.44V",      # FIN-02/FIN-03, Hopper sm_90
+        # RTX PRO 6000 (Blackwell) uses sm_100 too — excluded for same reason.
+        "1A6000.10V",          # A6000 48GB, ~$0.49/hr — cheapest viable
+        "1A100.40S.22V",       # A100 40GB SXM4, ~$0.72/hr
+        "1A100.40G",           # A100 40GB old naming
+        "1RTX6000ADA.10V",     # RTX 6000 Ada 48GB, ~$0.83/hr, sm_89
+        "1L40S.20V",           # L40S 48GB new naming, ~$0.91/hr
+        "1L40S.48G",           # L40S 48GB old naming
+        "1A100.22V",           # A100 80GB SXM4 new naming, ~$1.29/hr
+        "1A100.80G",           # A100 80GB old naming
+        "1H100.80S.30V",       # H100 80GB SXM5 FIN-02, ~$2.29/hr
+        "1H100.80S.32V",       # H100 80GB SXM5 variant, ~$2.29/hr
+        "1H100.80G",           # H100 80GB old naming
+        "1H200.141S.44V",      # H200 141GB SXM5, ~$3.39/hr
+        "1H200.141S",          # H200 old naming
         # 2-GPU fallbacks (moderate cost)
         "2A100.80G",
-        "2RTX6000ADA.20V",     # FIN-03
+        "2RTX6000ADA.20V",
         "2RTXPRO6000.60V",
-        # Multi-GPU fallbacks (expensive, last resort)
+        # 4-GPU last resort (cap here to avoid $30+/hr)
         "4A100.88V",
         "4RTXPRO6000.120V",
         "4H200.141S.176V",
-        "8H200.141S.176V",     # FIN-03, Hopper sm_90
     ]
 
     avail = client.instances.get_availabilities()
@@ -400,6 +406,38 @@ except:
     print('No pre-built events, will generate from video')
 "
 echo "Files downloaded."
+
+# VRAM validation — fail fast if GPU has insufficient memory for TRIBE v2
+echo "Checking GPU VRAM..."
+GPU_MEM_MB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d ' ')
+if [ -z "$GPU_MEM_MB" ]; then
+    echo "ERROR: nvidia-smi not found or no GPU detected"
+    python3 -c "
+import boto3, os
+s3 = boto3.client('s3', endpoint_url=os.environ.get('S3_ENDPOINT_URL') or None,
+    aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+    aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
+    region_name=os.environ.get('AWS_DEFAULT_REGION', 'us-east-1'))
+s3.put_object(Bucket=os.environ['S3_BUCKET'], Key='{sentinel_error}',
+    Body=b'No GPU detected by nvidia-smi')
+"
+    exit 1
+fi
+MIN_VRAM_MB=28000
+echo "GPU VRAM: ${{GPU_MEM_MB}} MB (minimum: ${{MIN_VRAM_MB}} MB)"
+if [ "$GPU_MEM_MB" -lt "$MIN_VRAM_MB" ]; then
+    echo "ERROR: GPU has ${{GPU_MEM_MB}} MB VRAM, need >= ${{MIN_VRAM_MB}} MB for TRIBE v2"
+    python3 -c "
+import boto3, os
+s3 = boto3.client('s3', endpoint_url=os.environ.get('S3_ENDPOINT_URL') or None,
+    aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+    aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
+    region_name=os.environ.get('AWS_DEFAULT_REGION', 'us-east-1'))
+s3.put_object(Bucket=os.environ['S3_BUCKET'], Key='{sentinel_error}',
+    Body=b'GPU VRAM insufficient: ${{GPU_MEM_MB}} MB < ${{MIN_VRAM_MB}} MB required for TRIBE v2')
+"
+    exit 1
+fi
 
 # Write the inference script
 cat > /tmp/inference.py << 'PYEOF'
