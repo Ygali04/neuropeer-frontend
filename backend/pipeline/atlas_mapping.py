@@ -115,7 +115,14 @@ def aggregate_roi_timeseries(
         (n_timesteps,) float32 array — mean activation across ROI vertices
     """
     indices = get_roi_vertex_indices(roi_name)
-    return predictions[:, indices].mean(axis=1)
+    # Guard against 1D predictions or shape mismatches from GPU inference
+    if predictions.ndim < 2 or predictions.shape[1] == 0:
+        return np.zeros(predictions.shape[0], dtype=np.float32)
+    max_idx = predictions.shape[1]
+    valid_indices = [i for i in indices if i < max_idx]
+    if not valid_indices:
+        return np.zeros(predictions.shape[0], dtype=np.float32)
+    return predictions[:, valid_indices].mean(axis=1)
 
 
 def aggregate_all_rois(predictions: np.ndarray) -> dict[str, np.ndarray]:
