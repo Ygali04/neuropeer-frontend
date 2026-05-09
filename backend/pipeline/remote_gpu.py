@@ -203,14 +203,14 @@ def _datacrunch_create_instance(
         # CUDA compat: A6000/A100=sm_80, L40S/RTX6000Ada=sm_89, H100/H200=sm_90.
         # B200/B300 (Blackwell sm_100) excluded — PyTorch build lacks kernels.
         # RTX PRO 6000 (Blackwell) uses sm_100 too — excluded for same reason.
-        "1A6000.10V",          # A6000 48GB, ~$0.49/hr — cheapest viable
+        "1A100.22V",           # A100 80GB SXM4 new naming, ~$1.29/hr — most reliable
+        "1A100.80G",           # A100 80GB old naming
+        "1RTX6000ADA.10V",     # RTX 6000 Ada 48GB, ~$0.83/hr, sm_89
         "1A100.40S.22V",       # A100 40GB SXM4, ~$0.72/hr
         "1A100.40G",           # A100 40GB old naming
-        "1RTX6000ADA.10V",     # RTX 6000 Ada 48GB, ~$0.83/hr, sm_89
         "1L40S.20V",           # L40S 48GB new naming, ~$0.91/hr
         "1L40S.48G",           # L40S 48GB old naming
-        "1A100.22V",           # A100 80GB SXM4 new naming, ~$1.29/hr
-        "1A100.80G",           # A100 80GB old naming
+        "1A6000.10V",          # A6000 48GB — OS image compat issues, try last
         "1H100.80S.30V",       # H100 80GB SXM5 FIN-02, ~$2.29/hr
         "1H100.80S.32V",       # H100 80GB SXM5 variant, ~$2.29/hr
         "1H100.80G",           # H100 80GB old naming
