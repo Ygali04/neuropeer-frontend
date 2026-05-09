@@ -182,12 +182,20 @@ def get_system_prompt(content_type: str) -> str:
     return SYSTEM_PROMPT
 
 
-def _build_user_prompt(fusion: FusionResult, content_type: str, duration_s: float, pegasus_analysis: str | None = None) -> str:
+def _build_user_prompt(fusion: FusionResult, content_type: str, duration_s: float, pegasus_analysis: str | None = None, screenplay_context: str | None = None) -> str:
     """Build the user prompt from fusion result."""
     ns = fusion.neural_score
     lines = [
         f"Video: {content_type.replace('_', ' ')} ({duration_s:.0f}s)",
     ]
+
+    if screenplay_context:
+        lines.append("")
+        lines.append("SCREENPLAY / CHARACTER GUIDE:")
+        lines.append("Use these character names and plot details to identify who is on screen.")
+        lines.append("Match visual descriptions from Pegasus to these named characters.")
+        lines.append(screenplay_context)
+        lines.append("")
 
     if pegasus_analysis:
         lines.append("")
@@ -272,6 +280,7 @@ def generate_vlm_report(
     duration_s: float = 0.0,
     parent_result: dict | None = None,
     pegasus_analysis: str | None = None,
+    screenplay_context: str | None = None,
 ) -> dict[str, Any]:
     """Generate an enriched VLM report from fused neural + visual/audio context.
 
@@ -281,7 +290,7 @@ def generate_vlm_report(
 
     Falls back from MiniMax M2.7 to Claude Haiku if the primary model fails.
     """
-    user_prompt = _build_user_prompt(fusion, content_type, duration_s, pegasus_analysis=pegasus_analysis)
+    user_prompt = _build_user_prompt(fusion, content_type, duration_s, pegasus_analysis=pegasus_analysis, screenplay_context=screenplay_context)
 
     if parent_result:
         pns = parent_result.get("neural_score", {})

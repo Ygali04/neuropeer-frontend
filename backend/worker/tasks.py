@@ -301,6 +301,30 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
             if raw_parent:
                 parent_result_data = json.loads(raw_parent)
 
+        # Load screenplay/character guide if available for this movie
+        screenplay_context = None
+        if content_type == "feature_film":
+            from pathlib import Path as _Path
+            # Look for character guide in cinema/data/ (keyed by any part of the URL)
+            cinema_data = _Path(__file__).resolve().parent.parent.parent.parent / "ugc-peer" / "cinema" / "data"
+            for guide_file in cinema_data.glob("*-character-guide.txt"):
+                try:
+                    screenplay_context = guide_file.read_text()
+                    logger.info("Loaded screenplay context: %s (%d chars)", guide_file.name, len(screenplay_context))
+                    break
+                except Exception:
+                    pass
+            if not screenplay_context:
+                # Try relative to work_dir
+                for p in [_Path.home() / "ugc-peer" / "cinema" / "data"]:
+                    for guide_file in p.glob("*-character-guide.txt"):
+                        try:
+                            screenplay_context = guide_file.read_text()
+                            logger.info("Loaded screenplay context: %s", guide_file.name)
+                            break
+                        except Exception:
+                            pass
+
         if fusion_result.fused_moments:
             from backend.pipeline.vlm_reporter import generate_vlm_report
             ai_feedback = generate_vlm_report(
@@ -309,6 +333,7 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
                 duration_s=media.duration_seconds,
                 parent_result=parent_result_data,
                 pegasus_analysis=pegasus_analysis,
+                screenplay_context=screenplay_context,
             )
         else:
             # No key moments detected — fall back to legacy AI feedback
