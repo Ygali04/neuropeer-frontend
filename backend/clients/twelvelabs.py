@@ -140,14 +140,12 @@ class TwelveLabsClient:
         raise TimeoutError(f"TwelveLabs indexing timed out after {timeout}s")
 
     async def generate_text(self, video_id: str, prompt: str) -> str:
-        """Generate text from video using Marengo's generate endpoint."""
-        client = await self._get_client()
-        resp = await client.post(
-            "/generate",
-            json={"video_id": video_id, "prompt": prompt},
-        )
-        resp.raise_for_status()
-        return resp.json().get("data", "")
+        """Generate text from video using /analyze streaming endpoint.
+
+        The old /generate endpoint is deprecated. This delegates to
+        analyze_scene which handles the streaming response format.
+        """
+        return await self.analyze_scene(video_id, prompt)
 
     async def search_moments(
         self, query: str, video_id: str
