@@ -476,8 +476,36 @@ def infer_chunk(args):
         from tribev2 import TribeModel
         m = TribeModel.from_pretrained("facebook/tribev2", cache_folder="/tmp/tribe_cache")
         df = m.get_events_dataframe(video_path=cpath)
-        preds, segs = m.predict(events=df)
-        clog.info("Chunk %d done: shape=%s", cid, preds.shape)
+        result = m.predict(events=df)
+        # Diagnostic: inspect what model.predict() actually returns
+        clog.info("DIAG: predict() returned type=%s", type(result))
+        if isinstance(result, tuple):
+            clog.info("DIAG: tuple length=%d", len(result))
+            for i, item in enumerate(result):
+                clog.info("DIAG: result[%d] type=%s shape=%s", i, type(item), getattr(item, 'shape', 'N/A'))
+                if isinstance(item, dict):
+                    for k, v in item.items():
+                        clog.info("DIAG: result[%d]['%s'] shape=%s", i, k, getattr(v, 'shape', 'N/A'))
+            preds = result[0]
+        else:
+            preds = result
+            clog.info("DIAG: single return shape=%s", getattr(preds, 'shape', 'N/A'))
+
+        # If preds is dict, extract vertex array
+        if isinstance(preds, dict):
+            clog.info("DIAG: preds is dict keys=%s", list(preds.keys()))
+            for try_key in ['predictions', 'vertices', 'cortex', 'bold', 'fmri', 'output']:
+                if try_key in preds:
+                    preds = preds[try_key]
+                    clog.info("DIAG: extracted preds['%s'] shape=%s", try_key, preds.shape)
+                    break
+
+        # Ensure 2D
+        if hasattr(preds, 'ndim') and preds.ndim == 1:
+            preds = preds.reshape(-1, 1)
+            clog.info("DIAG: reshaped 1D to %s", preds.shape)
+
+        clog.info("Chunk %d done: shape=%s nonzero=%d/%d", cid, getattr(preds,'shape','?'), int(np.count_nonzero(preds)) if hasattr(preds,'size') else 0, int(preds.size) if hasattr(preds,'size') else 0)
         return (cid, start_s, end_s, preds)
     except Exception as e:
         clog.error("Chunk %d failed: %s", cid, e)
