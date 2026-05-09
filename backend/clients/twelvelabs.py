@@ -73,26 +73,60 @@ class TwelveLabsClient:
             await self._client.aclose()
 
     async def index_video(self, video_url: str) -> str:
-        """Submit a video URL for indexing. Returns video_id."""
+        """Submit a video for indexing via /tasks endpoint. Returns video_id.
+
+        Downloads the video to a temp file first, then uploads via multipart
+        form to /tasks (the task-based upload that works with all index types).
+        """
+        import tempfile
+        from pathlib import Path
+
         client = await self._get_client()
-        resp = await client.post(
-            f"/indexes/{self.index_id}/videos",
-            json={"url": video_url, "provide_transcription": True},
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        video_id = data.get("_id") or data.get("id", "")
-        logger.info("TwelveLabs: video indexed, id=%s", video_id)
-        return video_id
+
+        # Download video to temp file
+        logger.info("TwelveLabs: downloading video from %s", video_url)
+        async with httpx.AsyncClient(timeout=120.0) as dl:
+            dl_resp = await dl.get(video_url)
+            dl_resp.raise_for_status()
+
+        suffix = ".mp4"
+        if ".webm" in video_url:
+            suffix = ".webm"
+        elif ".mov" in video_url:
+            suffix = ".mov"
+
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(dl_resp.content)
+            tmp_path = tmp.name
+
+        try:
+            # Upload via /tasks multipart endpoint
+            with open(tmp_path, "rb") as f:
+                resp = await client.post(
+                    "/tasks",
+                    data={
+                        "index_id": self.index_id,
+                        "provide_transcription": "true",
+                    },
+                    files={"video_file": (f"video{suffix}", f, "video/mp4")},
+                    timeout=120.0,
+                )
+            resp.raise_for_status()
+            data = resp.json()
+            video_id = data.get("_id") or data.get("video_id", "")
+            logger.info("TwelveLabs: video task created, id=%s", video_id)
+            return video_id
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
 
     async def wait_for_indexing(
-        self, video_id: str, poll_interval: float = 5.0, timeout: float = 300.0
+        self, video_id: str, poll_interval: float = 5.0, timeout: float = 600.0
     ) -> None:
-        """Poll until video indexing is complete."""
+        """Poll /tasks/{id} until video indexing is complete."""
         client = await self._get_client()
         elapsed = 0.0
         while elapsed < timeout:
-            resp = await client.get(f"/indexes/{self.index_id}/videos/{video_id}")
+            resp = await client.get(f"/tasks/{video_id}")
             resp.raise_for_status()
             status = resp.json().get("status", "")
             if status == "ready":
