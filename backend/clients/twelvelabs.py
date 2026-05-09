@@ -63,7 +63,7 @@ class TwelveLabsClient:
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(
                 base_url=TWELVELABS_BASE,
-                headers={"x-api-key": self.api_key, "Content-Type": "application/json"},
+                headers={"x-api-key": self.api_key},
                 timeout=300.0,
             )
         return self._client
