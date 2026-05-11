@@ -123,7 +123,11 @@ def _persist_to_db(job_id, url, content_type, duration, neural_score, metrics_da
                 vertex_data_s3_key=vertex_key,
                 metrics_json=metrics_data,
                 key_moments_json=[km.model_dump() for km in key_moments],
-                modality_json=[mb.model_dump() for mb in modality_breakdown],
+                modality_json=[
+                    {k: (0.0 if (isinstance(v, float) and (v != v)) else v)
+                     for k, v in mb.model_dump().items()}
+                    for mb in modality_breakdown
+                ],
                 overarching_summary=ai_feedback.get("summary") if ai_feedback else None,
                 ai_summary=ai_feedback.get("summary") if ai_feedback else None,
                 ai_report_title=ai_feedback.get("report_title") if ai_feedback else None,
@@ -253,6 +257,8 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
         from backend.pipeline.fusion import fuse
 
         # Try TwelveLabs for enriched visual/audio context
+        # Use presigned S3 URL so TwelveLabs can access the video regardless of
+        # whether the original URL is localhost, private, or already expired.
         marengo_result = None
         pegasus_analysis = None
         tl_client = get_twelvelabs_client()
@@ -261,8 +267,17 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
             loop = _asyncio.new_event_loop()
             _asyncio.set_event_loop(loop)
             try:
+                from backend.pipeline.remote_gpu import _s3_presigned_url
+                video_s3_key = f"staging/{job_id}/video{media.video_path.suffix}"
+                try:
+                    tl_video_url = _s3_presigned_url(video_s3_key, expires_in=3600)
+                    logger.info("Using presigned S3 URL for TwelveLabs (%s)", video_s3_key)
+                except Exception:
+                    tl_video_url = url
+                    logger.warning("Presigned URL failed, falling back to original URL")
+
                 _publish_progress(job_id, "scoring", 0.87, "Analyzing video with TwelveLabs…")
-                marengo_result = loop.run_until_complete(tl_client.analyze_video(url, media.duration_seconds))
+                marengo_result = loop.run_until_complete(tl_client.analyze_video(tl_video_url, media.duration_seconds))
                 logger.info("TwelveLabs Marengo analysis complete for job %s", job_id)
 
                 # For feature films, also get Pegasus scene-level analysis
