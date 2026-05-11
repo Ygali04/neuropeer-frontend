@@ -20,7 +20,7 @@ const dmSans = DM_Sans({
 export const metadata: Metadata = {
   title: "NeuroPeer — Neural GTM Content Analyzer",
   description:
-    "Predict fMRI-level brain responses to your GTM content using Meta TRIBE v2. No participants required.",
+    "Predict fMRI-level brain responses to your GTM content using ORCLE. No participants required.",
   metadataBase: new URL("https://neuropeer-frontend.vercel.app"),
   openGraph: {
     title: "NeuroPeer — Predict How Brains Respond to Your Content",
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "NeuroPeer — Neural GTM Content Analyzer",
     description:
-      "Predict fMRI-level brain responses to your content using Meta TRIBE v2.",
+      "Predict fMRI-level brain responses to your content using ORCLE.",
   },
   icons: {
     icon: "/favicon.svg",

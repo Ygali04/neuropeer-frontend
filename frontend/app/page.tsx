@@ -89,9 +89,10 @@ export default function HomePage() {
           <div className="flex items-center gap-2 sm:gap-4">
             <Link href="/methodology" className="hidden sm:block text-sm text-white/40 hover:text-white/70 transition-colors">Methodology</Link>
             <Link href="/compare" className="hidden sm:block text-sm text-white/40 hover:text-white/70 transition-colors">A/B Compare</Link>
+            <Link href="/presentations" className="hidden sm:block text-sm text-white/40 hover:text-white/70 transition-colors">Presentations</Link>
             <Badge variant="default" className="hidden sm:inline-flex">
               <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
-              TRIBE v2
+              ORCLE
             </Badge>
             <ThemeToggle />
             <UserMenu />
@@ -134,7 +135,7 @@ export default function HomePage() {
           <div className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-amber-500/[0.06] border border-amber-500/10">
             <Clock className="w-3.5 h-3.5 text-amber-400/60 flex-shrink-0" />
             <p className="text-[11px] text-amber-400/60">
-              Full neural analysis takes ~7 minutes — includes GPU instance provisioning, TRIBE v2 inference (4 modality passes), and 20-metric computation.
+              Full neural analysis takes ~7 minutes — includes GPU instance provisioning, ORCLE inference (6 modality passes), and 20-metric computation.
             </p>
           </div>
         </div>
@@ -163,7 +164,7 @@ export default function HomePage() {
             <div className="flex-1 min-w-0 relative">
               <div className="flex items-center gap-2 mb-1">
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-brand-500/10 border border-brand-500/20 text-brand-400">
-                  TRIBE v2 Neural Analysis
+                  ORCLE Neural Analysis
                 </span>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 border border-amber-500/20 text-amber-400">
                   A100 GPU
@@ -180,7 +181,7 @@ export default function HomePage() {
             </div>
           </Link>
           <p className="text-center text-[10px] text-white/20 mt-2">
-            Real fMRI-predicted cortical activations from Meta TRIBE v2 on DataCrunch A100
+            Real fMRI-predicted cortical activations from ORCLE on DataCrunch A100
           </p>
         </div>
 
@@ -283,7 +284,7 @@ export default function HomePage() {
       {/* ── Footer ──────────────────────────────────────────────────────────── */}
       <footer className="border-t border-white/[0.04] px-6 py-5 text-center">
         <p className="text-xs text-white/20">
-          TRIBE v2 is licensed CC BY-NC 4.0 · NeuroPeer
+          Powered by ORCLE · NeuroPeer
         </p>
       </footer>
     </div>

@@ -143,7 +143,7 @@ export default async function Image() {
           }}
         >
           <span style={{ fontSize: 12, color: "rgba(255,255,255,0.15)" }}>
-            Powered by Meta TRIBE v2 · Neural Simulation Engine
+            Powered by ORCLE · Neural Simulation Engine
           </span>
         </div>
       </div>

@@ -63,7 +63,7 @@ export default async function Image() {
 
         {/* Footer */}
         <div style={{ position: "absolute", bottom: 18, fontSize: 11, color: "rgba(26,23,20,0.15)" }}>
-          Neural GTM Content Analysis · Powered by Meta TRIBE v2
+          Neural GTM Content Analysis · Powered by ORCLE
         </div>
       </div>
     ),

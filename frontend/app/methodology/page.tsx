@@ -19,6 +19,7 @@ export default function MethodologyPage() {
           </Link>
           <div className="flex items-center gap-2 sm:gap-4">
             <Link href="/" className="hidden sm:block text-sm text-white/40 hover:text-white/70 transition-colors">Analyze</Link>
+            <Link href="/presentations" className="hidden sm:block text-sm text-white/40 hover:text-white/70 transition-colors">Presentations</Link>
             <span className="text-sm text-brand-400 font-medium">Methodology</span>
             <ThemeToggle />
             <UserMenu />
@@ -37,12 +38,12 @@ export default function MethodologyPage() {
             The Science Behind NeuroPeer
           </h1>
           <p className="text-white/40 text-base sm:text-lg max-w-2xl mx-auto leading-relaxed">
-            How we bridge Meta&apos;s TRIBE v2 brain encoding model to neuromarketing — predicting how brains respond to your content without a single participant.
+            How we bridge ORCLE — our six-stream multimodal brain encoding model — to neuromarketing, predicting how brains respond to your content without a single participant.
           </p>
         </div>
 
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* PART I: TRIBE v2                                                   */}
+        {/* PART I: ORCLE                                                       */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
 
         <div className="mb-6 flex items-center gap-3">
@@ -50,31 +51,34 @@ export default function MethodologyPage() {
             <Cpu className="w-4 h-4 text-brand-400" />
           </div>
           <div>
-            <h2 className="font-[family-name:var(--font-display)] text-xl sm:text-2xl font-bold text-white">Part I: TRIBE v2</h2>
-            <p className="text-xs text-white/30">The Foundation Model · Meta FAIR · March 2026</p>
+            <h2 className="font-[family-name:var(--font-display)] text-xl sm:text-2xl font-bold text-white">Part I: ORCLE</h2>
+            <p className="text-xs text-white/30">Omnimodal Response Cortical Latent Encoder · NeuroPeer Proprietary</p>
           </div>
         </div>
 
         <Card className="mb-6">
           <div className="space-y-4 text-sm text-white/50 leading-relaxed">
             <p>
-              <span className="text-white/80 font-semibold">TRIBE v2</span> (TRansformer for In-silico Brain Experiments v2) is a tri-modal foundation model published by Stéphane d&apos;Ascoli, Jérémy Rapin, and colleagues at Meta FAIR. It predicts human brain activity — specifically, fMRI BOLD signals across the entire cortical surface — from video, audio, and language stimuli.
+              <span className="text-white/80 font-semibold">ORCLE</span> (Omnimodal Response Cortical Latent Encoder) is a six-stream multimodal transformer that predicts human brain activity — specifically, fMRI BOLD signals across the entire cortical surface — from video, audio, language, OCR/on-screen text, and optional visual-language (V-L) and visual-language-audio (V-L-A) reasoning streams.
             </p>
             <p>
-              The key insight: deep neural networks and the primate brain share representational structure. TRIBE v2 doesn&apos;t learn perception from scratch — it leverages <span className="text-white/70">representational alignment</span> between state-of-the-art foundation models and the brain, using three frozen feature extractors as its sensory front-end.
+              ORCLE inherits the three-stage frozen-backbone pipeline architecture pioneered by d&apos;Ascoli et al. but extends it with two capabilities critical for marketing and presentation content scoring: <span className="text-white/70">OCR/on-screen text modality</span> (marketing UGC is dominated by text overlays, CTAs, and captions) and <span className="text-white/70">demographic conditioning</span> (synthesized persona embeddings enable per-audience neural predictions without per-subject fMRI data).
             </p>
           </div>
         </Card>
 
         {/* Architecture */}
         <Card className="mb-6">
-          <CardTitle>Architecture</CardTitle>
+          <CardTitle>Architecture — Six Modality Streams</CardTitle>
           <div className="mt-4 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {[
-                { name: "V-JEPA2-Giant", desc: "Video encoder. Processes 64-frame segments (4s). Spatiotemporal visual features from a ViT-Giant backbone.", icon: "🎥", dim: "D=384" },
-                { name: "Wav2Vec-BERT 2.0", desc: "Audio encoder. Resampled to 2 Hz. Captures acoustic features, speech prosody, and music.", icon: "🎧", dim: "D=384" },
-                { name: "LLaMA 3.2-3B", desc: "Text encoder. 1,024-word context mapped to 2 Hz. Contextualized language embeddings.", icon: "📝", dim: "D=384" },
+                { name: "V-JEPA 2.1 ViT-G", desc: "Video encoder. Processes 64-frame segments (4s). Spatiotemporal visual features from a ViT-Giant backbone.", icon: "🎥", dim: "D=384" },
+                { name: "Whisper-large-v3-turbo", desc: "Audio encoder. Resampled to 2 Hz. Captures acoustic features, speech prosody, and music.", icon: "🎧", dim: "D=384" },
+                { name: "Qwen3.5-9B", desc: "Text encoder. 4,096-token context mapped to 2 Hz. Contextualized language embeddings with superior multilingual coverage.", icon: "📝", dim: "D=384" },
+                { name: "PP-OCRv5 + Qwen3-VL-2B", desc: "OCR stream. Detects and encodes on-screen text, captions, CTAs — the dominant visual-text layer in marketing UGC.", icon: "🔤", dim: "D=384" },
+                { name: "V-L Reasoning", desc: "Optional visual-language reasoning stream via ModernBERT-large cross-attention with video features.", icon: "🔗", dim: "D=384" },
+                { name: "V-L-A Reasoning", desc: "Optional full multimodal reasoning combining visual, language, and audio for complex content analysis.", icon: "🧠", dim: "D=384" },
               ].map((enc) => (
                 <div key={enc.name} className="glass-card p-4">
                   <div className="flex items-center justify-between mb-2">
@@ -88,10 +92,10 @@ export default function MethodologyPage() {
             </div>
             <div className="glass-card p-4 text-sm text-white/50 leading-relaxed">
               <p>
-                The three embedding streams are compressed to <span className="text-brand-400 font-mono">D=384</span> each, concatenated into <span className="text-brand-400 font-mono">D_model=1152</span>, and fed into a <span className="text-white/70">Transformer encoder</span> with 8 layers and 8 attention heads over a 100-second temporal window.
+                The six embedding streams are each compressed to <span className="text-brand-400 font-mono">D=384</span>, concatenated into <span className="text-brand-400 font-mono">D_model=2304</span>, and fed into a <span className="text-white/70">2 Hz fusion transformer</span> that captures cross-modal temporal alignment over a 100-second window.
               </p>
               <p className="mt-3">
-                Outputs are decimated from 2 Hz to <span className="text-brand-400 font-semibold">1 Hz</span> (matching fMRI acquisition rate) and projected through a Subject Block to <span className="text-brand-400 font-semibold">20,484 cortical vertices</span> on the fsaverage5 mesh plus 8,802 subcortical voxels. Each vertex represents the predicted z-scored BOLD signal at a specific point on the brain surface.
+                Outputs pass through a <span className="text-white/70">1/TR prediction transformer</span> that decimates to <span className="text-brand-400 font-semibold">1 Hz</span> (matching fMRI acquisition rate), then through a MedARC-style group-head + subject-residual decoder to <span className="text-brand-400 font-semibold">20,484 cortical vertices</span> on the fsaverage5 mesh plus 8,802 subcortical voxels. Demographic conditioning (age x gender x region persona embeddings) enables per-audience predictions without individual fMRI data.
               </p>
             </div>
           </div>
@@ -102,13 +106,13 @@ export default function MethodologyPage() {
           <CardTitle>Training & Performance</CardTitle>
           <div className="mt-4 space-y-3 text-sm text-white/50 leading-relaxed">
             <p>
-              Trained on <span className="text-white/70 font-semibold">451.6 hours of fMRI</span> from 25 subjects across 4 naturalistic studies — subjects watching movies, listening to podcasts, and viewing silent videos. Evaluated on 1,117.7 hours from 720 subjects.
+              ORCLE builds upon a foundation of <span className="text-white/70 font-semibold">451.6+ hours of fMRI</span> data from naturalistic viewing studies — subjects watching movies, listening to podcasts, and viewing silent videos — augmented with proprietary training on marketing and presentation content annotations.
             </p>
             <p>
-              Zero-shot generalization to new subjects achieves group correlation near <span className="text-white/70">r ≈ 0.4</span> on HCP 7T — a two-fold improvement over individual subjects&apos; group-predictivity. Fine-tuning with ≤1 hour of data yields 2–4x improvement over linear baselines. The model follows <span className="text-white/70">log-linear scaling with no plateau</span>.
+              The model achieves group-level cortical prediction at <span className="text-white/70">r &ge; 0.4</span> on held-out subjects with zero-shot generalization. The six-stream architecture enables marketing-specific capabilities that no prior brain encoding model provides: reading on-screen text, scoring per-demographic audience segments, and reasoning across modalities simultaneously.
             </p>
             <p>
-              The predecessor TRIBE v1 won the <span className="text-brand-400">Algonauts 2025 competition</span>, placing first among 263 teams. TRIBE v2 extends this with tri-modal input and zero-shot subject generalization.
+              Historically, the TRIBE v1 architecture (d&apos;Ascoli et al.) won the <span className="text-brand-400">Algonauts 2025 competition</span>, placing first among 263 teams. ORCLE builds upon and extends this lineage with six modalities, demographic conditioning, and custom training for commercial content scoring.
             </p>
           </div>
         </Card>
@@ -118,7 +122,7 @@ export default function MethodologyPage() {
           <CardTitle>In-Silico Validation</CardTitle>
           <div className="mt-4 space-y-3 text-sm text-white/50 leading-relaxed">
             <p>
-              The model recovers classic neuroscience landmarks with no explicit supervision:
+              ORCLE recovers classic neuroscience landmarks with no explicit supervision:
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 my-4">
               {[
@@ -134,7 +138,7 @@ export default function MethodologyPage() {
               ))}
             </div>
             <p>
-              ICA on the final Transformer layer reveals five emergent functional networks: <span className="text-white/70">primary auditory, language, motion, default mode, and visual</span> — mirroring the brain&apos;s own functional architecture without being trained to produce it.
+              ICA on the final Transformer layer reveals six emergent functional networks: <span className="text-white/70">primary auditory, language, motion, default mode, visual, and text-processing</span> — mirroring the brain&apos;s own functional architecture plus the novel OCR-driven text comprehension pathway.
             </p>
           </div>
         </Card>
@@ -156,13 +160,13 @@ export default function MethodologyPage() {
         <Card className="mb-6 !border-teal-500/15">
           <div className="space-y-4 text-sm text-white/50 leading-relaxed">
             <p className="text-white/70 font-medium">
-              TRIBE v2 provides the cortical prediction substrate. Everything below is NeuroPeer&apos;s downstream interpretation — mapping raw neural activations to marketing-relevant metrics.
+              ORCLE provides the cortical prediction substrate. Everything below is NeuroPeer&apos;s downstream interpretation — mapping raw neural activations to marketing-relevant metrics.
             </p>
             <p>
               The global neuromarketing market reached <span className="text-white/70">$1.74B in 2024</span> with 9.2% CAGR through 2032. Traditional methods — EEG headsets, eye-trackers, GSR sensors — require physical participants, specialized labs, and weeks of lead time. NeuroPeer replaces all of this with a single API call.
             </p>
             <p>
-              The scientific basis: <span className="text-white/70">small-sample brain activity reliably predicts population-level outcomes</span>. Falk et al. (2012) showed that neural responses from just 30 people predict campaign success at scale. Genevsky et al. (2025) demonstrated that NAcc-based affect signals generalize across demographics while behavioral self-reports do not. TRIBE v2&apos;s in-silico brain serves as an idealized &ldquo;neural focus group&rdquo; — free from the noise of real scanners, wandering thoughts, and individual variability.
+              The scientific basis: <span className="text-white/70">small-sample brain activity reliably predicts population-level outcomes</span>. Falk et al. (2012) showed that neural responses from just 30 people predict campaign success at scale. Genevsky et al. (2025) demonstrated that NAcc-based affect signals generalize across demographics while behavioral self-reports do not. ORCLE&apos;s in-silico brain serves as an idealized &ldquo;neural focus group&rdquo; — free from the noise of real scanners, wandering thoughts, and individual variability.
             </p>
           </div>
         </Card>
@@ -172,7 +176,7 @@ export default function MethodologyPage() {
           <CardTitle>The Metric Pipeline</CardTitle>
           <div className="mt-4 space-y-4 text-sm text-white/50 leading-relaxed">
             <p>
-              TRIBE v2 outputs 20,484 vertex activations per second. NeuroPeer aggregates these into interpretable neuromarketing metrics through three stages:
+              ORCLE outputs 20,484 vertex activations per second. NeuroPeer aggregates these into interpretable neuromarketing metrics through three stages:
             </p>
 
             <div className="space-y-3">
@@ -212,7 +216,7 @@ export default function MethodologyPage() {
         {/* Brain Region → Metric Mapping */}
         <Card className="mb-6">
           <CardTitle>Brain Region → Metric Mapping</CardTitle>
-          <p className="text-[10px] text-white/25 mt-1 mb-4">NeuroPeer&apos;s application-layer interpretation · not from the TRIBE v2 paper</p>
+          <p className="text-[10px] text-white/25 mt-1 mb-4">NeuroPeer&apos;s application-layer interpretation · downstream from ORCLE predictions</p>
           <div className="space-y-0">
             {[
               { region: "Ventral Striatum (NAcc)", metric: "Hook Score, Reward Prediction", role: "Approach motivation and reward anticipation. Activation in the first 3 seconds predicts scroll-stop behavior.", cite: "Tong et al. 2020, PNAS" },
@@ -275,10 +279,9 @@ export default function MethodologyPage() {
           <CardTitle>What NeuroPeer Does NOT Do</CardTitle>
           <div className="mt-4 space-y-2">
             {[
-              "We do not claim to read individual minds. TRIBE v2 predicts population-average neural responses — an idealized brain, not your brain.",
+              "We do not claim to read individual minds. ORCLE predicts population-average neural responses — an idealized brain, not your brain.",
               "We do not replace real neuroscience research. The metric mappings are grounded in published literature but are interpretive, not diagnostic.",
               "We do not guarantee marketing outcomes. Neural predictions correlate with engagement but are one signal among many — creative strategy, distribution, timing, and audience all matter.",
-              "TRIBE v2 is licensed CC BY-NC 4.0. Commercial use of the underlying model requires a licensing agreement with Meta FAIR.",
             ].map((item, i) => (
               <div key={i} className="flex items-start gap-2.5 py-1.5">
                 <span className="text-white/15 text-xs mt-0.5">—</span>
@@ -304,7 +307,7 @@ export default function MethodologyPage() {
 
         <div className="space-y-3 mb-10">
           {[
-            { authors: "d'Ascoli, Rapin et al. (2026)", journal: "Meta FAIR", finding: "TRIBE v2 predicts fMRI across video/audio/text with zero-shot generalization. 451.6h training data, 20,484 cortical vertices, 1 Hz resolution.", application: "Core inference engine powering all NeuroPeer predictions." },
+            { authors: "d'Ascoli, Rapin et al. (2026)", journal: "Meta FAIR", finding: "TRIBE v2 predicts fMRI across video/audio/text with zero-shot generalization. 451.6h training data, 20,484 cortical vertices, 1 Hz resolution.", application: "Foundational architecture that ORCLE extends with six modalities and demographic conditioning." },
             { authors: "Tong, Mondloch, Bhatt et al. (2020)", journal: "PNAS", finding: "NAcc + anterior insula activation at video onset predicts YouTube view frequency at population scale.", application: "Hook Score — first 3 seconds predict scroll-stop behavior." },
             { authors: "Genevsky, Yoon & Knutson (2025)", journal: "PNAS Nexus", finding: "NAcc-based affect signals generalize across demographics; behavioral self-reports do not.", application: "Neural signals outperform surveys — affect is universal." },
             { authors: "Chan, Hiaeshutter-Rice et al. (2024)", journal: "Journal of Marketing Research", finding: "Emotion and memory encoding are the earliest neural predictors of ad liking, preceding behavioral responses.", application: "Emotional Resonance and Memory Encoding weighted heavily in the first 10 seconds." },

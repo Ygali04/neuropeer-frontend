@@ -5,7 +5,7 @@ export const metadata: Metadata = {
   description: "Compare neural engagement scores across multiple video analyses side by side.",
   openGraph: {
     title: "A/B Neural Comparison — NeuroPeer",
-    description: "Side-by-side neural engagement analysis powered by Meta TRIBE v2.",
+    description: "Side-by-side neural engagement analysis powered by ORCLE.",
     type: "website",
     siteName: "NeuroPeer",
   },

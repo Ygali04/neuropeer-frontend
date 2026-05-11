@@ -35,7 +35,7 @@ const STAGES: {
   {
     status: "inferring",
     label: "Simulating Brain Response",
-    description: "Running TRIBE v2 across 20,484 cortical vertices",
+    description: "Running ORCLE across 20,484 cortical vertices",
     icon: Brain,
     estimate: "~2-5min",
   },

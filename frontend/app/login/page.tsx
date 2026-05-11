@@ -62,8 +62,6 @@ function LoginInner() {
 
           <p className="text-[10px] text-white/15 mt-6 leading-relaxed">
             By signing in, you agree to our Terms of Service.
-            <br />
-            TRIBE v2 is licensed CC BY-NC 4.0.
           </p>
         </div>
       </div>
