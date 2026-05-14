@@ -13,6 +13,11 @@ Clients send the key via:
     WS     : query param ``?api_key=<raw>`` (WebSockets drop custom headers
              through some proxies, so we accept both forms everywhere).
 
+First-party origins (the NeuroPeer Vercel frontend) are exempt from API-key
+requirements — CORS already restricts which browser origins can call
+cross-origin. Service-to-service callers (Nucleus, scripts) have no Origin
+header and must provide an API key.
+
 Storage: raw keys are never persisted. Only ``sha256(raw).hexdigest()`` lives
 in the ``api_keys`` table. Revoked keys remain rows with ``revoked_at`` set.
 """
@@ -22,6 +27,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+import re
 import uuid
 from datetime import datetime
 
@@ -31,6 +37,21 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.config import settings
 from backend.models.db import ApiKeyRow
+
+
+# ── first-party origins (kept in sync with CORS in main.py) ─────────────────
+
+_FIRST_PARTY_EXACT = {
+    "http://localhost:3000",
+    "https://neuropeer.app",
+}
+_FIRST_PARTY_REGEX = re.compile(r"^https://.*\.vercel\.app$")
+
+
+def _is_first_party_origin(origin: str | None) -> bool:
+    if not origin:
+        return False
+    return origin in _FIRST_PARTY_EXACT or bool(_FIRST_PARTY_REGEX.match(origin))
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -126,10 +147,17 @@ async def require_api_key(
     """Dependency for HTTP routes.
 
     - Dev mode (flag unset): returns a synthetic row, doesn't touch the DB.
+    - First-party browser origin: returns a synthetic row (CORS gates the
+      browser; service callers have no Origin and must use an API key).
     - Prod mode: looks up the raw key's sha256, rejects missing/unknown/
       revoked keys with 401. Schedules a fire-and-forget last_used_at bump.
     """
     if not _enforce():
+        return _dev_row()
+
+    # First-party browser requests are pre-authenticated by CORS.
+    origin = request.headers.get("origin")
+    if _is_first_party_origin(origin):
         return _dev_row()
 
     raw = _extract_raw_key(request, x_api_key, api_key)

@@ -121,3 +121,34 @@ def test_valid_key_via_query_param(monkeypatch):
     client = TestClient(_build_app())
     r = client.get(f"/protected?api_key={raw}")
     assert r.status_code == 200
+
+
+def test_first_party_origin_bypasses_key(monkeypatch):
+    monkeypatch.setenv("NEUROPEER_REQUIRE_API_KEY", "true")
+    client = TestClient(_build_app())
+    r = client.get("/protected", headers={"Origin": "https://neuropeer.app"})
+    assert r.status_code == 200
+    assert r.json()["label"] == "dev-bypass"
+
+
+def test_first_party_vercel_origin_bypasses_key(monkeypatch):
+    monkeypatch.setenv("NEUROPEER_REQUIRE_API_KEY", "true")
+    client = TestClient(_build_app())
+    r = client.get("/protected", headers={"Origin": "https://neuropeer-frontend.vercel.app"})
+    assert r.status_code == 200
+    assert r.json()["label"] == "dev-bypass"
+
+
+def test_localhost_origin_bypasses_key(monkeypatch):
+    monkeypatch.setenv("NEUROPEER_REQUIRE_API_KEY", "true")
+    client = TestClient(_build_app())
+    r = client.get("/protected", headers={"Origin": "http://localhost:3000"})
+    assert r.status_code == 200
+    assert r.json()["label"] == "dev-bypass"
+
+
+def test_unknown_origin_still_requires_key(monkeypatch):
+    monkeypatch.setenv("NEUROPEER_REQUIRE_API_KEY", "true")
+    client = TestClient(_build_app())
+    r = client.get("/protected", headers={"Origin": "https://evil.example.com"})
+    assert r.status_code == 401
