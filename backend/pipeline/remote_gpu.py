@@ -219,8 +219,8 @@ def _datacrunch_create_instance(
         # Both old-format (e.g. 1A100.80G) and new Verda-format (e.g.
         # 1A100.22V) are listed — API may return either depending on region.
         # CUDA compat: A6000/A100=sm_80, L40S/RTX6000Ada=sm_89, H100/H200=sm_90.
-        # B200/B300 (Blackwell sm_100) excluded — PyTorch build lacks kernels.
-        # RTX PRO 6000 (Blackwell) uses sm_100 too — excluded for same reason.
+        # Blackwell GPUs (B200, B300, RTX PRO 6000 = sm_120) are EXCLUDED —
+        # PyTorch wheels lack sm_120 kernels → "no kernel image" CUDA error.
         "1A100.22V",           # A100 80GB SXM4 new naming, ~$1.29/hr — most reliable
         "1A100.80G",           # A100 80GB old naming
         "1RTX6000ADA.10V",     # RTX 6000 Ada 48GB, ~$0.83/hr, sm_89
@@ -237,10 +237,8 @@ def _datacrunch_create_instance(
         # 2-GPU fallbacks (moderate cost)
         "2A100.80G",
         "2RTX6000ADA.20V",
-        "2RTXPRO6000.60V",
         # 4-GPU last resort (cap here to avoid $30+/hr)
         "4A100.88V",
-        "4RTXPRO6000.120V",
         "4H200.141S.176V",
     ]
 
@@ -277,7 +275,7 @@ def _datacrunch_create_instance(
     # so we only filter out known-incompatible architectures (Blackwell
     # sm_100 — PyTorch lacks kernels).
     if not location:
-        _BLACKWELL_PATTERNS = {"B200", "B300"}
+        _BLACKWELL_PATTERNS = {"B200", "B300", "RTXPRO6000"}
         tried = {inst_type} | set(PREFERRED_TYPES)
         for entry in avail:
             loc = entry["location_code"] if isinstance(entry, dict) else entry.location_code
@@ -484,6 +482,25 @@ s3 = boto3.client('s3', endpoint_url=os.environ.get('S3_ENDPOINT_URL') or None,
     region_name=os.environ.get('AWS_DEFAULT_REGION', 'us-east-1'))
 s3.put_object(Bucket=os.environ['S3_BUCKET'], Key='{sentinel_error}',
     Body=b'GPU VRAM insufficient: ${{GPU_MEM_MB}} MB < ${{MIN_VRAM_MB}} MB required for TRIBE v2')
+"
+    exit 1
+fi
+
+# CUDA compute-capability check — fail fast on Blackwell (sm_120+)
+echo "Checking CUDA compute capability..."
+CUDA_CC=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d ' .')
+if [ -n "$CUDA_CC" ] && [ "$CUDA_CC" -gt 90 ]; then
+    GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)
+    CC_DOT=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d ' ')
+    echo "ERROR: GPU $GPU_NAME (sm_${{CC_DOT//./_}}) unsupported — PyTorch cu124 supports up to sm_90"
+    python3 -c "
+import boto3, os
+s3 = boto3.client('s3', endpoint_url=os.environ.get('S3_ENDPOINT_URL') or None,
+    aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+    aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
+    region_name=os.environ.get('AWS_DEFAULT_REGION', 'us-east-1'))
+s3.put_object(Bucket=os.environ['S3_BUCKET'], Key='{sentinel_error}',
+    Body=f'GPU $GPU_NAME compute capability sm_${{CC_DOT//./_}} exceeds PyTorch cu124 max (sm_90)'.encode())
 "
     exit 1
 fi
