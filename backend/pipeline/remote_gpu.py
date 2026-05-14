@@ -123,12 +123,30 @@ def _run_on_datacrunch(
         _poll_for_sentinel(instance_id, job_id, sentinel_done, sentinel_error)
         logger.info("Inference completed for job %s", job_id)
 
+        # 3b. Download and display GPU inference log (DIAG output)
+        gpu_log_key = f"staging/{job_id}/gpu_log.txt"
+        try:
+            gpu_log = _s3_download_text(gpu_log_key)
+            # Show last 5KB of GPU log (includes DIAG lines and chunk summary)
+            log_tail = gpu_log[-5000:] if len(gpu_log) > 5000 else gpu_log
+            logger.info("=== GPU INFERENCE LOG (last %d chars) ===\n%s\n=== END GPU LOG ===", len(log_tail), log_tail)
+        except Exception:
+            logger.debug("No GPU log found at %s", gpu_log_key)
+
         # 4. Download predictions
         predictions = _s3_download_predictions(vertex_key)
         return predictions, vertex_key
 
     except DataCrunchError as exc:
         logger.warning("DataCrunch inference failed for job %s (instance=%s): %s", job_id, instance_id, exc)
+        # Try to retrieve GPU log even on failure
+        gpu_log_key = f"staging/{job_id}/gpu_log.txt"
+        try:
+            gpu_log = _s3_download_text(gpu_log_key)
+            log_tail = gpu_log[-5000:] if len(gpu_log) > 5000 else gpu_log
+            logger.error("=== GPU LOG (FAILED RUN) ===\n%s\n=== END GPU LOG ===", log_tail)
+        except Exception:
+            logger.debug("No GPU log available for failed run")
         raise
 
     finally:
@@ -254,6 +272,30 @@ def _datacrunch_create_instance(
             if location:
                 break
 
+    # Dynamic fallback: accept any single/dual-GPU instance not in the
+    # preferred list.  VRAM is validated on-instance by the startup script,
+    # so we only filter out known-incompatible architectures (Blackwell
+    # sm_100 — PyTorch lacks kernels).
+    if not location:
+        _BLACKWELL_PATTERNS = {"B200", "B300"}
+        tried = {inst_type} | set(PREFERRED_TYPES)
+        for entry in avail:
+            loc = entry["location_code"] if isinstance(entry, dict) else entry.location_code
+            types = entry["availabilities"] if isinstance(entry, dict) else entry.availabilities
+            for t in types:
+                if t in tried:
+                    continue
+                if not (t.startswith("1") or t.startswith("2")):
+                    continue
+                if any(bp in t for bp in _BLACKWELL_PATTERNS):
+                    continue
+                inst_type = t
+                location = loc
+                logger.info("Dynamic fallback: using %s in %s", inst_type, location)
+                break
+            if location:
+                break
+
     if not location:
         client.startup_scripts.delete_by_id(script_obj.id)
         raise DataCrunchError(f"No single-GPU instances available. Checked: {avail}")
@@ -350,6 +392,9 @@ def _build_startup_script(
       df = model.get_events_dataframe(video_path="video.mp4")
       preds, segments = model.predict(events=df)
     """
+    # Derive GPU log key from sentinel path (staging/{job_id}/gpu_log.txt)
+    gpu_log_key = sentinel_done.rsplit("/", 1)[0] + "/gpu_log.txt"
+
     return f"""#!/bin/bash
 set -e
 
@@ -380,7 +425,11 @@ pip install git+https://github.com/facebookresearch/tribev2.git --no-deps 2>&1 |
 # AddText from events.transforms, which tribev2 still imports.
 pip install transformers huggingface-hub numpy pandas pyarrow scipy \
   nilearn nibabel x-transformers einops soundfile moviepy julius \
-  exca "neuralset==0.0.2" neuraltrain boto3 polars mne spacy langdetect -q 2>&1 | tail -3
+  exca "neuralset==0.0.2" neuraltrain boto3 polars mne spacy langdetect \
+  Levenshtein -q 2>&1 | tail -3
+
+# TRIBE v2 uses 'uvx' (from uv) to run whisperx for audio transcription
+pip install uv -q 2>&1 | tail -1
 
 echo "Dependencies installed."
 
@@ -423,7 +472,7 @@ s3.put_object(Bucket=os.environ['S3_BUCKET'], Key='{sentinel_error}',
 "
     exit 1
 fi
-MIN_VRAM_MB=28000
+MIN_VRAM_MB=22000
 echo "GPU VRAM: ${{GPU_MEM_MB}} MB (minimum: ${{MIN_VRAM_MB}} MB)"
 if [ "$GPU_MEM_MB" -lt "$MIN_VRAM_MB" ]; then
     echo "ERROR: GPU has ${{GPU_MEM_MB}} MB VRAM, need >= ${{MIN_VRAM_MB}} MB for TRIBE v2"
@@ -441,7 +490,7 @@ fi
 
 # Write the inference script
 cat > /tmp/inference.py << 'PYEOF'
-import io, os, sys, logging, json, subprocess, glob
+import io, os, sys, logging, json
 import numpy as np
 import pandas as pd
 import boto3
@@ -457,9 +506,9 @@ OUTPUT_KEY = "{output_s3_key}"
 SENTINEL_DONE = "{sentinel_done}"
 SENTINEL_ERROR = "{sentinel_error}"
 
-# TRIBE v2 context window and overlap for crossfade merging
-CHUNK_DURATION = 100  # seconds - TRIBE v2 context window
-OVERLAP = 10          # seconds overlap for consistency
+# Event-level chunking params (chunk the DataFrame, NOT the video file)
+MAX_CHUNK_S = 300  # seconds per chunk
+OVERLAP_S = 15     # seconds of overlap for context continuity
 
 def s3():
     return boto3.client("s3",
@@ -469,125 +518,88 @@ def s3():
         region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
     )
 
-def infer_chunk(args):
-    cid, start_s, end_s, cpath = args
-    clog = logging.getLogger("chunk_%d" % cid)
-    try:
-        from tribev2 import TribeModel
-        m = TribeModel.from_pretrained("facebook/tribev2", cache_folder="/tmp/tribe_cache")
-        df = m.get_events_dataframe(video_path=cpath)
-        result = m.predict(events=df)
-        # Diagnostic: inspect what model.predict() actually returns
-        clog.info("DIAG: predict() returned type=%s", type(result))
-        if isinstance(result, tuple):
-            clog.info("DIAG: tuple length=%d", len(result))
-            for i, item in enumerate(result):
-                clog.info("DIAG: result[%d] type=%s shape=%s", i, type(item), getattr(item, 'shape', 'N/A'))
-                if isinstance(item, dict):
-                    for k, v in item.items():
-                        clog.info("DIAG: result[%d]['%s'] shape=%s", i, k, getattr(v, 'shape', 'N/A'))
-            preds = result[0]
-        else:
-            preds = result
-            clog.info("DIAG: single return shape=%s", getattr(preds, 'shape', 'N/A'))
-
-        # If preds is dict, extract vertex array
-        if isinstance(preds, dict):
-            clog.info("DIAG: preds is dict keys=%s", list(preds.keys()))
-            for try_key in ['predictions', 'vertices', 'cortex', 'bold', 'fmri', 'output']:
-                if try_key in preds:
-                    preds = preds[try_key]
-                    clog.info("DIAG: extracted preds['%s'] shape=%s", try_key, preds.shape)
-                    break
-
-        # Ensure 2D
-        if hasattr(preds, 'ndim') and preds.ndim == 1:
-            preds = preds.reshape(-1, 1)
-            clog.info("DIAG: reshaped 1D to %s", preds.shape)
-
-        clog.info("Chunk %d done: shape=%s nonzero=%d/%d", cid, getattr(preds,'shape','?'), int(np.count_nonzero(preds)) if hasattr(preds,'size') else 0, int(preds.size) if hasattr(preds,'size') else 0)
-        return (cid, start_s, end_s, preds)
-    except Exception as e:
-        clog.error("Chunk %d failed: %s", cid, e)
-        return (cid, start_s, end_s, None)
-
-try:
-    # 1. Probe video duration
-    duration_result = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=noprint_wrappers=1:nokey=1", VIDEO_PATH],
-        capture_output=True, text=True
-    )
-    total_duration = float(duration_result.stdout.strip())
-    log.info("Movie duration: %.0f seconds", total_duration)
-
-    # 2. Split video into chunks via ffmpeg
-    os.makedirs("/tmp/chunks", exist_ok=True)
-    chunk_specs = []  # (chunk_id, start_sec, end_sec, video_path)
-
-    start = 0
-    chunk_id = 0
-    while start < total_duration:
-        end = min(start + CHUNK_DURATION, total_duration)
-        chunk_path = "/tmp/chunks/chunk_%04d.mp4" % chunk_id
-
-        subprocess.run([
-            "ffmpeg", "-y", "-ss", str(start), "-i", VIDEO_PATH,
-            "-t", str(end - start), "-c:v", "libx264", "-c:a", "aac",
-            "-movflags", "+faststart", chunk_path
-        ], capture_output=True, check=True)
-
-        chunk_specs.append((chunk_id, start, end, chunk_path))
-        log.info("  Created chunk %d: %.0f-%.0fs", chunk_id, start, end)
-
-        start += CHUNK_DURATION - OVERLAP
-        chunk_id += 1
-
-    log.info("Split into %d chunks", len(chunk_specs))
-
-    # 3. Run TRIBE v2 on each chunk sequentially (single-GPU, avoids VRAM contention)
-    log.info("Running TRIBE v2 on %d chunks...", len(chunk_specs))
-    results = []
-    for spec in chunk_specs:
-        result = infer_chunk(spec)
-        results.append(result)
-        if result[3] is not None:
-            log.info("Chunk %d/%d complete", result[0] + 1, len(chunk_specs))
-
-    # 4. Merge with linear crossfade in overlap regions
-    log.info("Merging %d chunk predictions...", len(results))
-    total_seconds = int(total_duration)
-    # Get vertex count from first successful result
-    n_vertices = 0
-    for r in results:
-        if r[3] is not None:
-            n_vertices = r[3].shape[1] if len(r[3].shape) > 1 else 1
+def chunked_predict(model, events_df, max_chunk_s=MAX_CHUNK_S, overlap_s=OVERLAP_S):
+    # Run TRIBE v2 in time-windowed chunks on the events DataFrame.
+    # This is the approach that works — chunk the EVENTS, not the video file.
+    # Detect the time column name
+    time_col = None
+    for col_name in ["onset", "start", "time", "timestamp"]:
+        if col_name in events_df.columns:
+            time_col = col_name
             break
+    if time_col is None:
+        log.warning("No time column found in events_df (columns=%s), running single-pass", list(events_df.columns))
+        preds, segments = model.predict(events=events_df)
+        return preds
 
-    merged = np.zeros((total_seconds, n_vertices), dtype=np.float32)
-    weights = np.zeros(total_seconds, dtype=np.float32)
+    total_duration = events_df[time_col].max() + 1
 
-    for cid, start_s, end_s, preds in results:
-        if preds is None:
+    if total_duration <= max_chunk_s:
+        # Short video — single pass (no chunking needed)
+        log.info("Video <= %ds, running single-pass inference", max_chunk_s)
+        preds, segments = model.predict(events=events_df)
+        log.info("Single-pass predictions: shape=%s, dtype=%s", preds.shape, preds.dtype)
+        return preds
+
+    log.info("Chunking %d seconds into %d-second windows with %d-second overlap",
+             int(total_duration), max_chunk_s, overlap_s)
+
+    all_preds = []
+    chunk_start = 0
+
+    while chunk_start < total_duration:
+        chunk_end = min(chunk_start + max_chunk_s, total_duration)
+
+        # Select events in this chunk's time range
+        mask = (events_df[time_col] >= chunk_start) & (events_df[time_col] < chunk_end)
+        chunk_df = events_df[mask].copy()
+
+        if len(chunk_df) == 0:
+            log.warning("  Chunk %.0f-%.0fs: 0 events, skipping", chunk_start, chunk_end)
+            chunk_start += max_chunk_s - overlap_s
             continue
+
+        log.info("  Chunk %.0f-%.0fs (%d events)", chunk_start, chunk_end, len(chunk_df))
+        preds, segments = model.predict(events=chunk_df)
+        log.info("  Chunk result: shape=%s", preds.shape)
+        all_preds.append((chunk_start, chunk_end, preds))
+
+        chunk_start += max_chunk_s - overlap_s
+
+    # Merge with linear crossfade
+    if len(all_preds) == 0:
+        log.error("No chunks produced predictions!")
+        return np.zeros((int(total_duration), 20484), dtype=np.float32)
+    if len(all_preds) == 1:
+        return all_preds[0][2]
+
+    return merge_overlapping(all_preds, total_duration, overlap_s)
+
+
+def merge_overlapping(batch_preds, total_duration, overlap_s=OVERLAP_S):
+    # Merge overlapping prediction chunks with linear crossfade.
+    total_s = int(total_duration)
+    n_vertices = batch_preds[0][2].shape[1] if len(batch_preds[0][2].shape) > 1 else 1
+    merged = np.zeros((total_s, n_vertices), dtype=np.float32)
+    weights = np.zeros(total_s, dtype=np.float32)
+
+    for start, end, preds in batch_preds:
         n = preds.shape[0]
-        offset = int(start_s)
+        offset = int(start)
+
         for t in range(n):
             gt = offset + t
-            if gt >= total_seconds:
+            if gt >= total_s:
                 break
             # Linear ramp in overlap regions
-            if t < OVERLAP:
-                w = t / OVERLAP
-            elif t > n - OVERLAP:
-                w = (n - t) / OVERLAP
+            if t < overlap_s:
+                w = t / overlap_s
+            elif t > n - overlap_s:
+                w = (n - t) / overlap_s
             else:
                 w = 1.0
             w = max(0.0, min(1.0, w))
-            if len(preds.shape) > 1:
-                merged[gt] += preds[t] * w
-            else:
-                merged[gt] += float(preds[t]) * w
+            merged[gt] += preds[t] * w if len(preds.shape) > 1 else float(preds[t]) * w
             weights[gt] += w
 
     nonzero = weights > 1e-8
@@ -595,12 +607,57 @@ try:
         merged[nonzero] /= weights[nonzero, np.newaxis]
     else:
         merged[nonzero] /= weights[nonzero]
+    return merged
 
-    preds_full = merged
-    log.info("Merged predictions: shape=%s", preds_full.shape)
 
-    # Build predictions dict (ablations skipped for now — full multimodal only)
+try:
+    from tribev2 import TribeModel
+
+    # Load TRIBE v2 model ONCE
+    log.info("Loading TRIBE v2 model...")
+    model = TribeModel.from_pretrained("facebook/tribev2", cache_folder="/tmp/tribe_cache")
+    log.info("Model loaded successfully")
+
+    # Use pre-built events if available, otherwise extract from video
+    if os.path.exists(EVENTS_PATH):
+        log.info("Loading pre-built events from %s", EVENTS_PATH)
+        df = pd.read_parquet(EVENTS_PATH)
+        try:
+            from neuralset.events.utils import standardize_events
+            df = standardize_events(df)
+        except Exception as e:
+            log.warning("standardize_events failed: %s — using raw events", e)
+    else:
+        log.info("Generating events from video...")
+        df = model.get_events_dataframe(video_path=VIDEO_PATH)
+    log.info("Events DataFrame: %d rows, columns=%s", len(df), list(df.columns))
+
+    # Run full multimodal prediction (with event-level chunking for long videos)
+    log.info("Running TRIBE v2 full multimodal inference...")
+    preds_full = chunked_predict(model, df)
+    log.info("Full predictions: shape=%s, nonzero=%d/%d",
+             preds_full.shape, int(np.count_nonzero(preds_full)), int(preds_full.size))
+
     predictions = {{"full": preds_full.astype(np.float32)}}
+
+    # Run modality ablations (video-only, audio-only, text-only)
+    for modality_name, ablation_kwargs in [
+        ("video_only", {{"audio_path": None}}),
+        ("audio_only", {{"video_path": None}}),
+        ("text_only",  {{"video_path": None, "audio_path": None}}),
+    ]:
+        log.info("Running ablation: %s", modality_name)
+        try:
+            df_ablated = model.get_events_dataframe(video_path=VIDEO_PATH)
+            for col, val in ablation_kwargs.items():
+                if col in df_ablated.columns and val is None:
+                    df_ablated[col] = ""
+            preds = chunked_predict(model, df_ablated)
+            predictions[modality_name] = preds.astype(np.float32)
+            log.info("  %s: shape=%s", modality_name, predictions[modality_name].shape)
+        except Exception as e:
+            log.warning("Ablation %s failed: %s — using full predictions as fallback", modality_name, e)
+            predictions[modality_name] = predictions["full"].copy()
 
     # Upload predictions to S3
     log.info("Uploading predictions to S3...")
@@ -626,9 +683,33 @@ except Exception as e:
     sys.exit(1)
 PYEOF
 
-# Run inference
+# Run inference — capture ALL output to log file for S3 upload
 echo "Running inference script..."
-python /tmp/inference.py
+set +e
+python /tmp/inference.py > /tmp/gpu_inference.log 2>&1
+INFERENCE_EXIT=$?
+set -e
+
+# Print log to stdout (visible in instance console if SSH'd in)
+cat /tmp/gpu_inference.log
+
+# Upload GPU log to S3 regardless of inference outcome
+echo "Uploading GPU log to S3..."
+python3 -c "
+import boto3, os
+s3 = boto3.client('s3', endpoint_url=os.environ.get('S3_ENDPOINT_URL') or None,
+    aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+    aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
+    region_name=os.environ.get('AWS_DEFAULT_REGION', 'us-east-1'))
+with open('/tmp/gpu_inference.log', 'rb') as f:
+    s3.put_object(Bucket=os.environ['S3_BUCKET'], Key='{gpu_log_key}', Body=f.read())
+print('GPU log uploaded to S3 at {gpu_log_key}')
+" || echo "WARNING: Failed to upload GPU log"
+
+if [ $INFERENCE_EXIT -ne 0 ]; then
+    echo "Inference script failed with exit code $INFERENCE_EXIT"
+    exit $INFERENCE_EXIT
+fi
 echo "Inference complete!"
 """
 
@@ -650,6 +731,15 @@ def _s3_client():
 
 def _s3_upload(data: bytes, key: str) -> None:
     _s3_client().put_object(Bucket=settings.s3_bucket, Key=key, Body=data)
+
+
+def _s3_presigned_url(key: str, expires_in: int = 3600) -> str:
+    """Generate a presigned GET URL for an S3 object (1-hour default)."""
+    return _s3_client().generate_presigned_url(
+        "get_object",
+        Params={"Bucket": settings.s3_bucket, "Key": key},
+        ExpiresIn=expires_in,
+    )
 
 
 def _s3_key_exists(key: str) -> bool:
