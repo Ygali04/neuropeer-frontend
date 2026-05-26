@@ -102,22 +102,25 @@ class Settings(BaseSettings):
     proxy_username: str = ""  # Oxylabs username (session ID appended automatically)
     proxy_password: str = ""  # Oxylabs password
 
-    # Remote GPU inference (DataCrunch.io A100 spot instances)
-    # Set to "local" to run TRIBE v2 on the worker itself (requires local GPU).
-    # Set to "datacrunch" to spin up an A100 spot instance per job.
-    inference_backend: str = "local"  # local | datacrunch
+    # Remote GPU inference
+    # "runpod" — spin up a RunPod GPU pod per job (recommended, reliable A100 availability)
+    # "datacrunch" — DataCrunch A100 spot instances (legacy, unreliable GPU supply)
+    # "local" — run TRIBE v2 on the worker itself (requires local GPU)
+    # "mock" — return random predictions (dev/test only)
+    inference_backend: str = "runpod"  # runpod | datacrunch | local | mock
 
-    # DataCrunch.io OAuth2 credentials (only needed when inference_backend = "datacrunch")
-    # Generate at the DataCrunch dashboard → API credentials
+    # RunPod.io GPU pods (preferred)
+    runpod_api_key: str = ""
+    runpod_gpu_type: str = "NVIDIA A100 80GB PCIe"
+    runpod_container_image: str = "pytorch/pytorch:2.4.0-cuda12.4-cudnn9-devel"
+    runpod_boot_timeout: int = 600
+
+    # DataCrunch.io (legacy fallback)
     datacrunch_client_id: str = ""
     datacrunch_client_secret: str = ""
-    # OS image with CUDA pre-installed (bare image — deps installed via startup script)
     datacrunch_image: str = "ubuntu-24.04-cuda-12.8-open-docker"
-    # Instance type: 1A100.80G ($0.45/h spot), 1A100.40G ($0.25/h spot)
     datacrunch_instance_type: str = "1A100.80G"
-    # Comma-separated SSH key IDs from DataCrunch dashboard (required for instance creation)
     datacrunch_ssh_key_ids: str = ""
-    # Max seconds to wait for spot instance to boot and complete inference
     datacrunch_boot_timeout: int = 600
 
     class Config:

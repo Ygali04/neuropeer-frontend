@@ -1,29 +1,31 @@
 """
-Remote GPU Inference — DataCrunch.io A100 Spot Instance Integration.
+Remote GPU Inference — RunPod (primary) + DataCrunch (legacy) Integration.
 
 Routes TRIBE v2 inference to either:
   A) Local GPU on the Celery worker (default for dev)
-  B) Ephemeral DataCrunch A100 spot instance (production)
+  B) RunPod GPU pod (recommended — reliable A100 availability)
+  C) Ephemeral DataCrunch A100 spot instance (legacy)
 
-Flow for mode B:
-  1. Worker uploads the downloaded video file to S3
-  2. Worker creates DataCrunch A100 spot instance with bash startup script
-  3. Instance boots, installs tribev2 from GitHub, downloads video from S3
-  4. Instance runs TribeModel.get_events_dataframe() + model.predict() for all 4 modalities
-  5. Instance uploads predictions.npz + sentinel file to S3
-  6. Worker polls S3 for sentinel, downloads predictions, deletes instance
+Flow for RunPod (mode B):
+  1. Worker uploads video + events to S3
+  2. Worker creates RunPod pod with startup command that runs TRIBE v2
+  3. Pod boots PyTorch container, installs tribev2, downloads video from S3
+  4. Pod runs inference, uploads predictions.npz + sentinel to S3
+  5. Worker polls S3 for sentinel, downloads predictions, terminates pod
 
-DataCrunch SDK: pip install datacrunch
+RunPod API: GraphQL at https://api.runpod.io/graphql
 """
 from __future__ import annotations
 
 import io
+import json
 import logging
 import time
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import requests
 
 from backend.config import settings
 from backend.pipeline.tribe_inference import Modality, run_all_modalities
@@ -42,7 +44,13 @@ def run_inference_backend(
     audio_path: Path | None = None,
 ) -> tuple[dict[Modality, np.ndarray], str]:
     """Run TRIBE v2 inference via the configured backend."""
-    if settings.inference_backend == "datacrunch":
+    backend = settings.inference_backend
+    if backend == "runpod":
+        if video_path is None:
+            logger.warning("RunPod backend requires video_path; falling back to local")
+            return _run_locally(job_id, events_df)
+        return _run_on_runpod(job_id, video_path, events_df, audio_path)
+    if backend == "datacrunch":
         if video_path is None:
             logger.warning("DataCrunch backend requires video_path; falling back to local")
             return _run_locally(job_id, events_df)
@@ -75,7 +83,214 @@ def _run_locally(
     return predictions, key
 
 
-# ── DataCrunch A100 spot instance inference ──────────────────────────────────
+# ── RunPod GPU pod inference ──────────────────────────────────────────────────
+
+
+RUNPOD_API_URL = "https://api.runpod.io/graphql"
+
+RUNPOD_GPU_FALLBACK = [
+    "NVIDIA A100 80GB PCIe",
+    "NVIDIA A100-SXM4-80GB",
+    "NVIDIA RTX A6000",
+    "NVIDIA H100 80GB HBM3",
+]
+
+
+class RunPodError(RuntimeError):
+    pass
+
+
+def _runpod_graphql(query: str, variables: dict | None = None) -> dict:
+    if not settings.runpod_api_key:
+        raise RunPodError("RUNPOD_API_KEY not configured")
+    resp = requests.post(
+        RUNPOD_API_URL,
+        headers={"Authorization": f"Bearer {settings.runpod_api_key}"},
+        json={"query": query, "variables": variables or {}},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if "errors" in data:
+        raise RunPodError(f"RunPod API: {json.dumps(data['errors'])}")
+    return data["data"]
+
+
+def _run_on_runpod(
+    job_id: str,
+    video_path: Path,
+    events_df: pd.DataFrame | None = None,
+    audio_path: Path | None = None,
+) -> tuple[dict[Modality, np.ndarray], str]:
+    """Spin up a RunPod GPU pod, run TRIBE v2, download results, terminate pod."""
+    logger.info("Provisioning RunPod GPU pod for job %s", job_id)
+
+    video_s3_key = f"staging/{job_id}/video{video_path.suffix}"
+    _s3_upload(video_path.read_bytes(), video_s3_key)
+
+    audio_s3_key = f"staging/{job_id}/audio.wav"
+    if audio_path and audio_path.exists():
+        _s3_upload(audio_path.read_bytes(), audio_s3_key)
+
+    events_s3_key = f"staging/{job_id}/events.parquet"
+    if events_df is not None:
+        buf = io.BytesIO()
+        events_df.to_parquet(buf, index=False)
+        _s3_upload(buf.getvalue(), events_s3_key)
+
+    logger.info("Video uploaded to S3 (%.1f MB)", video_path.stat().st_size / (1024 * 1024))
+
+    vertex_key = f"predictions/{job_id}/vertices.npz"
+    sentinel_done = f"staging/{job_id}/done"
+    sentinel_error = f"staging/{job_id}/error"
+    gpu_log_key = f"staging/{job_id}/gpu_log.txt"
+    pod_id: str | None = None
+
+    try:
+        pod_id = _runpod_create_pod(job_id, video_s3_key, audio_s3_key, events_s3_key, vertex_key, sentinel_done, sentinel_error)
+        logger.info("RunPod pod %s created for job %s", pod_id, job_id)
+
+        _poll_for_sentinel_generic(pod_id, job_id, sentinel_done, sentinel_error, settings.runpod_boot_timeout)
+        logger.info("Inference completed for job %s", job_id)
+
+        try:
+            gpu_log = _s3_download_text(gpu_log_key)
+            logger.info("=== GPU LOG ===\n%s\n=== END ===", gpu_log[-5000:])
+        except Exception:
+            pass
+
+        predictions = _s3_download_predictions(vertex_key)
+        return predictions, vertex_key
+
+    except RunPodError as exc:
+        logger.warning("RunPod inference failed for job %s (pod=%s): %s", job_id, pod_id, exc)
+        try:
+            logger.error("=== GPU LOG (FAILED) ===\n%s", _s3_download_text(gpu_log_key)[-5000:])
+        except Exception:
+            pass
+        raise
+
+    finally:
+        if pod_id:
+            try:
+                _runpod_terminate(pod_id)
+            except Exception:
+                logger.warning("Failed to terminate RunPod pod %s", pod_id)
+
+
+def _runpod_create_pod(
+    job_id: str,
+    video_s3_key: str,
+    audio_s3_key: str,
+    events_s3_key: str,
+    output_s3_key: str,
+    sentinel_done: str,
+    sentinel_error: str,
+) -> str:
+    """Create a RunPod pod for TRIBE v2 inference. Returns pod_id."""
+    startup_script = _build_startup_script(
+        video_s3_key, audio_s3_key, events_s3_key,
+        output_s3_key, sentinel_done, sentinel_error,
+    )
+
+    import base64
+    script_b64 = base64.b64encode(startup_script.encode()).decode()
+    gpu_log_key = sentinel_done.rsplit("/", 1)[0] + "/gpu_log.txt"
+
+    docker_args = (
+        f'bash -c "pip install -q boto3 2>/dev/null; '
+        f"echo '{script_b64}' | base64 -d > /tmp/run.sh; "
+        f'bash /tmp/run.sh > /tmp/gpu_inference.log 2>&1; '
+        f"python3 -c '"
+        f"import boto3,os; "
+        f"s3=boto3.client(\\\"s3\\\",endpoint_url=os.environ.get(\\\"S3_ENDPOINT_URL\\\") or None,"
+        f"aws_access_key_id=os.environ[\\\"AWS_ACCESS_KEY_ID\\\"],"
+        f"aws_secret_access_key=os.environ[\\\"AWS_SECRET_ACCESS_KEY\\\"],"
+        f"region_name=\\\"us-east-1\\\"); "
+        f"s3.upload_file(\\\"/tmp/gpu_inference.log\\\",\\\"{settings.s3_bucket}\\\",\\\"{gpu_log_key}\\\")"
+        f"'; sleep infinity\""
+    )
+
+    env_list = [
+        {"key": "AWS_ACCESS_KEY_ID", "value": settings.aws_access_key_id or ""},
+        {"key": "AWS_SECRET_ACCESS_KEY", "value": settings.aws_secret_access_key or ""},
+        {"key": "AWS_DEFAULT_REGION", "value": settings.aws_region},
+        {"key": "S3_BUCKET", "value": settings.s3_bucket},
+        {"key": "S3_ENDPOINT_URL", "value": settings.s3_endpoint_url or ""},
+        {"key": "HF_TOKEN", "value": settings.hf_token or ""},
+    ]
+
+    mutation = """
+    mutation CreatePod($input: PodFindAndDeployOnDemandInput!) {
+        podFindAndDeployOnDemand(input: $input) {
+            id name desiredStatus costPerHr
+            machine { gpuDisplayName }
+        }
+    }
+    """
+
+    gpu_types = [settings.runpod_gpu_type] + [g for g in RUNPOD_GPU_FALLBACK if g != settings.runpod_gpu_type]
+
+    for gpu_type in gpu_types:
+        pod_input = {
+            "name": f"neuropeer-{job_id[:8]}",
+            "imageName": settings.runpod_container_image,
+            "gpuTypeId": gpu_type,
+            "gpuCount": 1,
+            "containerDiskInGb": 50,
+            "volumeInGb": 0,
+            "env": env_list,
+            "dockerArgs": docker_args,
+            "cloudType": "COMMUNITY",
+            "startJupyter": False,
+            "startSsh": False,
+            "supportPublicIp": False,
+        }
+        try:
+            data = _runpod_graphql(mutation, {"input": pod_input})
+            pod = data["podFindAndDeployOnDemand"]
+            gpu_name = pod.get("machine", {}).get("gpuDisplayName", gpu_type)
+            logger.info("RunPod pod %s: %s @ $%s/hr", pod["id"], gpu_name, pod.get("costPerHr", "?"))
+            return pod["id"]
+        except RunPodError as e:
+            if "SUPPLY_CONSTRAINT" in str(e) or "does not have" in str(e):
+                logger.info("%s unavailable, trying next...", gpu_type)
+                continue
+            raise
+
+    raise RunPodError(f"No GPU available on RunPod. Tried: {gpu_types}")
+
+
+def _poll_for_sentinel_generic(resource_id: str, job_id: str, sentinel_done: str, sentinel_error: str, timeout: int) -> None:
+    """Poll S3 for sentinel file. Works for both RunPod and DataCrunch."""
+    deadline = time.time() + timeout
+    poll_interval = 15.0
+
+    while time.time() < deadline:
+        if _s3_key_exists(sentinel_done):
+            return
+        if _s3_key_exists(sentinel_error):
+            error_body = _s3_download_text(sentinel_error)
+            raise RunPodError(f"Inference failed on {resource_id}: {error_body[:500]}")
+        time.sleep(poll_interval)
+        poll_interval = min(poll_interval * 1.3, 60)
+
+    raise RunPodError(f"Resource {resource_id} timed out after {timeout}s")
+
+
+def _runpod_terminate(pod_id: str) -> None:
+    """Terminate a RunPod pod permanently."""
+    try:
+        _runpod_graphql(
+            'mutation T($podId: String!) { podTerminate(input: {podId: $podId}) }',
+            {"podId": pod_id},
+        )
+        logger.info("Terminated RunPod pod %s", pod_id)
+    except Exception as exc:
+        logger.warning("Error terminating RunPod pod %s: %s", pod_id, exc)
+
+
+# ── DataCrunch A100 spot instance inference (legacy) ─────────────────────────
 
 
 class DataCrunchError(RuntimeError):
