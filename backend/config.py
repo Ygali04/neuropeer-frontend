@@ -82,6 +82,13 @@ class Settings(BaseSettings):
     device: str = "cuda"  # cuda / cpu
     temp_dir: str = "/tmp/neuropeer"
 
+    # Cortical scorer backend — selects which model produces the cortical
+    # embedding (the 20,484-vertex fsaverage5 prediction). Swap via the
+    # SCORER_BACKEND env var without touching pipeline code.
+    #   "tribe-v2"   — Meta TRIBE v2 encoder (default, production)
+    #   "orcle-nano" — in-house ORCLE Nano encoder (placeholder, not yet implemented)
+    scorer_backend: str = "tribe-v2"
+
     # yt-dlp download settings
     # Path to a Netscape-format cookies.txt exported from your browser.
     # Required for Instagram, age-gated YouTube, and other auth-walled content.
