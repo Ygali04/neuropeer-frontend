@@ -1,0 +1,147 @@
+version: "3.9"
+
+# ── Cookie file setup ─────────────────────────────────────────────────────────
+# For Instagram and other auth-walled platforms, mount a cookies.txt file:
+#
+#   1. Export cookies from your logged-in browser (see backend/.env.example)
+#   2. Save the file to ./secrets/cookies.txt  (gitignored)
+#   3. The worker mounts it at /run/secrets/cookies.txt (read by yt-dlp)
+#
+# mkdir -p secrets && touch secrets/cookies.txt
+# Then paste your exported cookies content into secrets/cookies.txt
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ── Infrastructure ─────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: neuropeer
+      POSTGRES_PASSWORD: neuropeer
+      POSTGRES_DB: neuropeer
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: neuropeer
+      MINIO_ROOT_PASSWORD: neuropeer123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  # ── API server ─────────────────────────────────────────────────────────────
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: uvicorn backend.api.main:app --host 0.0.0.0 --port 8000 --reload
+    env_file: ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://neuropeer:neuropeer@postgres:5432/neuropeer
+      REDIS_URL: redis://redis:6379/0
+      S3_BUCKET: neuropeer-media
+      S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: neuropeer
+      AWS_SECRET_ACCESS_KEY: neuropeer123
+      AWS_REGION: us-east-1
+      DEVICE: cpu
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+      - minio
+    volumes:
+      - ./backend:/app/backend
+      - /tmp/neuropeer:/tmp/neuropeer
+
+  # ── Celery worker ──────────────────────────────────────────────────────────
+  #
+  # The worker handles all heavy lifting:
+  #   - Video download via yt-dlp (needs cookies.txt for Instagram/Facebook)
+  #   - Audio extraction via ffmpeg
+  #   - Whisper transcription
+  #   - TRIBE v2 inference (local GPU OR remote DataCrunch A100 spot)
+  #   - Metric computation
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A backend.worker.tasks.celery_app worker --loglevel=info --concurrency=1
+    env_file: ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://neuropeer:neuropeer@postgres:5432/neuropeer
+      REDIS_URL: redis://redis:6379/0
+      S3_BUCKET: neuropeer-media
+      S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: neuropeer
+      AWS_SECRET_ACCESS_KEY: neuropeer123
+      AWS_REGION: us-east-1
+      DEVICE: cpu  # set to "cuda" if running on a GPU machine
+      # ── yt-dlp cookie authentication ──────────────────────────────────────
+      # Mount path for the cookies file inside the container.
+      # The host file is mounted via the 'secrets' volume below.
+      YTDLP_COOKIES_FILE: /run/secrets/cookies.txt
+      YTDLP_MAX_RETRIES: "3"
+      YTDLP_RETRY_BACKOFF: "15.0"
+      # ── Residential proxy (required for Instagram/Facebook from cloud IPs) ──
+      # PROXY_URL: http://proxy.oxylabs.io:60000
+      # PROXY_USERNAME: your_oxylabs_username
+      # PROXY_PASSWORD: your_oxylabs_password
+      # ── Inference backend ──────────────────────────────────────────────────
+      # INFERENCE_BACKEND: datacrunch
+      # DATACRUNCH_CLIENT_ID: your_client_id
+      # DATACRUNCH_CLIENT_SECRET: your_client_secret
+      # DATACRUNCH_INSTANCE_TYPE: 1A100.80G
+      # DATACRUNCH_BOOT_TIMEOUT: "600"
+    depends_on:
+      - postgres
+      - redis
+      - minio
+    volumes:
+      - ./backend:/app/backend
+      - /tmp/neuropeer:/tmp/neuropeer
+      # Mount the cookies.txt file into the container.
+      # Create this file locally: mkdir -p secrets && touch secrets/cookies.txt
+      # Then paste your exported Instagram/YouTube cookies into it.
+      - ./secrets/cookies.txt:/run/secrets/cookies.txt:ro
+    # ── GPU pass-through (uncomment for local NVIDIA GPU) ──────────────────
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # ── Frontend ───────────────────────────────────────────────────────────────
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  minio_data:

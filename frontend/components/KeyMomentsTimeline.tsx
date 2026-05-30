@@ -1,0 +1,194 @@
+"use client";
+
+import { useState } from "react";
+import { Clock, Zap, TrendingUp, Heart, AlertTriangle, ArrowUpRight, ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
+import { MOMENT_INFO } from "@/lib/metric-info";
+import { VideoPlayer } from "@/components/VideoPlayer";
+import type { KeyMoment } from "@/lib/types";
+
+const MOMENT_CONFIG: Record<
+  KeyMoment["type"],
+  { color: string; icon: typeof Zap; bg: string }
+> = {
+  best_hook:       { color: "#c084fc", icon: Zap, bg: "rgba(192, 132, 252, 0.06)" },
+  peak_engagement: { color: "#34d399", icon: TrendingUp, bg: "rgba(52, 211, 153, 0.06)" },
+  emotional_peak:  { color: "#fbbf24", icon: Heart, bg: "rgba(251, 191, 36, 0.06)" },
+  dropoff_risk:    { color: "#f87171", icon: AlertTriangle, bg: "rgba(248, 113, 113, 0.06)" },
+  recovery:        { color: "#60a5fa", icon: ArrowUpRight, bg: "rgba(96, 165, 250, 0.06)" },
+  act_boundary:    { color: "#a78bfa", icon: Clock, bg: "rgba(167, 139, 250, 0.06)" },
+  climax_peak:     { color: "#f43f5e", icon: TrendingUp, bg: "rgba(244, 63, 94, 0.06)" },
+  reversal_point:  { color: "#38bdf8", icon: ArrowUpRight, bg: "rgba(56, 189, 248, 0.06)" },
+  frisson_peak:    { color: "#e879f9", icon: Zap, bg: "rgba(232, 121, 249, 0.06)" },
+};
+
+interface Props {
+  moments: KeyMoment[];
+  duration: number;
+  currentSecond?: number;
+  playbackTime?: number;
+  isPlaying?: boolean;
+  videoUrl?: string;
+  playbackSpeed?: number;
+  onSelect?: (second: number) => void;
+  onPlay?: () => void;
+  onPause?: () => void;
+  onCycleSpeed?: () => void;
+}
+
+export function KeyMomentsTimeline({
+  moments,
+  duration,
+  currentSecond,
+  playbackTime,
+  isPlaying = false,
+  videoUrl,
+  playbackSpeed = 1,
+  onSelect,
+  onPlay,
+  onPause,
+  onCycleSpeed,
+}: Props) {
+  const displayTime = playbackTime !== undefined ? playbackTime : (currentSecond ?? 0);
+  const safeMoments = moments ?? [];
+  const safeDuration = duration ?? 1;
+  const [momentsExpanded, setMomentsExpanded] = useState(true);
+
+  return (
+    <div className="w-full flex flex-col gap-3">
+      {/* Title — above everything */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Clock className="w-4 h-4 text-teal-400" />
+          <h3 className="text-sm font-medium text-white/60">Key Moments</h3>
+          <span className="text-[10px] text-white/20">{safeMoments.length} events</span>
+        </div>
+      </div>
+
+      {/* Video player */}
+      {videoUrl && (
+        <VideoPlayer
+          url={videoUrl}
+          currentTime={displayTime}
+          isPlaying={isPlaying}
+          duration={duration}
+          playbackSpeed={playbackSpeed}
+          onSeek={onSelect}
+          onPlay={onPlay}
+          onPause={onPause}
+          onCycleSpeed={onCycleSpeed}
+        />
+      )}
+
+      {/* Timeline bar */}
+      <div className="relative h-1.5 bg-white/[0.04] rounded-full">
+        {safeMoments.map((m, i) => {
+          const pct = (m.timestamp / safeDuration) * 100;
+          const cfg = MOMENT_CONFIG[m.type];
+          return (
+            <button
+              key={i}
+              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full transition-all duration-200 hover:scale-[1.8] cursor-pointer"
+              style={{
+                left: `${pct}%`,
+                backgroundColor: cfg.color,
+                boxShadow: `0 0 8px ${cfg.color}40`,
+              }}
+              onClick={() => onSelect?.(m.timestamp)}
+              title={`${m.label ?? ""} @ ${(m.timestamp ?? 0).toFixed(0)}s`}
+            />
+          );
+        })}
+        {/* Playhead */}
+        <div
+          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-0.5 h-4 bg-brand-400 rounded-full"
+          style={{
+            left: `${(displayTime / safeDuration) * 100}%`,
+            boxShadow: "0 0 6px rgba(249, 115, 22, 0.5)",
+            transition: isPlaying ? "none" : "left 200ms ease-out",
+          }}
+        />
+      </div>
+
+      {/* Collapsible moment cards */}
+      <button
+        onClick={() => setMomentsExpanded((p) => !p)}
+        className="flex items-center justify-between py-1 text-xs text-white/30 hover:text-white/50 transition-colors"
+      >
+        <span>{momentsExpanded ? "Hide" : "Show"} event details</span>
+        <ChevronDown className={cn("w-3.5 h-3.5 transition-transform duration-200", momentsExpanded && "rotate-180")} />
+      </button>
+
+      <div
+        className={cn(
+          "flex flex-col gap-1.5 overflow-hidden transition-all duration-300 ease-out",
+          momentsExpanded ? "max-h-[50vh] sm:max-h-[500px] overflow-y-auto" : "max-h-0"
+        )}
+      >
+        {safeMoments.map((m, i) => {
+          const cfg = MOMENT_CONFIG[m.type] ?? MOMENT_CONFIG.peak_engagement;
+          const Icon = cfg.icon;
+          const info = MOMENT_INFO[m.type];
+          const isNear = Math.abs(m.timestamp - displayTime) < 1.5;
+          return (
+            <div
+              key={i}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-300",
+                "border border-transparent",
+                isNear
+                  ? "bg-white/[0.04] border-white/[0.06]"
+                  : "hover:bg-white/[0.03]"
+              )}
+              style={{ backgroundColor: isNear ? undefined : cfg.bg }}
+            >
+              <button
+                onClick={() => onSelect?.(m.timestamp)}
+                className="flex items-center gap-3 flex-1 min-w-0"
+              >
+                <div
+                  className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 transition-transform duration-300"
+                  style={{
+                    backgroundColor: cfg.color + "15",
+                    transform: isNear ? "scale(1.15)" : "scale(1)",
+                  }}
+                >
+                  <Icon className="w-3.5 h-3.5" style={{ color: cfg.color }} />
+                </div>
+                <div className="flex-1 min-w-0 text-left">
+                  <span className="text-sm font-medium" style={{ color: cfg.color }}>
+                    {m.label}
+                  </span>
+                  <span className="text-xs text-white/25 ml-2">
+                    @ {(m.timestamp ?? 0).toFixed(0)}s
+                  </span>
+                </div>
+              </button>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="h-1 w-12 bg-white/[0.04] rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${m.score}%`, backgroundColor: cfg.color, opacity: 0.7 }}
+                  />
+                </div>
+                {info && (
+                  <InfoTooltip
+                    title={info.title}
+                    description={info.description}
+                    study={info.study}
+                    studyDetail={info.studyDetail}
+                    iconSize={13}
+                  />
+                )}
+              </div>
+            </div>
+          );
+        })}
+        {safeMoments.length === 0 && (
+          <p className="text-xs text-white/20 text-center py-4">No key moments detected.</p>
+        )}
+      </div>
+    </div>
+  );
+}

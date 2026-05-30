@@ -1,0 +1,16 @@
+frontend/node_modules/
+frontend/.next/
+frontend/.vercel/
+*.db
+*.sqlite3
+__pycache__/
+.git/
+.claude/
+docs/
+*.docx
+*.pdf
+*.pptx
+neuropeer-data/
+secrets/
+.pytest_cache/
+.mypy_cache/

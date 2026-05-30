@@ -1,0 +1,450 @@
+"""Campaign management endpoints."""
+
+from __future__ import annotations
+
+from uuid import UUID
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+import json
+
+import redis.asyncio as aioredis
+
+from backend.config import settings
+from backend.models.db import Job, Result
+
+router = APIRouter(tags=["Campaigns"])
+
+
+class AssignRequest(BaseModel):
+    job_id: str
+    user_email: str
+    campaign_name: str | None = None
+
+
+@router.post("/campaigns/assign")
+async def assign_job_to_user(body: AssignRequest) -> dict:
+    """Assign a job to a user's profile and optionally name the campaign."""
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with Session() as session:
+        stmt = select(Job).where(Job.id == UUID(body.job_id))
+        job = (await session.execute(stmt)).scalar_one_or_none()
+        if not job:
+            await engine.dispose()
+            raise HTTPException(status_code=404, detail="Job not found")
+        job.user_email = body.user_email
+        if body.campaign_name:
+            job.campaign_name = body.campaign_name
+        await session.commit()
+
+    await engine.dispose()
+    return {"job_id": body.job_id, "user_email": body.user_email, "campaign_name": body.campaign_name}
+
+
+class RenameRequest(BaseModel):
+    name: str
+
+
+@router.get("/campaigns/all-reports")
+async def all_reports(user_email: str) -> list[dict]:
+    """Return every individual report for a user, across all campaigns."""
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with Session() as session:
+        stmt = (
+            select(Job, Result.neural_score_total)
+            .outerjoin(Result, Result.job_id == Job.id)
+            .where(Job.user_email == user_email, Job.status == "complete")
+            .order_by(Job.created_at.asc())
+        )
+        rows = (await session.execute(stmt)).all()
+
+    await engine.dispose()
+
+    reports = []
+    for job, score in rows:
+        reports.append({
+            "job_id": str(job.id),
+            "url": job.url,
+            "content_type": job.content_type,
+            "score": round(score, 1) if score else 0,
+            "campaign_name": job.campaign_name,
+            "content_group_id": str(job.content_group_id),
+            "project_id": str(job.project_id) if job.project_id else None,
+            "campaign_id": str(job.campaign_id) if job.campaign_id else None,
+            "created_at": job.created_at.isoformat() if job.created_at else "",
+        })
+
+    return reports
+
+
+@router.get("/campaigns")
+async def list_campaigns(user_email: str | None = None) -> list[dict]:
+    """List all campaigns for a user, with scores and deltas."""
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with Session() as session:
+        base_filter = [Job.status == "complete"]
+        if user_email:
+            base_filter.append(Job.user_email == user_email)
+
+        groups_stmt = (
+            select(
+                Job.content_group_id,
+                func.min(Job.campaign_name).label("campaign_name"),
+                func.count(Job.id).label("media_count"),
+                func.min(Job.content_type).label("content_type"),
+                func.min(Job.created_at).label("created_at"),
+                func.max(Job.created_at).label("latest_at"),
+            )
+            .where(*base_filter)
+            .group_by(Job.content_group_id)
+            .order_by(func.max(Job.created_at).desc())
+        )
+        groups = (await session.execute(groups_stmt)).all()
+
+        # Redis for reading cached scores (source of truth for frontend)
+        r = aioredis.from_url(settings.redis_url, decode_responses=True)
+
+        campaigns = []
+        for cg_id, name, count, ct, created, latest in groups:
+            # Get latest and first job IDs
+            latest_job_stmt = (
+                select(Job.id)
+                .where(Job.content_group_id == cg_id, Job.status == "complete")
+                .order_by(Job.created_at.desc())
+                .limit(1)
+            )
+            latest_job_id = (await session.execute(latest_job_stmt)).scalar_one_or_none()
+
+            first_job_stmt = (
+                select(Job.id)
+                .where(Job.content_group_id == cg_id, Job.status == "complete")
+                .order_by(Job.created_at.asc())
+                .limit(1)
+            )
+            first_job_id = (await session.execute(first_job_stmt)).scalar_one_or_none()
+
+            # Read scores from Redis first (matches what frontend report shows), fall back to DB
+            latest_score = 0
+            first_score = 0
+
+            if latest_job_id:
+                raw = await r.get(f"neuropeer:result:{latest_job_id}")
+                if raw:
+                    latest_score = json.loads(raw).get("neural_score", {}).get("total", 0)
+                else:
+                    res = (await session.execute(select(Result.neural_score_total).where(Result.job_id == latest_job_id))).scalar_one_or_none()
+                    latest_score = res or 0
+
+            if first_job_id:
+                raw = await r.get(f"neuropeer:result:{first_job_id}")
+                if raw:
+                    first_score = json.loads(raw).get("neural_score", {}).get("total", 0)
+                else:
+                    res = (await session.execute(select(Result.neural_score_total).where(Result.job_id == first_job_id))).scalar_one_or_none()
+                    first_score = res or 0
+
+            await r.aclose()
+
+            campaigns.append({
+                "content_group_id": str(cg_id),
+                "campaign_name": name,
+                "media_count": count,
+                "latest_score": round(latest_score, 1),
+                "first_score": round(first_score, 1),
+                "delta": round(latest_score - first_score, 1),
+                "content_type": ct or "custom",
+                "created_at": created.isoformat() if created else "",
+                "latest_at": latest.isoformat() if latest else "",
+                "latest_job_id": str(latest_job_id) if latest_job_id else None,
+            })
+
+    await engine.dispose()
+    return campaigns
+
+
+@router.delete("/campaigns/{content_group_id}")
+async def delete_campaign(content_group_id: UUID) -> dict:
+    """Delete a campaign and all its jobs/results."""
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with Session() as session:
+        # Delete results first (FK constraint)
+        jobs_stmt = select(Job.id).where(Job.content_group_id == content_group_id)
+        job_ids = (await session.execute(jobs_stmt)).scalars().all()
+        if not job_ids:
+            await engine.dispose()
+            raise HTTPException(status_code=404, detail="Campaign not found")
+
+        from sqlalchemy import delete as sql_delete
+        await session.execute(sql_delete(Result).where(Result.job_id.in_(job_ids)))
+        await session.execute(sql_delete(Job).where(Job.content_group_id == content_group_id))
+        await session.commit()
+
+    # Clean Redis cache
+    r = aioredis.from_url(settings.redis_url, decode_responses=True)
+    for jid in job_ids:
+        await r.delete(f"neuropeer:result:{jid}")
+        await r.delete(f"neuropeer:job_status:{jid}")
+    await r.aclose()
+
+    await engine.dispose()
+    return {"deleted": len(job_ids), "content_group_id": str(content_group_id)}
+
+
+@router.post("/campaigns/bulk-delete")
+async def bulk_delete_campaigns(body: dict) -> dict:
+    """Delete multiple campaigns at once. Body: {"content_group_ids": ["uuid", ...]}"""
+    ids = body.get("content_group_ids", [])
+    if not ids:
+        raise HTTPException(status_code=400, detail="No campaign IDs provided")
+
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    total_deleted = 0
+
+    async with Session() as session:
+        for cg_id in ids:
+            jobs_stmt = select(Job.id).where(Job.content_group_id == UUID(cg_id))
+            job_ids = (await session.execute(jobs_stmt)).scalars().all()
+            if job_ids:
+                from sqlalchemy import delete as sql_delete
+                await session.execute(sql_delete(Result).where(Result.job_id.in_(job_ids)))
+                await session.execute(sql_delete(Job).where(Job.content_group_id == UUID(cg_id)))
+                total_deleted += len(job_ids)
+
+                r = aioredis.from_url(settings.redis_url, decode_responses=True)
+                for jid in job_ids:
+                    await r.delete(f"neuropeer:result:{jid}")
+                    await r.delete(f"neuropeer:job_status:{jid}")
+                await r.aclose()
+
+        await session.commit()
+
+    await engine.dispose()
+    return {"deleted_jobs": total_deleted, "deleted_campaigns": len(ids)}
+
+
+class MergeRequest(BaseModel):
+    content_group_ids: list[str]
+    name: str | None = None
+
+
+@router.post("/campaigns/merge")
+async def merge_campaigns(body: MergeRequest) -> dict:
+    """
+    Merge multiple campaigns into one. All jobs get the same content_group_id.
+    Jobs are automatically ordered chronologically by created_at.
+    The target group is the earliest campaign (smallest created_at).
+    """
+    if len(body.content_group_ids) < 2:
+        raise HTTPException(status_code=400, detail="Need at least 2 campaigns to merge")
+
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with Session() as session:
+        # Find the earliest campaign to use as the target group
+        all_jobs = []
+        for cg_id in body.content_group_ids:
+            stmt = select(Job).where(Job.content_group_id == UUID(cg_id))
+            jobs = (await session.execute(stmt)).scalars().all()
+            all_jobs.extend(jobs)
+
+        if not all_jobs:
+            await engine.dispose()
+            raise HTTPException(status_code=404, detail="No jobs found in the specified campaigns")
+
+        # Sort by created_at and pick the earliest group as target
+        all_jobs.sort(key=lambda j: j.created_at or j.id)
+        target_group_id = all_jobs[0].content_group_id
+
+        # Update all jobs to point to the target group
+        # Also set parent_job_id to chain them chronologically
+        merged_count = 0
+        for i, job in enumerate(all_jobs):
+            job.content_group_id = target_group_id
+            if i > 0:
+                job.parent_job_id = all_jobs[i - 1].id
+            if body.name:
+                job.campaign_name = body.name
+            merged_count += 1
+
+        await session.commit()
+
+    await engine.dispose()
+
+    return {
+        "target_group_id": str(target_group_id),
+        "merged_jobs": merged_count,
+        "source_campaigns": len(body.content_group_ids),
+        "campaign_name": body.name,
+    }
+
+
+class MoveReportRequest(BaseModel):
+    job_id: str
+    target_group_id: str
+
+
+@router.post("/campaigns/move-report")
+async def move_report_to_campaign(body: MoveReportRequest) -> dict:
+    """Move a report (job) into a different campaign (content_group)."""
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with Session() as session:
+        stmt = select(Job).where(Job.id == UUID(body.job_id))
+        job = (await session.execute(stmt)).scalar_one_or_none()
+        if not job:
+            await engine.dispose()
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        job.content_group_id = UUID(body.target_group_id)
+
+        # Also pick up the campaign name from an existing job in the target group
+        target_stmt = select(Job.campaign_name).where(
+            Job.content_group_id == UUID(body.target_group_id),
+            Job.campaign_name.is_not(None)
+        ).limit(1)
+        target_name = (await session.execute(target_stmt)).scalar_one_or_none()
+        if target_name:
+            job.campaign_name = target_name
+
+        await session.commit()
+
+    await engine.dispose()
+    return {"job_id": body.job_id, "target_group_id": body.target_group_id}
+
+
+@router.put("/campaigns/{content_group_id}/name")
+async def rename_campaign(content_group_id: UUID, body: RenameRequest) -> dict:
+    """Rename a campaign (updates all jobs in the content group)."""
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with Session() as session:
+        stmt = select(Job).where(Job.content_group_id == content_group_id)
+        jobs = (await session.execute(stmt)).scalars().all()
+        if not jobs:
+            await engine.dispose()
+            raise HTTPException(status_code=404, detail="Campaign not found")
+
+        for job in jobs:
+            job.campaign_name = body.name
+        await session.commit()
+
+    await engine.dispose()
+    return {"content_group_id": str(content_group_id), "campaign_name": body.name}
+
+
+# ── New hierarchy endpoints (Project → Campaign → Report) ────────────────────
+
+
+class CreateCampaignRequest(BaseModel):
+    name: str
+    project_id: str | None = None
+    user_email: str
+    description: str | None = None
+
+
+class MoveReportV2Request(BaseModel):
+    job_id: str
+    project_id: str | None = None
+    campaign_id: str | None = None
+
+
+@router.post("/campaigns/create")
+async def create_campaign(body: CreateCampaignRequest) -> dict:
+    """Create an explicit Campaign (optionally within a Project)."""
+    from backend.models.db import Campaign as CampaignModel
+    import uuid as _uuid
+
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    async with Session() as session:
+        campaign = CampaignModel(
+            id=_uuid.uuid4(),
+            project_id=_uuid.UUID(body.project_id) if body.project_id else None,
+            user_email=body.user_email,
+            name=body.name,
+            description=body.description,
+        )
+        session.add(campaign)
+        await session.commit()
+    await engine.dispose()
+    return {"id": str(campaign.id), "name": campaign.name, "project_id": body.project_id}
+
+
+@router.get("/campaigns/v2")
+async def list_campaigns_v2(user_email: str | None = None, project_id: str | None = None) -> list[dict]:
+    """List campaigns with the new hierarchy model. Supports filtering by project."""
+    from backend.models.db import Campaign as CampaignModel
+    import uuid as _uuid
+
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    async with Session() as session:
+        stmt = select(CampaignModel)
+        if user_email:
+            stmt = stmt.where(CampaignModel.user_email == user_email)
+        if project_id:
+            stmt = stmt.where(CampaignModel.project_id == _uuid.UUID(project_id))
+        stmt = stmt.order_by(CampaignModel.updated_at.desc())
+        campaigns = (await session.execute(stmt)).scalars().all()
+
+        results = []
+        for c in campaigns:
+            job_count = (await session.execute(
+                select(func.count()).where(Job.campaign_id == c.id)
+            )).scalar() or 0
+            latest = (await session.execute(
+                select(Result.neural_score_total)
+                .join(Job, Result.job_id == Job.id)
+                .where(Job.campaign_id == c.id)
+                .order_by(Job.created_at.desc()).limit(1)
+            )).scalar()
+            results.append({
+                "id": str(c.id), "name": c.name, "description": c.description,
+                "project_id": str(c.project_id) if c.project_id else None,
+                "user_email": c.user_email,
+                "report_count": job_count, "latest_score": latest,
+                "created_at": c.created_at.isoformat() if c.created_at else "",
+            })
+
+    await engine.dispose()
+    return results
+
+
+@router.post("/reports/move")
+async def move_report_v2(body: MoveReportV2Request) -> dict:
+    """Move a report (Job) to a project and/or campaign."""
+    import uuid as _uuid
+
+    engine = create_async_engine(settings.database_url)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    async with Session() as session:
+        job = (await session.execute(
+            select(Job).where(Job.id == _uuid.UUID(body.job_id))
+        )).scalar_one_or_none()
+        if not job:
+            await engine.dispose()
+            raise HTTPException(404, "Report not found")
+
+        if body.project_id is not None:
+            job.project_id = _uuid.UUID(body.project_id) if body.project_id else None
+        if body.campaign_id is not None:
+            job.campaign_id = _uuid.UUID(body.campaign_id) if body.campaign_id else None
+        await session.commit()
+
+    await engine.dispose()
+    return {"job_id": body.job_id, "project_id": body.project_id, "campaign_id": body.campaign_id}

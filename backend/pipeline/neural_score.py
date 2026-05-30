@@ -1,0 +1,324 @@
+"""
+Stage 4b — Neural Score Composite.
+
+Computes the NeuroPeer Neural Score (0–100) as a weighted composite of
+six core GTM dimensions. Weights are calibrated against real-world
+engagement data and can be overridden per content type preset.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+from pydantic import BaseModel
+
+from backend.models.schemas import ContentType
+from backend.pipeline.metric_engine import MetricResult
+
+DEFAULT_WEIGHTS: dict[str, float] = {
+    "Hook Score": 0.25,
+    "Sustained Attention": 0.20,  # mapped from Hold Rate + Attention Decay Rate
+    "Emotional Resonance": 0.20,  # mapped from Emotional Arousal + Valence
+    "Memory Encoding": 0.15,
+    "Aesthetic Quality": 0.10,  # mapped from Visual Aesthetic Score
+    "Cognitive Accessibility": 0.10,  # inverse of Cognitive Load
+}
+
+CONTENT_PRESETS: dict[ContentType, dict[str, float]] = {
+    ContentType.instagram_reel: {
+        "Hook Score": 0.35,
+        "Sustained Attention": 0.15,
+        "Emotional Resonance": 0.20,
+        "Memory Encoding": 0.10,
+        "Aesthetic Quality": 0.12,
+        "Cognitive Accessibility": 0.08,
+    },
+    ContentType.youtube_preroll: {
+        "Hook Score": 0.40,
+        "Sustained Attention": 0.15,
+        "Emotional Resonance": 0.15,
+        "Memory Encoding": 0.15,
+        "Aesthetic Quality": 0.08,
+        "Cognitive Accessibility": 0.07,
+    },
+    ContentType.product_demo: {
+        "Hook Score": 0.20,
+        "Sustained Attention": 0.25,
+        "Emotional Resonance": 0.15,
+        "Memory Encoding": 0.20,
+        "Aesthetic Quality": 0.05,
+        "Cognitive Accessibility": 0.15,
+    },
+    ContentType.conference_talk: {
+        "Hook Score": 0.15,
+        "Sustained Attention": 0.25,
+        "Emotional Resonance": 0.15,
+        "Memory Encoding": 0.20,
+        "Aesthetic Quality": 0.05,
+        "Cognitive Accessibility": 0.20,
+    },
+    ContentType.podcast_audio: {
+        "Hook Score": 0.20,
+        "Sustained Attention": 0.20,
+        "Emotional Resonance": 0.25,
+        "Memory Encoding": 0.15,
+        "Aesthetic Quality": 0.02,
+        "Cognitive Accessibility": 0.18,
+    },
+    ContentType.custom: DEFAULT_WEIGHTS,
+}
+
+
+# ── Cinema scoring weights (feature_film content type) ─────────────────────
+# 18 cinema-specific metrics weighted by narrative importance.
+# Sum = 1.02 (intentional micro-rounding; clipped to 100 at output).
+
+CINEMA_WEIGHTS: dict[str, float] = {
+    "narrative_absorption": 0.12,
+    "emotional_depth": 0.10,
+    "suspense_arc": 0.08,
+    "character_empathy": 0.08,
+    "attention_grip": 0.08,
+    "memory_imprint": 0.07,
+    "cinematic_frisson": 0.06,
+    "pacing_coherence": 0.06,
+    "cognitive_clarity": 0.06,
+    "visual_spectacle": 0.05,
+    "soundtrack_integration": 0.05,
+    "surprise_prediction_error": 0.04,
+    "opening_hook": 0.04,
+    "climax_impact": 0.04,
+    "resolution_satisfaction": 0.03,
+    "scene_transition_flow": 0.02,
+    "dialogue_engagement": 0.02,
+    "tonal_consistency": 0.02,
+}
+
+
+class NeuralScoreBreakdownResult(BaseModel):
+    total: float
+    hook_score: float
+    sustained_attention: float
+    emotional_resonance: float
+    memory_encoding: float
+    aesthetic_quality: float
+    cognitive_accessibility: float
+
+
+class KeyMomentResult(BaseModel):
+    timestamp: float
+    type: str
+    label: str
+    score: float
+
+
+def _get_metric(metrics: list[MetricResult], name: str) -> float:
+    for m in metrics:
+        if m.name == name:
+            return m.score
+    return 50.0  # fallback to neutral if not found
+
+
+def compute_neural_score(
+    metrics: list[MetricResult],
+    content_type: ContentType = ContentType.custom,
+) -> NeuralScoreBreakdownResult:
+    """
+    Compute the NeuroPeer Neural Score (0–100) and its 6 component breakdown.
+
+    Dimension mappings:
+      Hook Score           → Hook Score metric (direct)
+      Sustained Attention  → average(Hold Rate, 100 - Attention Decay Rate*inverse)
+      Emotional Resonance  → average(Emotional Arousal, Valence)
+      Memory Encoding      → Memory Encoding metric (direct)
+      Aesthetic Quality    → Visual Aesthetic Score metric (direct)
+      Cognitive Accessibility → 100 - Cognitive Load score (inverted)
+    """
+    weights = CONTENT_PRESETS.get(content_type, DEFAULT_WEIGHTS)
+
+    # Resolve dimension scores from individual metrics
+    hook = _get_metric(metrics, "Hook Score")
+
+    hold = _get_metric(metrics, "Hold Rate")
+    decay = _get_metric(metrics, "Attention Decay Rate")
+    sustained = (hold + decay) / 2
+
+    arousal = _get_metric(metrics, "Emotional Arousal")
+    val = _get_metric(metrics, "Valence")
+    emotional = (arousal + val) / 2
+
+    memory = _get_metric(metrics, "Memory Encoding")
+    aesthetic = _get_metric(metrics, "Visual Aesthetic Score")
+    cog_load = _get_metric(metrics, "Cognitive Load")
+    cognitive_accessibility = 100.0 - cog_load
+
+    dimensions = {
+        "Hook Score": hook,
+        "Sustained Attention": sustained,
+        "Emotional Resonance": emotional,
+        "Memory Encoding": memory,
+        "Aesthetic Quality": aesthetic,
+        "Cognitive Accessibility": cognitive_accessibility,
+    }
+
+    total = sum(dimensions[dim] * weights.get(dim, 0.0) for dim in dimensions)
+    total = float(np.clip(total, 0, 100))
+
+    return NeuralScoreBreakdownResult(
+        total=round(total, 1),
+        hook_score=round(hook, 1),
+        sustained_attention=round(sustained, 1),
+        emotional_resonance=round(emotional, 1),
+        memory_encoding=round(memory, 1),
+        aesthetic_quality=round(aesthetic, 1),
+        cognitive_accessibility=round(cognitive_accessibility, 1),
+    )
+
+
+def detect_key_moments(
+    attention_curve: np.ndarray,
+    arousal_curve: np.ndarray,
+    cognitive_load_curve: np.ndarray,
+    predictions_full: np.ndarray,
+) -> list[KeyMomentResult]:
+    """
+    Automatically identify key inflection points in the attention timeline.
+
+    Moment types:
+      best_hook       — peak NAcc at onset (first 5s)
+      peak_engagement — global attention maximum
+      emotional_peak  — amygdala spike (arousal > mean + 1.5 std)
+      dropoff_risk    — DMN spike (cognitive load drop + attention drop together)
+      recovery        — re-engagement after drop (attention recovering upward)
+    """
+
+    moments = []
+    n = len(attention_curve)
+
+    # best_hook: highest attention in first 5 seconds
+    hook_window = min(5, n)
+    if hook_window > 0:
+        best_t = int(np.argmax(attention_curve[:hook_window]))
+        moments.append(
+            KeyMomentResult(
+                timestamp=float(best_t),
+                type="best_hook",
+                label="Best Hook",
+                score=float(attention_curve[best_t]),
+            )
+        )
+
+    # peak_engagement: global attention maximum (after hook window)
+    if n > hook_window:
+        peak_t = int(np.argmax(attention_curve[hook_window:])) + hook_window
+        moments.append(
+            KeyMomentResult(
+                timestamp=float(peak_t),
+                type="peak_engagement",
+                label="Peak Engagement",
+                score=float(attention_curve[peak_t]),
+            )
+        )
+
+    # emotional_peaks: arousal spikes > mean + 1.5 std
+    mean_a, std_a = arousal_curve.mean(), arousal_curve.std()
+    threshold_a = mean_a + 1.5 * std_a
+    above = np.where(arousal_curve > threshold_a)[0]
+    # Deduplicate — only keep local maxima separated by 2+ seconds
+    prev_t = -5
+    for t in above:
+        if t - prev_t >= 2:
+            moments.append(
+                KeyMomentResult(
+                    timestamp=float(t),
+                    type="emotional_peak",
+                    label="Emotional Peak",
+                    score=float(arousal_curve[t]),
+                )
+            )
+            prev_t = int(t)
+
+    # dropoff_risk: attention declining AND cognitive load high
+    if n > 5:
+        for t in range(2, n - 1):
+            attn_falling = attention_curve[t] < attention_curve[t - 2] - 10
+            cog_high = cognitive_load_curve[t] > cognitive_load_curve.mean() + cognitive_load_curve.std()
+            if attn_falling and cog_high:
+                moments.append(
+                    KeyMomentResult(
+                        timestamp=float(t),
+                        type="dropoff_risk",
+                        label="Drop-off Risk",
+                        score=float(attention_curve[t]),
+                    )
+                )
+
+    # recovery: attention rises > 15 points over 2-second window
+    for t in range(2, n):
+        if attention_curve[t] - attention_curve[t - 2] > 15:
+            moments.append(
+                KeyMomentResult(
+                    timestamp=float(t),
+                    type="recovery",
+                    label="Re-engagement",
+                    score=float(attention_curve[t]),
+                )
+            )
+
+    # Sort by timestamp, deduplicate same-second entries
+    moments.sort(key=lambda m: m.timestamp)
+    seen_times: set[float] = set()
+    deduped = []
+    for m in moments:
+        if m.timestamp not in seen_times:
+            deduped.append(m)
+            seen_times.add(m.timestamp)
+
+    return deduped
+
+
+# ── Cinema neural score (feature_film) ─────────────────────────────────────
+
+
+def compute_cinema_neural_score(
+    cinema_metrics: list[dict],
+) -> NeuralScoreBreakdownResult:
+    """Compute the NeuroPeer Neural Score for feature_film content type.
+
+    Uses CINEMA_WEIGHTS to produce a weighted composite from the 18 cinema
+    metrics produced by cinema_metrics.compute_cinema_metrics().
+
+    The 6-dimension breakdown is mapped from cinema metrics:
+      hook_score            → opening_hook
+      sustained_attention   → attention_grip
+      emotional_resonance   → emotional_depth
+      memory_encoding       → memory_imprint
+      aesthetic_quality     → visual_spectacle
+      cognitive_accessibility → cognitive_clarity
+
+    Args:
+        cinema_metrics: List of 18 dicts from compute_cinema_metrics(),
+                        each with 'key' and 'score' fields.
+
+    Returns:
+        NeuralScoreBreakdownResult with total and 6-dimension breakdown.
+    """
+    # Build key -> score lookup
+    scores_by_key = {m["key"]: m["score"] for m in cinema_metrics}
+
+    # Weighted composite across all 18 cinema metrics
+    total = sum(
+        scores_by_key.get(key, 50.0) * weight
+        for key, weight in CINEMA_WEIGHTS.items()
+    )
+    total = float(np.clip(total, 0, 100))
+
+    # Map cinema metrics to the 6 standard breakdown dimensions
+    return NeuralScoreBreakdownResult(
+        total=round(total, 1),
+        hook_score=round(scores_by_key.get("opening_hook", 50.0), 1),
+        sustained_attention=round(scores_by_key.get("attention_grip", 50.0), 1),
+        emotional_resonance=round(scores_by_key.get("emotional_depth", 50.0), 1),
+        memory_encoding=round(scores_by_key.get("memory_imprint", 50.0), 1),
+        aesthetic_quality=round(scores_by_key.get("visual_spectacle", 50.0), 1),
+        cognitive_accessibility=round(scores_by_key.get("cognitive_clarity", 50.0), 1),
+    )

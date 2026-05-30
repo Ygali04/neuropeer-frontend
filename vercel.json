@@ -1,5 +1,14 @@
 {
   "framework": "nextjs",
   "buildCommand": "npm run build",
-  "installCommand": "npm ci --legacy-peer-deps"
+  "installCommand": "npm ci --legacy-peer-deps",
+  "experimentalServices": {
+    "frontend": {
+      "routePrefix": "/"
+    },
+    "backend": {
+      "entrypoint": "backend",
+      "routePrefix": "/_/backend"
+    }
+  }
 }

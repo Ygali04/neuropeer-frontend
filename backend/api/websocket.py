@@ -1,0 +1,81 @@
+"""WebSocket endpoint — streams real-time job progress to the frontend."""
+
+from __future__ import annotations
+
+import json
+
+import redis.asyncio as aioredis
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+from backend.api.middleware.api_key import authenticate_websocket
+from backend.config import settings
+
+router = APIRouter(tags=["WebSocket"])
+
+
+@router.websocket("/ws/job/{job_id}")
+async def job_progress(websocket: WebSocket, job_id: str) -> None:
+    """
+    WebSocket connection for a specific job.
+
+    Subscribes to the Redis pub/sub channel for this job and forwards
+    all progress events to the connected frontend client.
+
+    Emits ProgressEvent JSON objects:
+      {"job_id": str, "status": str, "progress": float, "message": str}
+
+    Closes the connection when status is "complete" or "error".
+    """
+    # Gate the handshake BEFORE accept so unauthenticated clients get a clean
+    # 4401 close instead of a hung socket.
+    auth = await authenticate_websocket(websocket)
+    if auth is None:
+        return
+
+    await websocket.accept()
+
+    r = aioredis.from_url(settings.redis_url, decode_responses=True)
+    pubsub = r.pubsub()
+    await pubsub.subscribe(f"neuropeer:job:{job_id}")
+
+    try:
+        # First, check if the job is already complete (race condition / cache expired)
+        existing = await r.get(f"neuropeer:result:{job_id}")
+        if not existing:
+            # Check PostgreSQL for completed jobs whose cache expired
+            from backend.api.routes.results import _load_from_db
+            db_result = await _load_from_db(job_id)
+            if db_result:
+                existing = "found_in_db"
+        if existing:
+            await websocket.send_json(
+                {
+                    "job_id": job_id,
+                    "status": "complete",
+                    "progress": 1.0,
+                    "message": "Analysis already complete.",
+                }
+            )
+            await websocket.close()
+            return
+
+        # Stream progress until complete or error
+        async for message in pubsub.listen():
+            if message["type"] != "message":
+                continue
+
+            try:
+                event = json.loads(message["data"])
+            except (json.JSONDecodeError, TypeError):
+                continue
+
+            await websocket.send_json(event)
+
+            if event.get("status") in ("complete", "error"):
+                break
+
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await pubsub.unsubscribe(f"neuropeer:job:{job_id}")
+        await r.aclose()
