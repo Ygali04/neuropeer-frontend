@@ -17,6 +17,7 @@ import numpy as np
 import redis as redis_sync
 
 from backend.config import settings
+from backend.observability.tracing import stage_span
 
 logger = logging.getLogger(__name__)
 
@@ -186,7 +187,8 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
         _update_job_status(job_id, "downloading")
 
         try:
-            media, events_df = ingest(url, work_dir)
+            with stage_span("ingest", job_id=job_id):
+                media, events_df = ingest(url, work_dir)
         except DownloadError as exc:
             # Surface the full yt-dlp stderr in the job error — never swallow it
             logger.error("Download failed for job %s: %s", job_id, str(exc))
@@ -228,9 +230,10 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
                 "subject": "default", "sentence": sentence, "context": sentence})
         tribe_events_df = _pd.DataFrame(tribe_events)
 
-        predictions, vertex_key = run_inference_backend(
-            job_id, tribe_events_df, work_dir, video_path=media.video_path, audio_path=media.audio_path
-        )
+        with stage_span("infer", job_id=job_id, model=settings.tribe_model_id):
+            predictions, vertex_key = run_inference_backend(
+                job_id, tribe_events_df, work_dir, video_path=media.video_path, audio_path=media.audio_path
+            )
 
         _publish_progress(job_id, "inferring", 0.65, "All 4 modality passes complete.")
 
@@ -239,7 +242,8 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
         _update_job_status(job_id, "aggregating")
 
         content_type_enum = ContentType(content_type)
-        metrics, attn_curve, arousal_curve, cog_curve, modality_breakdown = compute_all_metrics(predictions)
+        with stage_span("metrics", job_id=job_id):
+            metrics, attn_curve, arousal_curve, cog_curve, modality_breakdown = compute_all_metrics(predictions)
 
         # ── Stage 4: Neural Score + key moments ───────────────────────────────
         _publish_progress(job_id, "scoring", 0.85, "Computing Neural Score composite…")
@@ -247,8 +251,9 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
 
         from backend.pipeline.tribe_inference import Modality
 
-        neural_score = compute_neural_score(metrics, content_type_enum)
-        key_moments = detect_key_moments(attn_curve, arousal_curve, cog_curve, predictions[Modality.FULL])
+        with stage_span("score", job_id=job_id):
+            neural_score = compute_neural_score(metrics, content_type_enum)
+            key_moments = detect_key_moments(attn_curve, arousal_curve, cog_curve, predictions[Modality.FULL])
 
         # ── Stage 5: Fusion + VLM Report (or legacy AI feedback) ─────────
         _publish_progress(job_id, "scoring", 0.86, "Fusing neural signals with visual context…")
@@ -297,15 +302,16 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
                 loop.close()
 
         # Fuse TRIBE v2 signals with Marengo context
-        fusion_result = fuse(
-            key_moments=key_moments,
-            attention_curve=attn_curve,
-            arousal_curve=arousal_curve,
-            cognitive_load_curve=cog_curve,
-            neural_score=neural_score,
-            metrics=metrics,
-            marengo=marengo_result,
-        )
+        with stage_span("fuse", job_id=job_id):
+            fusion_result = fuse(
+                key_moments=key_moments,
+                attention_curve=attn_curve,
+                arousal_curve=arousal_curve,
+                cognitive_load_curve=cog_curve,
+                neural_score=neural_score,
+                metrics=metrics,
+                marengo=marengo_result,
+            )
 
         # Generate AI feedback — VLM reporter if fusion available, legacy otherwise
         _publish_progress(job_id, "scoring", 0.88, "Generating AI improvement strategies…")
