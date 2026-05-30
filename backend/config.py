@@ -82,6 +82,13 @@ class Settings(BaseSettings):
     device: str = "cuda"  # cuda / cpu
     temp_dir: str = "/tmp/neuropeer"
 
+    # Cortical scorer backend — selects which model produces the cortical
+    # embedding (the 20,484-vertex fsaverage5 prediction). Swap via the
+    # SCORER_BACKEND env var without touching pipeline code.
+    #   "tribe-v2"   — Meta TRIBE v2 encoder (default, production)
+    #   "orcle-nano" — in-house ORCLE Nano encoder (placeholder, not yet implemented)
+    scorer_backend: str = "tribe-v2"
+
     # yt-dlp download settings
     # Path to a Netscape-format cookies.txt exported from your browser.
     # Required for Instagram, age-gated YouTube, and other auth-walled content.
@@ -102,22 +109,39 @@ class Settings(BaseSettings):
     proxy_username: str = ""  # Oxylabs username (session ID appended automatically)
     proxy_password: str = ""  # Oxylabs password
 
-    # Remote GPU inference (DataCrunch.io A100 spot instances)
-    # Set to "local" to run TRIBE v2 on the worker itself (requires local GPU).
-    # Set to "datacrunch" to spin up an A100 spot instance per job.
-    inference_backend: str = "local"  # local | datacrunch
+    # Remote GPU inference
+    # "runpod" — spin up a RunPod GPU pod per job (recommended, reliable A100 availability)
+    # "datacrunch" — DataCrunch A100 spot instances (legacy, unreliable GPU supply)
+    # "local" — run TRIBE v2 on the worker itself (requires local GPU)
+    # "mock" — return random predictions (dev/test only)
+    inference_backend: str = "runpod"  # runpod | datacrunch | local | mock
 
-    # DataCrunch.io OAuth2 credentials (only needed when inference_backend = "datacrunch")
-    # Generate at the DataCrunch dashboard → API credentials
+    # GPU compute backend selector for the RunPod provider.
+    #   "pod"        — provision one RunPod pod per job (legacy, default; ~2-3 min cold start)
+    #   "serverless" — submit to a RunPod Serverless endpoint (queue-driven autoscale + scale-to-zero)
+    # Orthogonal to `inference_backend` above (which picks the provider). This
+    # only refines *how* the runpod provider runs. Prefer the live-read helper
+    # `gpu_backend()` (below) over this cached field so the flag can be flipped
+    # without a worker restart — mirrors the api-key middleware's `_enforce()`.
+    gpu_backend: str = "pod"  # pod | serverless
+
+    # RunPod.io GPU pods (preferred)
+    runpod_api_key: str = ""
+    runpod_gpu_type: str = "NVIDIA A100 80GB PCIe"
+    runpod_container_image: str = "pytorch/pytorch:2.4.0-cuda12.4-cudnn9-devel"
+    runpod_boot_timeout: int = 600
+
+    # RunPod Serverless (used when GPU_BACKEND=serverless)
+    runpod_serverless_endpoint_id: str = ""
+    # Max seconds to poll the serverless endpoint /status before giving up.
+    runpod_serverless_timeout: int = 1800
+
+    # DataCrunch.io (legacy fallback)
     datacrunch_client_id: str = ""
     datacrunch_client_secret: str = ""
-    # OS image with CUDA pre-installed (bare image — deps installed via startup script)
     datacrunch_image: str = "ubuntu-24.04-cuda-12.8-open-docker"
-    # Instance type: 1A100.80G ($0.45/h spot), 1A100.40G ($0.25/h spot)
     datacrunch_instance_type: str = "1A100.80G"
-    # Comma-separated SSH key IDs from DataCrunch dashboard (required for instance creation)
     datacrunch_ssh_key_ids: str = ""
-    # Max seconds to wait for spot instance to boot and complete inference
     datacrunch_boot_timeout: int = 600
 
     class Config:
@@ -125,3 +149,17 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def gpu_backend() -> str:
+    """Live-read the GPU backend selector (env first, then cached settings).
+
+    Mirrors the api-key middleware's ``_enforce()`` pattern: reads ``GPU_BACKEND``
+    from the environment on every call so the flag can be flipped on a running
+    worker without a restart. Returns ``"serverless"`` or ``"pod"`` (default).
+    """
+    import os
+
+    raw = os.getenv("GPU_BACKEND")
+    value = (raw if raw is not None else settings.gpu_backend).strip().lower()
+    return "serverless" if value == "serverless" else "pod"

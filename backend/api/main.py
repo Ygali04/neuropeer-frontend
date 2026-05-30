@@ -8,19 +8,24 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.middleware.api_key import require_api_key
-from backend.api.routes import analyze, compare, export, results, score
+from backend.api.routes import analyze, compare, embeddings, export, results, score
 from backend.api.routes.campaigns import router as campaigns_router
+from backend.api.routes.keys import router as keys_router
 from backend.api.routes.profile import router as profile_router
 from backend.api.routes.projects import router as projects_router
 from backend.api.routes.upload import router as upload_router
 from backend.api.websocket import router as ws_router
 from backend.config import settings
+from backend.observability.tracing import setup_tracing
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Create database tables on startup."""
     from backend.models.db import Base, engine
+
+    # OTel tracing — safe no-op unless OTEL_EXPORTER_OTLP_ENDPOINT is set.
+    setup_tracing(app)
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -58,12 +63,15 @@ _auth = [Depends(require_api_key)]
 app.include_router(analyze.router, prefix="/api/v1", dependencies=_auth)
 app.include_router(upload_router, prefix="/api/v1", dependencies=_auth)
 app.include_router(score.router, prefix="/api/v1")  # auth handled in-route
+app.include_router(embeddings.router, prefix="/api/v1")  # auth handled in-route
 app.include_router(results.router, prefix="/api/v1")  # public read
 app.include_router(compare.router, prefix="/api/v1", dependencies=_auth)
 app.include_router(export.router, prefix="/api/v1")
 app.include_router(campaigns_router, prefix="/api/v1")
 app.include_router(projects_router, prefix="/api/v1")
 app.include_router(profile_router, prefix="/api/v1")
+# API-key management — gated by ADMIN_API_TOKEN bearer (kwale dashboard only).
+app.include_router(keys_router, prefix="/api/v1")
 app.include_router(ws_router)
 
 
