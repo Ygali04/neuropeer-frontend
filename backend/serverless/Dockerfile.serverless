@@ -1,0 +1,60 @@
+# NeuroPeer — TRIBE v2 RunPod Serverless image
+#
+# Long-lived serverless worker: RunPod keeps the container warm between jobs
+# (or scales it to zero), so model deps + weights are baked in at build time
+# instead of installed per-job like the legacy pod startup script.
+#
+# Build (from the repo ROOT, so the backend/ package is in context):
+#   docker build -f backend/serverless/Dockerfile.serverless \
+#     -t <registry>/neuropeer-serverless:latest .
+# Push:
+#   docker push <registry>/neuropeer-serverless:latest
+#
+# See backend/serverless/README.md for endpoint creation steps.
+
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 python3-pip python3.11-dev \
+    git curl ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN ln -sf /usr/bin/python3.11 /usr/bin/python && ln -sf /usr/bin/pip3 /usr/bin/pip
+
+# PyTorch with CUDA 12.4 (cu124 supports up to sm_90; see check_gpu guard).
+RUN pip install --no-cache-dir \
+    torch==2.4.0 torchvision torchaudio \
+    --index-url https://download.pytorch.org/whl/cu124
+
+# TRIBE v2 + its deps. neuralset MUST be pinned to 0.0.2 — 0.0.3 removed
+# AddText from events.transforms, which tribev2 still imports.
+RUN pip install --no-cache-dir git+https://github.com/facebookresearch/tribev2.git --no-deps
+RUN pip install --no-cache-dir \
+    transformers huggingface-hub numpy pandas pyarrow scipy \
+    nilearn nibabel x-transformers einops soundfile moviepy julius \
+    exca "neuralset==0.0.2" neuraltrain boto3 polars mne spacy langdetect \
+    Levenshtein uv
+
+# RunPod Serverless SDK (provides runpod.serverless.start).
+RUN pip install --no-cache-dir runpod
+
+WORKDIR /app
+
+# Copy the backend package (handler + shared inference core + config). The
+# repo root is the build context so backend/ resolves as an importable package.
+COPY backend/ /app/backend/
+
+# Optional: pre-download TRIBE v2 weights at build time to cut cold-start.
+# Pass --build-arg HF_TOKEN=... if the model is gated.
+ARG HF_TOKEN=""
+ENV HF_TOKEN=${HF_TOKEN}
+RUN python -c "import os; from huggingface_hub import snapshot_download; \
+    (snapshot_download(repo_id='facebook/tribev2', token=os.environ.get('HF_TOKEN') or None, \
+    cache_dir='/tmp/tribe_cache') if os.environ.get('HF_TOKEN') else print('skip weight prefetch (no HF_TOKEN)'))"
+
+# Entrypoint: starts the RunPod serverless worker loop. The __main__ block in
+# rp_handler.py calls runpod.serverless.start({"handler": handler}).
+CMD ["python", "-m", "backend.serverless.rp_handler"]
