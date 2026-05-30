@@ -27,7 +27,8 @@ import numpy as np
 import pandas as pd
 import requests
 
-from backend.config import settings
+from backend.config import gpu_backend, settings
+from backend.pipeline.inference_core import render_pod_inference_script
 from backend.pipeline.tribe_inference import Modality, run_all_modalities
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,13 @@ def run_inference_backend(
         if video_path is None:
             logger.warning("RunPod backend requires video_path; falling back to local")
             return _run_locally(job_id, events_df)
+        # GPU_BACKEND refines *how* the runpod provider runs: a serverless
+        # endpoint (autoscale + scale-to-zero) or the legacy pod-per-job path.
+        if gpu_backend() == "serverless":
+            from backend.pipeline.runpod_serverless_client import run_on_serverless
+
+            logger.info("Routing job %s to RunPod Serverless (GPU_BACKEND=serverless)", job_id)
+            return run_on_serverless(job_id, video_path, events_df, audio_path)
         return _run_on_runpod(job_id, video_path, events_df, audio_path)
     if backend == "datacrunch":
         if video_path is None:
@@ -608,6 +616,14 @@ def _build_startup_script(
     # Derive GPU log key from sentinel path (staging/{job_id}/gpu_log.txt)
     gpu_log_key = sentinel_done.rsplit("/", 1)[0] + "/gpu_log.txt"
 
+    # Single source of truth: the /tmp/inference.py body is rendered from
+    # backend.pipeline.inference_core (same code the serverless handler runs),
+    # then base64-embedded so we never maintain a duplicate copy here.
+    import base64 as _b64
+
+    inference_py = render_pod_inference_script(output_s3_key, sentinel_done, sentinel_error)
+    inference_py_b64 = _b64.b64encode(inference_py.encode()).decode()
+
     return f"""#!/bin/bash
 set -e
 
@@ -720,200 +736,9 @@ s3.put_object(Bucket=os.environ['S3_BUCKET'], Key='{sentinel_error}',
     exit 1
 fi
 
-# Write the inference script
-cat > /tmp/inference.py << 'PYEOF'
-import io, os, sys, logging, json
-import numpy as np
-import pandas as pd
-import boto3
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-log = logging.getLogger("tribe_inference")
-
-S3_BUCKET = os.environ["S3_BUCKET"]
-S3_ENDPOINT = os.environ.get("S3_ENDPOINT_URL") or None
-VIDEO_PATH = "/tmp/video.mp4"
-EVENTS_PATH = "/tmp/events.parquet"
-OUTPUT_KEY = "{output_s3_key}"
-SENTINEL_DONE = "{sentinel_done}"
-SENTINEL_ERROR = "{sentinel_error}"
-
-# Event-level chunking params (chunk the DataFrame, NOT the video file)
-MAX_CHUNK_S = 300  # seconds per chunk
-OVERLAP_S = 15     # seconds of overlap for context continuity
-
-def s3():
-    return boto3.client("s3",
-        endpoint_url=S3_ENDPOINT,
-        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
-        region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
-    )
-
-def chunked_predict(model, events_df, max_chunk_s=MAX_CHUNK_S, overlap_s=OVERLAP_S):
-    # Run TRIBE v2 in time-windowed chunks on the events DataFrame.
-    # This is the approach that works — chunk the EVENTS, not the video file.
-    # Detect the time column name
-    time_col = None
-    for col_name in ["onset", "start", "time", "timestamp"]:
-        if col_name in events_df.columns:
-            time_col = col_name
-            break
-    if time_col is None:
-        log.warning("No time column found in events_df (columns=%s), running single-pass", list(events_df.columns))
-        preds, segments = model.predict(events=events_df)
-        return preds
-
-    total_duration = events_df[time_col].max() + 1
-
-    if total_duration <= max_chunk_s:
-        # Short video — single pass (no chunking needed)
-        log.info("Video <= %ds, running single-pass inference", max_chunk_s)
-        preds, segments = model.predict(events=events_df)
-        log.info("Single-pass predictions: shape=%s, dtype=%s", preds.shape, preds.dtype)
-        return preds
-
-    log.info("Chunking %d seconds into %d-second windows with %d-second overlap",
-             int(total_duration), max_chunk_s, overlap_s)
-
-    all_preds = []
-    chunk_start = 0
-
-    while chunk_start < total_duration:
-        chunk_end = min(chunk_start + max_chunk_s, total_duration)
-
-        # Select events in this chunk's time range
-        mask = (events_df[time_col] >= chunk_start) & (events_df[time_col] < chunk_end)
-        chunk_df = events_df[mask].copy()
-
-        if len(chunk_df) == 0:
-            log.warning("  Chunk %.0f-%.0fs: 0 events, skipping", chunk_start, chunk_end)
-            chunk_start += max_chunk_s - overlap_s
-            continue
-
-        log.info("  Chunk %.0f-%.0fs (%d events)", chunk_start, chunk_end, len(chunk_df))
-        preds, segments = model.predict(events=chunk_df)
-        log.info("  Chunk result: shape=%s", preds.shape)
-        all_preds.append((chunk_start, chunk_end, preds))
-
-        chunk_start += max_chunk_s - overlap_s
-
-    # Merge with linear crossfade
-    if len(all_preds) == 0:
-        log.error("No chunks produced predictions!")
-        return np.zeros((int(total_duration), 20484), dtype=np.float32)
-    if len(all_preds) == 1:
-        return all_preds[0][2]
-
-    return merge_overlapping(all_preds, total_duration, overlap_s)
-
-
-def merge_overlapping(batch_preds, total_duration, overlap_s=OVERLAP_S):
-    # Merge overlapping prediction chunks with linear crossfade.
-    total_s = int(total_duration)
-    n_vertices = batch_preds[0][2].shape[1] if len(batch_preds[0][2].shape) > 1 else 1
-    merged = np.zeros((total_s, n_vertices), dtype=np.float32)
-    weights = np.zeros(total_s, dtype=np.float32)
-
-    for start, end, preds in batch_preds:
-        n = preds.shape[0]
-        offset = int(start)
-
-        for t in range(n):
-            gt = offset + t
-            if gt >= total_s:
-                break
-            # Linear ramp in overlap regions
-            if t < overlap_s:
-                w = t / overlap_s
-            elif t > n - overlap_s:
-                w = (n - t) / overlap_s
-            else:
-                w = 1.0
-            w = max(0.0, min(1.0, w))
-            merged[gt] += preds[t] * w if len(preds.shape) > 1 else float(preds[t]) * w
-            weights[gt] += w
-
-    nonzero = weights > 1e-8
-    if len(merged.shape) > 1:
-        merged[nonzero] /= weights[nonzero, np.newaxis]
-    else:
-        merged[nonzero] /= weights[nonzero]
-    return merged
-
-
-try:
-    from tribev2 import TribeModel
-
-    # Load TRIBE v2 model ONCE
-    log.info("Loading TRIBE v2 model...")
-    model = TribeModel.from_pretrained("facebook/tribev2", cache_folder="/tmp/tribe_cache")
-    log.info("Model loaded successfully")
-
-    # Use pre-built events if available, otherwise extract from video
-    if os.path.exists(EVENTS_PATH):
-        log.info("Loading pre-built events from %s", EVENTS_PATH)
-        df = pd.read_parquet(EVENTS_PATH)
-        try:
-            from neuralset.events.utils import standardize_events
-            df = standardize_events(df)
-        except Exception as e:
-            log.warning("standardize_events failed: %s — using raw events", e)
-    else:
-        log.info("Generating events from video...")
-        df = model.get_events_dataframe(video_path=VIDEO_PATH)
-    log.info("Events DataFrame: %d rows, columns=%s", len(df), list(df.columns))
-
-    # Run full multimodal prediction (with event-level chunking for long videos)
-    log.info("Running TRIBE v2 full multimodal inference...")
-    preds_full = chunked_predict(model, df)
-    log.info("Full predictions: shape=%s, nonzero=%d/%d",
-             preds_full.shape, int(np.count_nonzero(preds_full)), int(preds_full.size))
-
-    predictions = {{"full": preds_full.astype(np.float32)}}
-
-    # Run modality ablations (video-only, audio-only, text-only)
-    for modality_name, ablation_kwargs in [
-        ("video_only", {{"audio_path": None}}),
-        ("audio_only", {{"video_path": None}}),
-        ("text_only",  {{"video_path": None, "audio_path": None}}),
-    ]:
-        log.info("Running ablation: %s", modality_name)
-        try:
-            df_ablated = model.get_events_dataframe(video_path=VIDEO_PATH)
-            for col, val in ablation_kwargs.items():
-                if col in df_ablated.columns and val is None:
-                    df_ablated[col] = ""
-            preds = chunked_predict(model, df_ablated)
-            predictions[modality_name] = preds.astype(np.float32)
-            log.info("  %s: shape=%s", modality_name, predictions[modality_name].shape)
-        except Exception as e:
-            log.warning("Ablation %s failed: %s — using full predictions as fallback", modality_name, e)
-            predictions[modality_name] = predictions["full"].copy()
-
-    # Upload predictions to S3
-    log.info("Uploading predictions to S3...")
-    out_buf = io.BytesIO()
-    np.savez_compressed(out_buf, **predictions)
-    s3().put_object(Bucket=S3_BUCKET, Key=OUTPUT_KEY, Body=out_buf.getvalue())
-
-    # Signal success
-    s3().put_object(Bucket=S3_BUCKET, Key=SENTINEL_DONE, Body=json.dumps({{
-        "status": "done",
-        "n_timesteps": int(preds_full.shape[0]),
-        "n_vertices": int(preds_full.shape[1]) if len(preds_full.shape) > 1 else 0,
-        "modalities": list(predictions.keys()),
-    }}).encode())
-    log.info("Done! Predictions uploaded successfully.")
-
-except Exception as e:
-    log.error("Inference failed: %s", e, exc_info=True)
-    try:
-        s3().put_object(Bucket=S3_BUCKET, Key=SENTINEL_ERROR, Body=str(e).encode())
-    except Exception:
-        pass
-    sys.exit(1)
-PYEOF
+# Write the inference script (rendered from backend.pipeline.inference_core,
+# base64-embedded — ONE shared source of truth with the serverless handler)
+echo '{inference_py_b64}' | base64 -d > /tmp/inference.py
 
 # Run inference — capture ALL output to log file for S3 upload
 echo "Running inference script..."

@@ -109,11 +109,25 @@ class Settings(BaseSettings):
     # "mock" — return random predictions (dev/test only)
     inference_backend: str = "runpod"  # runpod | datacrunch | local | mock
 
+    # GPU compute backend selector for the RunPod provider.
+    #   "pod"        — provision one RunPod pod per job (legacy, default; ~2-3 min cold start)
+    #   "serverless" — submit to a RunPod Serverless endpoint (queue-driven autoscale + scale-to-zero)
+    # Orthogonal to `inference_backend` above (which picks the provider). This
+    # only refines *how* the runpod provider runs. Prefer the live-read helper
+    # `gpu_backend()` (below) over this cached field so the flag can be flipped
+    # without a worker restart — mirrors the api-key middleware's `_enforce()`.
+    gpu_backend: str = "pod"  # pod | serverless
+
     # RunPod.io GPU pods (preferred)
     runpod_api_key: str = ""
     runpod_gpu_type: str = "NVIDIA A100 80GB PCIe"
     runpod_container_image: str = "pytorch/pytorch:2.4.0-cuda12.4-cudnn9-devel"
     runpod_boot_timeout: int = 600
+
+    # RunPod Serverless (used when GPU_BACKEND=serverless)
+    runpod_serverless_endpoint_id: str = ""
+    # Max seconds to poll the serverless endpoint /status before giving up.
+    runpod_serverless_timeout: int = 1800
 
     # DataCrunch.io (legacy fallback)
     datacrunch_client_id: str = ""
@@ -128,3 +142,17 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def gpu_backend() -> str:
+    """Live-read the GPU backend selector (env first, then cached settings).
+
+    Mirrors the api-key middleware's ``_enforce()`` pattern: reads ``GPU_BACKEND``
+    from the environment on every call so the flag can be flipped on a running
+    worker without a restart. Returns ``"serverless"`` or ``"pod"`` (default).
+    """
+    import os
+
+    raw = os.getenv("GPU_BACKEND")
+    value = (raw if raw is not None else settings.gpu_backend).strip().lower()
+    return "serverless" if value == "serverless" else "pod"
