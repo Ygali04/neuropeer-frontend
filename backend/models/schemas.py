@@ -140,6 +140,57 @@ class BrainMapFrame(BaseModel):
     vertex_activations: list[float]  # length 20484
 
 
+# --- Cortical embedding (kwale.ai developer-API primitive) ---
+
+
+class EmbeddingsRequest(AnalyzeRequest):
+    """Same input as /score, plus a flag to inline the full array.
+
+    Inherits url / content_type / parent_job_id / user_email / project_id /
+    campaign_id from AnalyzeRequest so the embeddings endpoint accepts an
+    identical request shape.
+    """
+
+    return_full: bool = False  # inline the full (n_timesteps, 20484) array
+
+
+class ModalityEmbeddingSummary(BaseModel):
+    """Compact, JSON-safe summary of one modality's cortical embedding.
+
+    mean / l2_norm are per-vertex vectors of length n_vertices (20484), small
+    enough to inline. vertices is the full (n_timesteps x n_vertices) array,
+    populated only when return_full=true.
+    """
+
+    modality: str  # Modality value: "full" | "video_only" | "audio_only" | "text_only"
+    n_timesteps: int
+    n_vertices: int  # 20484 for fsaverage5
+    mean: list[float]  # per-vertex mean across time, length n_vertices
+    l2_norm: list[float]  # per-vertex L2 norm across time, length n_vertices
+    vertices: list[list[float]] | None = None  # full array iff return_full=true
+
+
+class EmbeddingsResponse(BaseModel):
+    """Cortical embedding output for the developer API.
+
+    By default returns compact per-modality summaries plus an S3 URI to the
+    full .npz the pipeline already wrote. Set return_full=true to inline the
+    full per-modality arrays as well.
+    """
+
+    job_id: UUID
+    url: str
+    content_type: ContentType
+    duration_seconds: float
+    surface: str = "fsaverage5"
+    n_vertices: int = 20484
+    scorer_backend: str  # which CorticalScorer produced the embedding
+    vertex_data_s3_key: str | None = None  # key of the full predictions .npz
+    vertex_data_uri: str | None = None  # s3:// URI of the full predictions .npz
+    return_full: bool = False
+    modalities: list[ModalityEmbeddingSummary]
+
+
 class ComparisonResult(BaseModel):
     job_ids: list[UUID]
     labels: list[str]

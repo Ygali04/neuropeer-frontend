@@ -29,7 +29,8 @@ import requests
 
 from backend.config import gpu_backend, settings
 from backend.pipeline.inference_core import render_pod_inference_script
-from backend.pipeline.tribe_inference import Modality, run_all_modalities
+from backend.pipeline.model_interface import get_scorer
+from backend.pipeline.tribe_inference import Modality
 
 logger = logging.getLogger(__name__)
 
@@ -80,8 +81,9 @@ def _run_locally(
         mock_preds = np.random.randn(n_timesteps, 20484).astype(np.float32) * 0.3
         predictions = {m: mock_preds.copy() for m in Modality}
     else:
-        logger.info("Running TRIBE v2 locally for job %s", job_id)
-        predictions = run_all_modalities(events_df)
+        scorer = get_scorer()
+        logger.info("Running cortical scorer %r locally for job %s", scorer.backend_id, job_id)
+        predictions = scorer.predict(events_df)
 
     buf = io.BytesIO()
     np.savez_compressed(buf, **{m.value: arr for m, arr in predictions.items()})

@@ -102,8 +102,21 @@ def run_all_modalities(events_df: pd.DataFrame) -> dict[Modality, np.ndarray]:
     """
     Run all 4 inference passes (full + 3 ablations).
     Returns dict mapping Modality → predictions array (n_timesteps, 20484).
+
+    Delegates to the single shared TRIBE v2 implementation in
+    ``backend.pipeline.inference_core`` (the same code the RunPod pod and
+    Serverless handler run), passing the events DataFrame in-memory so the
+    worker-local path, the pod path, and the serverless path can never drift.
+    The string-keyed result is mapped back onto the ``Modality`` enum.
     """
-    return {modality: run_inference(events_df, modality) for modality in Modality}
+    from backend.pipeline.inference_core import run_tribe_inference
+
+    preds_by_name = run_tribe_inference(events_df=events_df)
+    out: dict[Modality, np.ndarray] = {}
+    for modality in Modality:
+        if modality.value in preds_by_name:
+            out[modality] = preds_by_name[modality.value]
+    return out
 
 
 def save_predictions(predictions: dict[Modality, np.ndarray], output_path: Path) -> None:

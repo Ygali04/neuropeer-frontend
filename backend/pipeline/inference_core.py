@@ -185,11 +185,40 @@ def merge_overlapping(batch_preds, total_duration, overlap_s=OVERLAP_S):
     return merged
 
 
+# Columns blanked (set to "") to produce each single-modality ablation. Kept
+# here next to the inference loop so the GPU/pod path and the worker-local
+# CorticalScorer path share ONE definition of what each ablation means.
+_ABLATION_COLUMNS: dict[str, tuple[str, ...]] = {
+    "video_only": ("audio_path",),
+    "audio_only": ("video_path",),
+    "text_only": ("video_path", "audio_path"),
+}
+
+
+def _ablate_events_df(events_df, modality_name: str):
+    """Return a copy of ``events_df`` with the ablation columns for ``modality_name`` blanked."""
+    df_ablated = events_df.copy()
+    for col in _ABLATION_COLUMNS.get(modality_name, ()):
+        if col in df_ablated.columns:
+            df_ablated[col] = ""
+    return df_ablated
+
+
 def run_tribe_inference(
     video_path: str = "/tmp/video.mp4",
     events_path: str | None = "/tmp/events.parquet",
+    events_df=None,
 ) -> dict[str, np.ndarray]:
-    """Run the full + 3 ablation TRIBE v2 passes on the GPU.
+    """Run the full + 3 ablation TRIBE v2 passes.
+
+    This is the **single** TRIBE v2 inference implementation, shared by every
+    compute backend:
+
+      * the legacy pod-per-job path and the RunPod Serverless handler call it
+        with file paths (``video_path`` / ``events_path``);
+      * the worker-local :class:`CorticalScorer` calls it with an in-memory
+        ``events_df`` (no temp files, no video regeneration — ablations are
+        produced by blanking columns on the provided DataFrame).
 
     Loads ``facebook/tribev2`` once, then produces predictions for the ``full``
     modality plus the ``video_only`` / ``audio_only`` / ``text_only`` ablations.
@@ -204,7 +233,14 @@ def run_tribe_inference(
     model = TribeModel.from_pretrained("facebook/tribev2", cache_folder="/tmp/tribe_cache")
     log.info("Model loaded successfully")
 
-    if events_path and os.path.exists(events_path):
+    # Source the full-modality events DataFrame. An in-memory df (worker-local
+    # scorer) takes precedence; then a pre-built parquet; then regenerate from
+    # the source video (GPU/pod path).
+    in_memory = events_df is not None
+    if in_memory:
+        log.info("Using in-memory events DataFrame (%d rows)", len(events_df))
+        df = events_df
+    elif events_path and os.path.exists(events_path):
         log.info("Loading pre-built events from %s", events_path)
         df = pd.read_parquet(events_path)
         try:
@@ -229,17 +265,17 @@ def run_tribe_inference(
 
     predictions: dict[str, np.ndarray] = {"full": preds_full.astype(np.float32)}
 
-    for modality_name, ablation_kwargs in [
-        ("video_only", {"audio_path": None}),
-        ("audio_only", {"video_path": None}),
-        ("text_only", {"video_path": None, "audio_path": None}),
-    ]:
+    for modality_name in ("video_only", "audio_only", "text_only"):
         log.info("Running ablation: %s", modality_name)
         try:
-            df_ablated = model.get_events_dataframe(video_path=video_path)
-            for col, val in ablation_kwargs.items():
-                if col in df_ablated.columns and val is None:
-                    df_ablated[col] = ""
+            if in_memory:
+                # Ablate the provided DataFrame directly (no video access).
+                df_ablated = _ablate_events_df(df, modality_name)
+            else:
+                # Regenerate events from the source video, then blank columns.
+                df_ablated = _ablate_events_df(
+                    model.get_events_dataframe(video_path=video_path), modality_name
+                )
             preds = chunked_predict(model, df_ablated)
             predictions[modality_name] = preds.astype(np.float32)
             log.info("  %s: shape=%s", modality_name, predictions[modality_name].shape)
