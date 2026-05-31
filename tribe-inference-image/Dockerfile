@@ -1,5 +1,5 @@
 # NeuroPeer — TRIBE v2 Inference Image
-# For local testing / model weight pre-download (DataCrunch uses startup scripts)
+# For local testing / model weight pre-download (RunPod uses startup scripts)
 #
 # Build:  docker build -t neuropeer/tribe-inference:latest .
 # Push:   docker push neuropeer/tribe-inference:latest
@@ -55,6 +55,6 @@ print('TRIBE v2 weights pre-downloaded successfully.')
 
 ENV TRIBE_MODEL_PATH=/models/tribev2
 
-# On DataCrunch, deps are installed via bash startup_script at instance boot.
+# On RunPod, deps are installed via bash startup script at pod boot.
 # This CMD is a fallback for manual testing.
 CMD ["python", "-c", "print('NeuroPeer TRIBE v2 inference image ready.')"]

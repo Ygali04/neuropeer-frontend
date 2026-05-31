@@ -368,7 +368,7 @@ Add:
 - [ ] Dependency scanning: Dependabot + `pip-audit` in CI
 - [ ] HTTPS everywhere (Vercel + Railway handle TLS)
 - [ ] Secure cookies: HttpOnly, Secure, SameSite=Strict
-- [ ] API key rotation policy for DataCrunch and S3
+- [ ] API key rotation policy for RunPod and S3
 - [ ] No secrets in Docker images or git history
 
 ---
@@ -381,7 +381,7 @@ Add:
 4. [ ] Deploy backend + worker to Railway with `api.neuropeer.app`
 5. [ ] Provision managed PostgreSQL and Redis on Railway
 6. [ ] Create production S3 bucket with CORS policy
-7. [ ] Configure DataCrunch production credentials
+7. [ ] Configure RunPod production credentials
 8. [ ] Set up Sentry for error tracking (frontend + backend)
 9. [ ] Implement NextAuth.js with Google OAuth
 10. [ ] Create Stripe account and configure plans
