@@ -75,7 +75,7 @@ services:
   #   - Video download via yt-dlp (needs cookies.txt for Instagram/Facebook)
   #   - Audio extraction via ffmpeg
   #   - Whisper transcription
-  #   - TRIBE v2 inference (local GPU OR remote DataCrunch A100 spot)
+  #   - TRIBE v2 inference (local GPU OR remote RunPod GPU pod)
   #   - Metric computation
 
   worker:
@@ -104,11 +104,10 @@ services:
       # PROXY_USERNAME: your_oxylabs_username
       # PROXY_PASSWORD: your_oxylabs_password
       # ── Inference backend ──────────────────────────────────────────────────
-      # INFERENCE_BACKEND: datacrunch
-      # DATACRUNCH_CLIENT_ID: your_client_id
-      # DATACRUNCH_CLIENT_SECRET: your_client_secret
-      # DATACRUNCH_INSTANCE_TYPE: 1A100.80G
-      # DATACRUNCH_BOOT_TIMEOUT: "600"
+      # INFERENCE_BACKEND: runpod
+      # RUNPOD_API_KEY: your_runpod_api_key
+      # RUNPOD_GPU_TYPE: NVIDIA A100 80GB PCIe
+      # RUNPOD_BOOT_TIMEOUT: "600"
     depends_on:
       - postgres
       - redis

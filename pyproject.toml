@@ -29,8 +29,6 @@ dependencies = [
     "huggingface-hub>=0.24.6",
     "numpy>=1.26.4",
     "scipy>=1.14.1",
-    # Remote GPU (DataCrunch A100 spot instances)
-    "datacrunch",
     # Neuroscience
     "nilearn>=0.10.4",
     "nibabel>=5.2.1",

@@ -157,7 +157,7 @@ export default function HomePage() {
             </div>
           </Link>
           <p className="text-center text-[10px] text-white/20 mt-2">
-            Real fMRI-predicted cortical activations from Meta TRIBE v2 on DataCrunch A100
+            Real fMRI-predicted cortical activations from Meta TRIBE v2 on RunPod A100
           </p>
         </div>
 

@@ -103,25 +103,34 @@ class Settings(BaseSettings):
     proxy_password: str = ""  # Oxylabs password
 
     # Remote GPU inference
-    # "runpod" — spin up a RunPod GPU pod per job (recommended, reliable A100 availability)
-    # "datacrunch" — DataCrunch A100 spot instances (legacy, unreliable GPU supply)
+    # "runpod" — spin up a RunPod GPU pod per job (reliable A100 availability)
     # "local" — run TRIBE v2 on the worker itself (requires local GPU)
     # "mock" — return random predictions (dev/test only)
-    inference_backend: str = "runpod"  # runpod | datacrunch | local | mock
+    inference_backend: str = "runpod"  # runpod | local | mock
 
-    # RunPod.io GPU pods (preferred)
+    # RunPod.io GPU pods (sole GPU backend)
     runpod_api_key: str = ""
     runpod_gpu_type: str = "NVIDIA A100 80GB PCIe"
     runpod_container_image: str = "pytorch/pytorch:2.4.0-cuda12.4-cudnn9-devel"
     runpod_boot_timeout: int = 600
 
-    # DataCrunch.io (legacy fallback)
-    datacrunch_client_id: str = ""
-    datacrunch_client_secret: str = ""
-    datacrunch_image: str = "ubuntu-24.04-cuda-12.8-open-docker"
-    datacrunch_instance_type: str = "1A100.80G"
-    datacrunch_ssh_key_ids: str = ""
-    datacrunch_boot_timeout: int = 600
+    @model_validator(mode="after")
+    def migrate_legacy_inference_backend(self):
+        """Map the retired ``datacrunch`` backend value to ``runpod``.
+
+        The DataCrunch backend was removed in favour of RunPod-only inference.
+        Rather than crashing on a stale env value, warn once and fall back to
+        the supported RunPod path.
+        """
+        if self.inference_backend == "datacrunch":
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "INFERENCE_BACKEND='datacrunch' is no longer supported; "
+                "the DataCrunch backend has been removed. Falling back to 'runpod'."
+            )
+            self.inference_backend = "runpod"
+        return self
 
     class Config:
         env_file = ".env"

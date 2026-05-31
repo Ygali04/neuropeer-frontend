@@ -1,10 +1,9 @@
 """
-Remote GPU Inference — RunPod (primary) + DataCrunch (legacy) Integration.
+Remote GPU Inference — RunPod Integration.
 
 Routes TRIBE v2 inference to either:
   A) Local GPU on the Celery worker (default for dev)
-  B) RunPod GPU pod (recommended — reliable A100 availability)
-  C) Ephemeral DataCrunch A100 spot instance (legacy)
+  B) RunPod GPU pod (reliable A100 availability — the sole GPU backend)
 
 Flow for RunPod (mode B):
   1. Worker uploads video + events to S3
@@ -50,11 +49,6 @@ def run_inference_backend(
             logger.warning("RunPod backend requires video_path; falling back to local")
             return _run_locally(job_id, events_df)
         return _run_on_runpod(job_id, video_path, events_df, audio_path)
-    if backend == "datacrunch":
-        if video_path is None:
-            logger.warning("DataCrunch backend requires video_path; falling back to local")
-            return _run_locally(job_id, events_df)
-        return _run_on_datacrunch(job_id, video_path, events_df, audio_path)
     return _run_locally(job_id, events_df)
 
 
@@ -262,7 +256,7 @@ def _runpod_create_pod(
 
 
 def _poll_for_sentinel_generic(resource_id: str, job_id: str, sentinel_done: str, sentinel_error: str, timeout: int) -> None:
-    """Poll S3 for sentinel file. Works for both RunPod and DataCrunch."""
+    """Poll S3 for the inference sentinel file."""
     deadline = time.time() + timeout
     poll_interval = 15.0
 
@@ -290,303 +284,7 @@ def _runpod_terminate(pod_id: str) -> None:
         logger.warning("Error terminating RunPod pod %s: %s", pod_id, exc)
 
 
-# ── DataCrunch A100 spot instance inference (legacy) ─────────────────────────
-
-
-class DataCrunchError(RuntimeError):
-    pass
-
-
-def _run_on_datacrunch(
-    job_id: str,
-    video_path: Path,
-    events_df: pd.DataFrame | None = None,
-    audio_path: Path | None = None,
-) -> tuple[dict[Modality, np.ndarray], str]:
-    """Spin up a DataCrunch GPU, run TRIBE v2, download results, delete instance."""
-    logger.info("Provisioning DataCrunch GPU instance for job %s", job_id)
-
-    # 1. Upload video + audio + events to S3
-    video_s3_key = f"staging/{job_id}/video{video_path.suffix}"
-    _s3_upload(video_path.read_bytes(), video_s3_key)
-
-    audio_s3_key = f"staging/{job_id}/audio.wav"
-    if audio_path and audio_path.exists():
-        _s3_upload(audio_path.read_bytes(), audio_s3_key)
-        logger.info("Audio uploaded to S3")
-
-    events_s3_key = f"staging/{job_id}/events.parquet"
-    if events_df is not None:
-        buf = io.BytesIO()
-        events_df.to_parquet(buf, index=False)
-        _s3_upload(buf.getvalue(), events_s3_key)
-        logger.info("Events DataFrame uploaded to S3")
-    logger.info("Video uploaded to s3://%s/%s (%.1f MB)", settings.s3_bucket, video_s3_key, video_path.stat().st_size / (1024 * 1024))
-
-    vertex_key = f"predictions/{job_id}/vertices.npz"
-    sentinel_done = f"staging/{job_id}/done"
-    sentinel_error = f"staging/{job_id}/error"
-    instance_id: str | None = None
-    script_id: str | None = None
-
-    try:
-        # 2. Create instance (finds available GPU, creates startup script)
-        instance_id, script_id = _datacrunch_create_instance(job_id, video_s3_key, audio_s3_key, events_s3_key, vertex_key, sentinel_done, sentinel_error)
-        logger.info("DataCrunch instance %s created for job %s", instance_id, job_id)
-
-        # 3. Poll S3 for sentinel
-        _poll_for_sentinel(instance_id, job_id, sentinel_done, sentinel_error)
-        logger.info("Inference completed for job %s", job_id)
-
-        # 3b. Download and display GPU inference log (DIAG output)
-        gpu_log_key = f"staging/{job_id}/gpu_log.txt"
-        try:
-            gpu_log = _s3_download_text(gpu_log_key)
-            # Show last 5KB of GPU log (includes DIAG lines and chunk summary)
-            log_tail = gpu_log[-5000:] if len(gpu_log) > 5000 else gpu_log
-            logger.info("=== GPU INFERENCE LOG (last %d chars) ===\n%s\n=== END GPU LOG ===", len(log_tail), log_tail)
-        except Exception:
-            logger.debug("No GPU log found at %s", gpu_log_key)
-
-        # 4. Download predictions
-        predictions = _s3_download_predictions(vertex_key)
-        return predictions, vertex_key
-
-    except DataCrunchError as exc:
-        logger.warning("DataCrunch inference failed for job %s (instance=%s): %s", job_id, instance_id, exc)
-        # Try to retrieve GPU log even on failure
-        gpu_log_key = f"staging/{job_id}/gpu_log.txt"
-        try:
-            gpu_log = _s3_download_text(gpu_log_key)
-            log_tail = gpu_log[-5000:] if len(gpu_log) > 5000 else gpu_log
-            logger.error("=== GPU LOG (FAILED RUN) ===\n%s\n=== END GPU LOG ===", log_tail)
-        except Exception:
-            logger.debug("No GPU log available for failed run")
-        raise
-
-    finally:
-        if instance_id:
-            try:
-                _datacrunch_delete(instance_id)
-            except Exception:
-                logger.warning("Failed to delete DataCrunch instance %s", instance_id)
-        if script_id:
-            try:
-                _datacrunch_client().startup_scripts.delete_by_id(script_id)
-            except Exception:
-                pass
-
-
-# ── DataCrunch API client ────────────────────────────────────────────────────
-
-
-def _datacrunch_client():
-    """Return an authenticated DataCrunch SDK client."""
-    try:
-        from datacrunch import DataCrunchClient
-    except ImportError as exc:
-        raise DataCrunchError("DataCrunch SDK not installed. Run: pip install datacrunch") from exc
-
-    if not settings.datacrunch_client_id or not settings.datacrunch_client_secret:
-        raise DataCrunchError("DATACRUNCH_CLIENT_ID and DATACRUNCH_CLIENT_SECRET must be set")
-
-    return DataCrunchClient(settings.datacrunch_client_id, settings.datacrunch_client_secret)
-
-
-def _datacrunch_create_instance(
-    job_id: str,
-    video_s3_key: str,
-    audio_s3_key: str,
-    events_s3_key: str,
-    output_s3_key: str,
-    sentinel_done: str,
-    sentinel_error: str,
-) -> tuple[str, str]:
-    """Create a DataCrunch spot instance. Returns (instance_id, script_id)."""
-    client = _datacrunch_client()
-
-    # SSH keys
-    ssh_key_ids = [k.strip() for k in settings.datacrunch_ssh_key_ids.split(",") if k.strip()]
-    if not ssh_key_ids:
-        keys = client.ssh_keys.get()
-        if not keys:
-            raise DataCrunchError("No SSH keys configured in DataCrunch account")
-        ssh_key_ids = [keys[0].id]
-        logger.info("Using SSH key: %s", ssh_key_ids[0])
-
-    # Create startup script as a separate resource (SDK requirement)
-    script_content = _build_startup_script(video_s3_key, audio_s3_key, events_s3_key, output_s3_key, sentinel_done, sentinel_error)
-    script_obj = client.startup_scripts.create(name=f"neuropeer-{job_id[:8]}", script=script_content)
-    logger.info("Created startup script: %s", script_obj.id)
-
-    # Find available instance type + location.
-    # TRIBE v2 needs ~30GB VRAM — single-GPU instances are preferred
-    # (cheapest), with 2-GPU as fallback. Multi-GPU (4x/8x) is never
-    # provisioned to avoid $14+/hr surprises.
-    #
-    # Ordered by preference (cheapest single-GPU first):
-    # Instance type names come from the DataCrunch/Verda API.
-    # Format: <count><GPU>.<totalVRAM>V (e.g. 4A100.88V = 4 A100s, 88GB VRAM each × 4 = 352 total)
-    # Single-GPU preferred (cheapest). Multi-GPU as last resort.
-    # Cap at 4-GPU to avoid $30+/hr instances.
-    PREFERRED_TYPES = [
-        # Single-GPU — cheapest first. TRIBE v2 needs ~30GB VRAM.
-        # Both old-format (e.g. 1A100.80G) and new Verda-format (e.g.
-        # 1A100.22V) are listed — API may return either depending on region.
-        # CUDA compat: A6000/A100=sm_80, L40S/RTX6000Ada=sm_89, H100/H200=sm_90.
-        # Blackwell GPUs (B200, B300, RTX PRO 6000 = sm_120) are EXCLUDED —
-        # PyTorch wheels lack sm_120 kernels → "no kernel image" CUDA error.
-        "1A100.22V",           # A100 80GB SXM4 new naming, ~$1.29/hr — most reliable
-        "1A100.80G",           # A100 80GB old naming
-        "1RTX6000ADA.10V",     # RTX 6000 Ada 48GB, ~$0.83/hr, sm_89
-        "1A100.40S.22V",       # A100 40GB SXM4, ~$0.72/hr
-        "1A100.40G",           # A100 40GB old naming
-        "1L40S.20V",           # L40S 48GB new naming, ~$0.91/hr
-        "1L40S.48G",           # L40S 48GB old naming
-        "1A6000.10V",          # A6000 48GB — OS image compat issues, try last
-        "1H100.80S.30V",       # H100 80GB SXM5 FIN-02, ~$2.29/hr
-        "1H100.80S.32V",       # H100 80GB SXM5 variant, ~$2.29/hr
-        "1H100.80G",           # H100 80GB old naming
-        "1H200.141S.44V",      # H200 141GB SXM5, ~$3.39/hr
-        "1H200.141S",          # H200 old naming
-        # 2-GPU fallbacks (moderate cost)
-        "2A100.80G",
-        "2RTX6000ADA.20V",
-        # 4-GPU last resort (cap here to avoid $30+/hr)
-        "4A100.88V",
-        "4H200.141S.176V",
-    ]
-
-    avail = client.instances.get_availabilities()
-    inst_type = settings.datacrunch_instance_type
-    location = None
-
-    # Try the configured type first
-    for entry in avail:
-        loc = entry["location_code"] if isinstance(entry, dict) else entry.location_code
-        types = entry["availabilities"] if isinstance(entry, dict) else entry.availabilities
-        if inst_type in types:
-            location = loc
-            break
-
-    # Fallback: walk the preference list
-    if not location:
-        for preferred in PREFERRED_TYPES:
-            if preferred == inst_type:
-                continue  # already tried
-            for entry in avail:
-                loc = entry["location_code"] if isinstance(entry, dict) else entry.location_code
-                types = entry["availabilities"] if isinstance(entry, dict) else entry.availabilities
-                if preferred in types:
-                    inst_type = preferred
-                    location = loc
-                    logger.info("Primary %s unavailable, falling back to %s", settings.datacrunch_instance_type, inst_type)
-                    break
-            if location:
-                break
-
-    # Dynamic fallback: accept any single/dual-GPU instance not in the
-    # preferred list.  VRAM is validated on-instance by the startup script,
-    # so we only filter out known-incompatible architectures (Blackwell
-    # sm_100 — PyTorch lacks kernels).
-    if not location:
-        _BLACKWELL_PATTERNS = {"B200", "B300", "RTXPRO6000"}
-        tried = {inst_type} | set(PREFERRED_TYPES)
-        for entry in avail:
-            loc = entry["location_code"] if isinstance(entry, dict) else entry.location_code
-            types = entry["availabilities"] if isinstance(entry, dict) else entry.availabilities
-            for t in types:
-                if t in tried:
-                    continue
-                if not (t.startswith("1") or t.startswith("2")):
-                    continue
-                if any(bp in t for bp in _BLACKWELL_PATTERNS):
-                    continue
-                inst_type = t
-                location = loc
-                logger.info("Dynamic fallback: using %s in %s", inst_type, location)
-                break
-            if location:
-                break
-
-    if not location:
-        client.startup_scripts.delete_by_id(script_obj.id)
-        raise DataCrunchError(f"No single-GPU instances available. Checked: {avail}")
-
-    logger.info("Using %s in %s", inst_type, location)
-
-    # Create instance — try spot first (cheaper), fall back to on-demand.
-    # Spot instances may be evicted, but NeuroPeer jobs are short (2-5 min)
-    # so eviction risk is low. On-demand is the safe fallback.
-    last_error = None
-    for is_spot in [True, False]:
-        tier = "spot" if is_spot else "on-demand"
-        try:
-            instance = client.instances.create(
-                instance_type=inst_type,
-                image=settings.datacrunch_image,
-                ssh_key_ids=ssh_key_ids,
-                hostname=f"neuropeer-{job_id[:8]}",
-                description=f"NeuroPeer-{job_id[:8]}-{tier}",
-                location=location,
-                is_spot=is_spot,
-                startup_script_id=script_obj.id,
-                max_wait_time=600,
-            )
-            logger.info("Provisioned %s %s instance: %s", inst_type, tier, instance.id)
-            return instance.id, script_obj.id
-        except Exception as exc:
-            last_error = exc
-            logger.warning("Failed to create %s %s instance: %s", inst_type, tier, exc)
-
-    # Both spot and on-demand failed
-    client.startup_scripts.delete_by_id(script_obj.id)
-    raise DataCrunchError(f"Failed to create {inst_type} instance (spot + on-demand both failed): {last_error}") from last_error
-
-
-def _poll_for_sentinel(instance_id: str, job_id: str, sentinel_done: str, sentinel_error: str) -> None:
-    """Poll S3 for sentinel file indicating inference completion."""
-    deadline = time.time() + settings.datacrunch_boot_timeout
-    poll_interval = 15.0
-    client = _datacrunch_client()
-
-    while time.time() < deadline:
-        if _s3_key_exists(sentinel_done):
-            return
-        if _s3_key_exists(sentinel_error):
-            error_body = _s3_download_text(sentinel_error)
-            raise DataCrunchError(f"Inference failed on instance {instance_id}: {error_body[:500]}")
-
-        try:
-            instance = client.instances.get_by_id(instance_id)
-            status = getattr(instance, "status", "unknown")
-            logger.debug("Instance %s status: %s (job=%s)", instance_id, status, job_id)
-            if status in ("failed", "error", "offline"):
-                raise DataCrunchError(f"DataCrunch instance {instance_id} status: {status}")
-        except DataCrunchError:
-            raise
-        except Exception as exc:
-            logger.warning("DataCrunch poll error: %s", exc)
-
-        time.sleep(poll_interval)
-        poll_interval = min(poll_interval * 1.3, 60)
-
-    raise DataCrunchError(f"Instance {instance_id} timed out after {settings.datacrunch_boot_timeout}s")
-
-
-def _datacrunch_delete(instance_id: str) -> None:
-    """Delete a DataCrunch instance."""
-    try:
-        from datacrunch.constants import Actions
-
-        client = _datacrunch_client()
-        client.instances.action(instance_id, Actions.DELETE)
-        logger.info("Deleted DataCrunch instance %s", instance_id)
-    except Exception as exc:
-        logger.warning("Error deleting DataCrunch instance %s: %s", instance_id, exc)
-
-
-# ── Startup script (runs inside the DataCrunch A100 instance) ────────────────
+# ── Startup script (runs inside the RunPod GPU pod) ──────────────────────────
 
 
 def _build_startup_script(
@@ -597,7 +295,7 @@ def _build_startup_script(
     sentinel_done: str,
     sentinel_error: str,
 ) -> str:
-    """Generate the bash startup script for the DataCrunch A100 instance.
+    """Generate the bash startup script for the RunPod GPU pod.
 
     Uses the real TRIBE v2 API from facebookresearch/tribev2:
       from tribev2 import TribeModel
@@ -621,7 +319,7 @@ export HF_TOKEN="{settings.hf_token}"
 echo "=== NeuroPeer TRIBE v2 Inference ==="
 echo "Installing dependencies..."
 
-# Install system deps first (python3-venv missing on DataCrunch images)
+# Install system deps first (python3-venv may be missing on the base image)
 apt-get update -qq && apt-get install -y -qq python3-venv python3-pip ffmpeg > /dev/null 2>&1
 
 # Install tribev2 with optimized dependency resolution

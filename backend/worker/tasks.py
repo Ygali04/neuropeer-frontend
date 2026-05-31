@@ -198,11 +198,11 @@ def run_analysis(self, job_id: str, url: str, content_type: str, parent_job_id: 
             job_id, "transcribing", 0.18, f"Downloaded {media.duration_seconds:.0f}s video. Transcribing audio…"
         )
 
-        # ── Stage 2: TRIBE v2 inference (local GPU or DataCrunch A100 spot) ──
+        # ── Stage 2: TRIBE v2 inference (local GPU or RunPod GPU pod) ──
         _publish_progress(job_id, "inferring", 0.25, _inference_start_msg())
         _update_job_status(job_id, "inferring")
 
-        # Build TRIBE v2-compatible events DataFrame for DataCrunch
+        # Build TRIBE v2-compatible events DataFrame for the GPU backend
         # (Video + Audio + Word events with sentence/context fields)
         import re as _re
         import pandas as _pd
@@ -477,6 +477,6 @@ def _friendly_download_error(raw_error: str, url: str) -> str:
 
 def _inference_start_msg() -> str:
     backend = settings.inference_backend
-    if backend == "datacrunch":
-        return "Provisioning DataCrunch A100 GPU instance for TRIBE v2 inference…"
+    if backend == "runpod":
+        return "Provisioning RunPod GPU pod for TRIBE v2 inference…"
     return "Running TRIBE v2 inference (full multimodal + 3 ablations)…"
